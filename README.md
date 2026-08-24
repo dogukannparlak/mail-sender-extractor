@@ -1,82 +1,86 @@
 # Mail Sender Extractor
 
-Gmail gelen kutusundaki mailleri gönderene göre sayan; seçtiğin gönderenlerden gelen mailleri
-toplu olarak çöpe taşıyan veya (gönderen destekliyorsa) aboneliğini iptal eden bir web uygulaması.
-Gönderenler tek, sıralanabilir bir liste olarak gösterilir. İstenirse yalnızca tarama/CSV çıktısı
-için `extract_senders.py` bağımsız bir CLI script olarak da çalıştırılabilir.
+*Diğer diller: [🇹🇷 Türkçe](README.tr.md)*
 
-## Özellikler
+A web app that scans your Gmail inbox, groups messages by sender with counts, and lets you
+bulk-trash or one-click unsubscribe from the senders you pick. Senders are shown as a single,
+sortable list. If you only want a CSV export without the web UI, `extract_senders.py` also runs
+standalone as a CLI script.
 
-- **Tara:** Gelen kutusunu tarayıp gönderenleri mail sayısıyla listeler ve `gonderenler.csv`'ye yazar.
-- **Sırala:** Mail sayısına (çoktan aza / azdan çoğa) veya isme (A‑Z / Z‑A) göre sıralama.
-- **Toplu seçim:** "Tümünü seç" kutusu ile tüm gönderenleri tek tıkla işaretleme.
-- **Adres kopyala:** Her gönderenin e-posta adresini panoya kopyalama.
-- **Önizle:** Silmeden önce bir gönderenin son maillerinin konu ve tarihlerini görme.
-- **Çöpe taşı:** Seçilen gönderenlerin tüm maillerini Gmail Çöp Kutusu'na taşıma (30 gün geri alınabilir).
-- **Abonelikten çık:** `List-Unsubscribe` başlığını kullanarak otomatik (one-click) çıkış ya da
-  manuel çıkış linki/adresi sunma.
+## Features
 
-## Kurulum
+- **Scan:** Scans the inbox, lists senders by message count, and writes the result to `gonderenler.csv`.
+- **Sort:** Sort by message count (high→low / low→high) or by name (A–Z / Z–A).
+- **Bulk select:** A "select all" checkbox to select every sender in one click.
+- **Copy address:** Copy any sender's email address to the clipboard.
+- **Preview:** See a sender's most recent message subjects/dates before deleting anything.
+- **Move to trash:** Move all of the selected senders' messages to Gmail Trash (recoverable for 30 days).
+- **Unsubscribe:** Uses the `List-Unsubscribe` header to offer automatic (one-click) unsubscribe,
+  or a manual unsubscribe link/address when one-click isn't supported.
 
-Sanal ortam zaten oluşturuldu (`venv/`). Kullanmak için:
+## Setup
 
 ```bash
+python3 -m venv venv
 source venv/bin/activate
-```
-
-Bağımlılıklar zaten kuruldu, ama tekrar kurman gerekirse:
-
-```bash
 pip install -r requirements.txt
 ```
 
-## Google Cloud kimlik bilgileri (credentials.json)
+## Google Cloud credentials (credentials.json)
 
-Script'in çalışması için Gmail API erişimi olan bir OAuth client secret dosyasına ihtiyacın var:
+You need an OAuth client secret file with Gmail API access:
 
-1. [Google Cloud Console](https://console.cloud.google.com/) üzerinde bir proje oluştur (veya var olanı seç).
-2. **APIs & Services > Library** kısmından **Gmail API**'yi etkinleştir.
-3. **APIs & Services > Credentials** kısmından **Create Credentials > OAuth client ID** seç.
+1. Create (or select) a project in the [Google Cloud Console](https://console.cloud.google.com/).
+2. Under **APIs & Services > Library**, enable the **Gmail API**.
+3. Under **APIs & Services > Credentials**, choose **Create Credentials > OAuth client ID**.
    - Application type: **Desktop app**
-4. Oluşturulan client ID için JSON dosyasını indir ve bu klasöre `credentials.json` adıyla kaydet.
+4. Download the resulting client ID JSON and save it in this folder as `credentials.json`.
 
-## Çalıştırma (web uygulaması, önerilen)
+## Running (web app, recommended)
 
 ```bash
 source venv/bin/activate
 python app.py
 ```
 
-Tarayıcıda `http://localhost:5050` adresini aç. İlk çalıştırmada (veya "Gelen Kutusunu Tara"
-butonuna ilk basışta) bir tarayıcı penceresi açılıp Google hesabınla giriş yapmanı isteyecek.
-Onayladıktan sonra `token.json` dosyası oluşturulur ve sonraki çalıştırmalarda tekrar giriş
-yapmana gerek kalmaz.
+Open `http://localhost:5050` in your browser. On first run (or the first time you click "Scan
+Inbox"), a browser window will open asking you to sign in with your Google account. Once
+approved, a `token.json` file is created so you won't need to sign in again on later runs.
 
-"Gelen Kutusunu Tara" butonu gelen kutusunu tarar ve `gonderenler.csv` dosyasını güncel gönderen
-listesiyle yeniden yazar. Arayüzdeki listeyi mail sayısına veya isme göre sıralayabilir, "Tümünü
-seç" ile toplu seçim yapabilir, her gönderenin adresini kopyalayabilir ve "Önizle" ile silmeden
-önce o gönderenin son maillerinin konularını görebilirsin. Seçtiğin gönderenlerin maillerini çöpe
-taşıyabilir veya (gönderen destekliyorsa) abonelikten çıkabilirsin.
+The "Scan Inbox" button scans the inbox and rewrites `gonderenler.csv` with the current sender
+list. You can sort the list by message count or name, bulk-select with "select all", copy any
+sender's address, and use "Preview" to see that sender's recent subjects before deleting
+anything. You can move the selected senders' messages to trash, or unsubscribe (when the sender
+supports it).
 
-## Çalıştırma (yalnızca CSV, CLI)
+## Running (CSV only, CLI)
 
-Tarayıcı arayüzü olmadan sadece tarama/CSV çıktısı istiyorsan:
+If you just want the scan/CSV output without the web UI:
 
 ```bash
 source venv/bin/activate
 python extract_senders.py
 ```
 
-Sonuç `gonderenler.csv` dosyasına yazılır: her satırda gönderen (isim/adres) ve o gönderenden gelen mail sayısı bulunur.
+The result is written to `gonderenler.csv`: one row per sender (name/address) with the number of
+messages from that sender.
 
-## Notlar
+## Tests
 
-- `credentials.json` ve `token.json` gizli bilgiler içerir, `.gitignore` içinde hariç tutuldu.
-- Depodaki `mail_kategorileri.json` şu an uygulama tarafından kullanılmıyor; ileride API key ile
-  eklenecek AI destekli kategorilendirme için elle hazırlanmış örnek veri olarak saklanıyor.
-  Tarama bu dosyaya dokunmaz.
-- `app.py`'nin silme özelliği nedeniyle ortak `token.json`, `gmail.modify` (okuma + değiştirme)
-  izniyle oluşturulur. `extract_senders.py`'nin kendisi Gmail'e yalnızca okuma amaçlı istekler
-  gönderir, mail silmez veya değiştirmez — ama artık aynı token'ı web uygulamasıyla paylaştığı
-  için token'ın izin kapsamı daha geniştir. Bu değişiklikten önce oluşturulmuş eski bir
-  `token.json` varsa silip (`rm token.json`) yeniden giriş yapman gerekir.
+The project has a `pytest` suite that runs entirely against a fake Gmail service — no real
+Gmail account or network access is touched.
+
+```bash
+source venv/bin/activate
+pip install pytest
+python -m pytest tests/ -v
+```
+
+## Notes
+
+- `credentials.json` and `token.json` contain secrets and are excluded via `.gitignore`.
+- Because `app.py` can delete messages, the shared `token.json` is created with the
+  `gmail.modify` scope (read + modify). `extract_senders.py` itself only makes read-only Gmail
+  requests and never deletes or modifies messages — but since it shares the same token as the web
+  app, that token's permission scope is broader. If you have an older `token.json` created before
+  this change, delete it (`rm token.json`) and sign in again.
