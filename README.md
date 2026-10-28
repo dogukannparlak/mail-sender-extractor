@@ -28,6 +28,9 @@ your own machine (`localhost`); nothing is sent anywhere except Gmail's own API.
   state, so archived mail doesn't land in the inbox.
 - **Unsubscribe with confirmation:** one-click unsubscribe (RFC 8058) is only sent after you
   confirm the list of senders; otherwise you get a link or `mailto:` address to open yourself.
+- **Several Gmail accounts:** add accounts from the header and switch between them. Each account
+  keeps its own sender list, scan and undo; the protected list is shared. Confirm dialogs name
+  the account so you don't trash mail in the wrong one.
 - **Preview and copy:** see a sender's latest subjects before deleting; copy an address.
 
 ## Try it without a Gmail account (demo mode)
@@ -39,7 +42,7 @@ pip install -r requirements.txt
 DEMO=1 python app.py
 ```
 
-Open `http://localhost:5050`. Demo mode uses an in-memory mailbox of about 360 fake messages;
+Open `http://localhost:5050`. Demo mode uses two in-memory fake accounts (about 500 messages);
 data files go to a temporary folder and unsubscribe requests never leave your machine.
 
 ## Use it with your Gmail
@@ -59,8 +62,13 @@ source venv/bin/activate
 python app.py
 ```
 
-Open `http://localhost:5050` and click **Scan Inbox**. The first time, a browser window asks you
-to sign in; after that a `token.json` file keeps you signed in.
+Open `http://localhost:5050`, click **+ Add account** and pick the Google account in the browser
+window that opens, then click **Scan Inbox**. Add more accounts the same way and switch between
+them in the header. Each account's sign-in token is stored in `hesaplar/<address>/token.json`.
+If the OAuth app is in "Testing" mode in Google Cloud, add every account under **Test users**.
+
+Upgrading from the single-account version: an existing `token.json` and its data files are moved
+into the right `hesaplar/<address>/` folder automatically on first start.
 
 Deleted messages go to Gmail's **Trash**, not straight to permanent deletion. Gmail empties the
 Trash after 30 days.
@@ -86,14 +94,15 @@ Flask app.py ── Host / Origin checks ── Gmail API (google-api-python-cli
    │                                     ├─ batch messages.get (metadata)
    │                                     ├─ messages.batchModify (TRASH)
    │                                     └─ batch messages.untrash (undo)
-   └─ local files: gonderenler.csv · korunanlar.json · son_islem.json
+   └─ local files: hesaplar/<address>/{token.json, gonderenler.csv, taranan_idler.json,
+                   son_islem.json} · korunanlar.json (shared)
 ```
 
 | File | What it holds |
 |---|---|
 | `app.py` | Web server and API: scan, count, delete, undo, preview, unsubscribe, protected list |
 | `extract_senders.py` | Scan logic (batched fetch, grouping, categories) and CSV read/write; also a CLI |
-| `gmail_auth.py` | OAuth sign-in; `token.json` is written with `0600` permissions |
+| `gmail_auth.py` | OAuth sign-in per account; tokens are written with `0600` permissions |
 | `demo.py` | Fake mailbox for demo mode |
 
 ## Security notes
@@ -108,7 +117,7 @@ own browser on `localhost`:
 - Everything coming from mail headers is HTML-escaped before it reaches the page.
 - One-click unsubscribe only goes to `https` URLs on public IP addresses, without following
   redirects, and only after you confirm.
-- `credentials.json`, `token.json` and the local data files are in `.gitignore`.
+- `credentials.json`, the `hesaplar/` folder (tokens) and the local data files are in `.gitignore`.
 
 Don't expose this app on a network or run it on a shared server.
 
@@ -128,4 +137,4 @@ python -m pytest tests/ -v
 
 - The token uses the `gmail.modify` scope (read + modify), because the web app moves messages
   to Trash. `extract_senders.py` only reads, but shares the same token.
-- If you have a `token.json` from before the scope change, delete it and sign in again.
+- If an account's sign-in stops working (expired or revoked), remove it in the header and add it again.

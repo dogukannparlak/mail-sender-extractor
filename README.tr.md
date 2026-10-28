@@ -30,6 +30,9 @@ Gmail'in kendi API'si dışında hiçbir yere veri gitmez.
   döner; arşivdeki mailler gelen kutusuna düşmez.
 - **Onaylı abonelikten çıkma:** tek tıkla çıkış (RFC 8058) yalnız gönderen listesini onayladıktan
   sonra gönderilir; aksi halde kendin açacağın bir link ya da `mailto:` adresi verilir.
+- **Birden fazla Gmail hesabı:** başlıktan hesap ekle ve hesaplar arasında geçiş yap. Her hesabın
+  gönderen listesi, taraması ve geri alması ayrıdır; korunanlar listesi ortaktır. Onay pencereleri
+  hesabı yazar, yanlış hesapta mail taşınmaz.
 - **Önizleme ve kopyalama:** silmeden önce gönderenin son konularını gör; adresi kopyala.
 
 ## Gmail hesabı olmadan dene (demo modu)
@@ -41,9 +44,8 @@ pip install -r requirements.txt
 DEMO=1 python app.py
 ```
 
-`http://localhost:5050` adresini aç. Demo modu bellekte yaklaşık 360 sahte mail içeren bir
-posta kutusu kullanır; veri dosyaları geçici bir klasöre yazılır, abonelik istekleri
-bilgisayarından çıkmaz.
+`http://localhost:5050` adresini aç. Demo modu bellekte iki sahte hesap kullanır (yaklaşık 500
+mail); veri dosyaları geçici bir klasöre yazılır, abonelik istekleri bilgisayarından çıkmaz.
 
 ## Kendi Gmail'inle kullan
 
@@ -62,8 +64,13 @@ source venv/bin/activate
 python app.py
 ```
 
-`http://localhost:5050` adresini aç ve **Gelen Kutusunu Tara**'ya bas. İlk seferde bir tarayıcı
-penceresi Google girişi ister; sonra `token.json` dosyası oturumu açık tutar.
+`http://localhost:5050` adresini aç, **+ Hesap ekle**'ye bas ve açılan tarayıcı penceresinde Google
+hesabını seç; sonra **Gelen Kutusunu Tara**'ya bas. Başka hesapları da aynı yolla ekleyip başlıktan
+geçiş yapabilirsin. Her hesabın giriş anahtarı `hesaplar/<adres>/token.json` dosyasında durur.
+OAuth uygulaman Google Cloud'da "Testing" durumundaysa her hesabı **Test users** listesine ekle.
+
+Tek hesaplı sürümden geçiyorsan: mevcut `token.json` ve veri dosyaları ilk açılışta otomatik olarak
+doğru `hesaplar/<adres>/` klasörüne taşınır.
 
 Silinen mailler doğrudan kalıcı olarak silinmez, Gmail'in **Çöp Kutusu**'na taşınır. Gmail çöp
 kutusunu 30 gün sonra boşaltır.
@@ -89,14 +96,15 @@ Flask app.py ── Host / Origin kontrolü ── Gmail API (google-api-python-
    │                                       ├─ batch messages.get (metadata)
    │                                       ├─ messages.batchModify (TRASH)
    │                                       └─ batch messages.untrash (geri al)
-   └─ yerel dosyalar: gonderenler.csv · korunanlar.json · son_islem.json
+   └─ yerel dosyalar: hesaplar/<adres>/{token.json, gonderenler.csv, taranan_idler.json,
+                     son_islem.json} · korunanlar.json (ortak)
 ```
 
 | Dosya | İçinde ne var |
 |---|---|
 | `app.py` | Web sunucusu ve API: tarama, sayım, silme, geri alma, önizleme, abonelik, korunanlar |
 | `extract_senders.py` | Tarama mantığı (batch okuma, gruplama, kategori) ve CSV okuma/yazma; ayrıca CLI |
-| `gmail_auth.py` | OAuth girişi; `token.json` `0600` izniyle yazılır |
+| `gmail_auth.py` | Hesap başına OAuth girişi; token'lar `0600` izniyle yazılır |
 | `demo.py` | Demo modu için sahte posta kutusu |
 
 ## Güvenlik notları
@@ -111,7 +119,7 @@ Uygulama maillerini değiştirebilen bir token tutar; bu yüzden yalnız kendi t
 - Mail başlıklarından gelen her şey sayfaya girmeden önce HTML olarak kaçırılır.
 - Tek tıkla çıkış yalnız genel IP'deki `https` adreslerine, yönlendirme izlenmeden ve yalnız
   sen onayladıktan sonra gönderilir.
-- `credentials.json`, `token.json` ve yerel veri dosyaları `.gitignore`'da.
+- `credentials.json`, `hesaplar/` klasörü (token'lar) ve yerel veri dosyaları `.gitignore`'da.
 
 Uygulamayı bir ağa açma ya da ortak bir sunucuda çalıştırma.
 
@@ -131,4 +139,4 @@ python -m pytest tests/ -v
 
 - Token `gmail.modify` iznini (okuma + değiştirme) kullanır, çünkü web uygulaması mailleri
   Çöp Kutusu'na taşır. `extract_senders.py` yalnız okur ama aynı token'ı paylaşır.
-- İzin değişikliğinden önce oluşmuş bir `token.json`'ın varsa sil ve yeniden giriş yap.
+- Bir hesabın girişi çalışmazsa (süresi dolmuş ya da izin geri alınmış) başlıktan hesabı çıkar ve yeniden ekle.
