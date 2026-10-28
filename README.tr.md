@@ -1,86 +1,129 @@
 # Mail Sender Extractor
 
-*Languages: [🇬🇧 English](README.md)*
+*Other languages: [🇬🇧 English](README.md)*
 
-Gmail gelen kutusundaki mailleri gönderene göre sayan; seçtiğin gönderenlerden gelen mailleri
-toplu olarak çöpe taşıyan veya (gönderen destekliyorsa) aboneliğini iptal eden bir web uygulaması.
-Gönderenler tek, sıralanabilir bir liste olarak gösterilir. İstenirse yalnızca tarama/CSV çıktısı
-için `extract_senders.py` bağımsız bir CLI script olarak da çalıştırılabilir.
+Gmail gelen kutunu tarayan, mailleri gönderene göre gruplayan ve seçtiğin gönderenlerin
+maillerini toplu olarak çöpe taşımanı ya da abonelikten çıkmanı sağlayan yerel bir web
+uygulaması. Son silme geri alınabilir. Yalnız kendi bilgisayarında (`localhost`) çalışır;
+Gmail'in kendi API'si dışında hiçbir yere veri gitmez.
+
+![Demo modunda gönderen listesi](docs/screenshot.jpg)
 
 ## Özellikler
 
-- **Tara:** Gelen kutusunu tarayıp gönderenleri mail sayısıyla listeler ve `gonderenler.csv`'ye yazar.
-- **Sırala:** Mail sayısına (çoktan aza / azdan çoğa) veya isme (A‑Z / Z‑A) göre sıralama.
-- **Toplu seçim:** "Tümünü seç" kutusu ile tüm gönderenleri tek tıkla işaretleme.
-- **Adres kopyala:** Her gönderenin e-posta adresini panoya kopyalama.
-- **Önizle:** Silmeden önce bir gönderenin son maillerinin konu ve tarihlerini görme.
-- **Çöpe taşı:** Seçilen gönderenlerin tüm maillerini Gmail Çöp Kutusu'na taşıma (30 gün geri alınabilir).
-- **Abonelikten çık:** `List-Unsubscribe` başlığını kullanarak otomatik (one-click) çıkış ya da
-  manuel çıkış linki/adresi sunma.
+- **Hızlı tarama ve ilerleme çubuğu:** mail bilgileri arka planda Gmail batch istekleriyle
+  alınır (paket başına 50, hız sınırında yeniden denenir); sayfada ilerleme görünür.
+- **Gönderen başına tek satır:** sayım gerçek adrese göre yapılır; aynı adres farklı adlarla
+  gelse de tek satırdır. **Alan adı görünümü** ile `magaza.com`'u bütün olarak görebilirsin.
+- **Modelsiz kategori:** her gönderen Gmail'in kendi sekmelerinden (`CATEGORY_*` etiketleri)
+  ve `List-Unsubscribe` başlığından *bülten / promosyon / bildirim / kişisel* olarak etiketlenir.
+- **Arama ve filtre:** ad ya da adresle ara; kategoriye ya da "abonelik linki olanlar"a göre
+  süz. "Tümünü seç" yalnız ekranda görünen satırları seçer.
+- **Korunan gönderenler:** bir adresi ya da alan adının tamamını kilitle (`@banka.com`, alt
+  alan adları dahil). Kilitli gönderenler seçilemez; sunucu da onları silmeyi ve abonelikten
+  çıkmayı reddeder.
+- **Gerçek sayıyla silme:** *yalnız gelen kutusu* ya da *tüm mailler (arşiv dahil)* seç; onay
+  penceresi Çöp Kutusu'na gerçekten kaç mail gideceğini gösterir.
+- **Geri al:** son silme geri alınabilir. Mailler eski gelen kutusu/okunmadı durumlarıyla
+  döner; arşivdeki mailler gelen kutusuna düşmez.
+- **Onaylı abonelikten çıkma:** tek tıkla çıkış (RFC 8058) yalnız gönderen listesini onayladıktan
+  sonra gönderilir; aksi halde kendin açacağın bir link ya da `mailto:` adresi verilir.
+- **Önizleme ve kopyalama:** silmeden önce gönderenin son konularını gör; adresi kopyala.
 
-## Kurulum
+## Gmail hesabı olmadan dene (demo modu)
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+DEMO=1 python app.py
 ```
 
-## Google Cloud kimlik bilgileri (credentials.json)
+`http://localhost:5050` adresini aç. Demo modu bellekte yaklaşık 360 sahte mail içeren bir
+posta kutusu kullanır; veri dosyaları geçici bir klasöre yazılır, abonelik istekleri
+bilgisayarından çıkmaz.
 
-Script'in çalışması için Gmail API erişimi olan bir OAuth client secret dosyasına ihtiyacın var:
+## Kendi Gmail'inle kullan
 
-1. [Google Cloud Console](https://console.cloud.google.com/) üzerinde bir proje oluştur (veya var olanı seç).
-2. **APIs & Services > Library** kısmından **Gmail API**'yi etkinleştir.
-3. **APIs & Services > Credentials** kısmından **Create Credentials > OAuth client ID** seç.
-   - Application type: **Desktop app**
-4. Oluşturulan client ID için JSON dosyasını indir ve bu klasöre `credentials.json` adıyla kaydet.
+### 1. Google Cloud kimlik bilgisi (`credentials.json`)
 
-## Çalıştırma (web uygulaması, önerilen)
+1. [Google Cloud Console](https://console.cloud.google.com/)'da bir proje oluştur (ya da seç).
+2. **APIs & Services > Library** altında **Gmail API**'yi etkinleştir.
+3. **APIs & Services > Credentials** altında **Create Credentials > OAuth client ID** seç,
+   uygulama türü **Desktop app**.
+4. İndirdiğin JSON dosyasını bu klasöre `credentials.json` adıyla kaydet.
+
+### 2. Çalıştır
 
 ```bash
 source venv/bin/activate
 python app.py
 ```
 
-Tarayıcıda `http://localhost:5050` adresini aç. İlk çalıştırmada (veya "Gelen Kutusunu Tara"
-butonuna ilk basışta) bir tarayıcı penceresi açılıp Google hesabınla giriş yapmanı isteyecek.
-Onayladıktan sonra `token.json` dosyası oluşturulur ve sonraki çalıştırmalarda tekrar giriş
-yapmana gerek kalmaz.
+`http://localhost:5050` adresini aç ve **Gelen Kutusunu Tara**'ya bas. İlk seferde bir tarayıcı
+penceresi Google girişi ister; sonra `token.json` dosyası oturumu açık tutar.
 
-"Gelen Kutusunu Tara" butonu gelen kutusunu tarar ve `gonderenler.csv` dosyasını güncel gönderen
-listesiyle yeniden yazar. Arayüzdeki listeyi mail sayısına veya isme göre sıralayabilir, "Tümünü
-seç" ile toplu seçim yapabilir, her gönderenin adresini kopyalayabilir ve "Önizle" ile silmeden
-önce o gönderenin son maillerinin konularını görebilirsin. Seçtiğin gönderenlerin maillerini çöpe
-taşıyabilir veya (gönderen destekliyorsa) abonelikten çıkabilirsin.
+Silinen mailler doğrudan kalıcı olarak silinmez, Gmail'in **Çöp Kutusu**'na taşınır. Gmail çöp
+kutusunu 30 gün sonra boşaltır.
 
-## Çalıştırma (yalnızca CSV, CLI)
-
-Tarayıcı arayüzü olmadan sadece tarama/CSV çıktısı istiyorsan:
+### Yalnız CSV (CLI)
 
 ```bash
-source venv/bin/activate
 python extract_senders.py
 ```
 
-Sonuç `gonderenler.csv` dosyasına yazılır: her satırda gönderen (isim/adres) ve o gönderenden gelen mail sayısı bulunur.
+`gonderenler.csv` dosyasına adres başına bir satır yazar: adres, görünen ad, sayı, kategori ve
+abonelik linki görülüp görülmediği. Eski CSV dosyaları (ham `From` başlığı + sayı) hâlâ okunur
+ve adrese göre birleştirilir.
+
+## Nasıl çalışır
+
+```
+tarayıcı (templates/index.html)
+   │  fetch, yalnız aynı kaynaktan
+   ▼
+Flask app.py ── Host / Origin kontrolü ── Gmail API (google-api-python-client)
+   │                                       ├─ messages.list  (from:"adres" in:inbox)
+   │                                       ├─ batch messages.get (metadata)
+   │                                       ├─ messages.batchModify (TRASH)
+   │                                       └─ batch messages.untrash (geri al)
+   └─ yerel dosyalar: gonderenler.csv · korunanlar.json · son_islem.json
+```
+
+| Dosya | İçinde ne var |
+|---|---|
+| `app.py` | Web sunucusu ve API: tarama, sayım, silme, geri alma, önizleme, abonelik, korunanlar |
+| `extract_senders.py` | Tarama mantığı (batch okuma, gruplama, kategori) ve CSV okuma/yazma; ayrıca CLI |
+| `gmail_auth.py` | OAuth girişi; `token.json` `0600` izniyle yazılır |
+| `demo.py` | Demo modu için sahte posta kutusu |
+
+## Güvenlik notları
+
+Uygulama maillerini değiştirebilen bir token tutar; bu yüzden yalnız kendi tarayıcından,
+`localhost` üzerinden erişilecek şekilde kuruldu:
+
+- `localhost` / `127.0.0.1` / `[::1]` dışındaki bir `Host` ile gelen istekler reddedilir
+  (DNS rebinding); başka sitelerden gelen `POST`'lar `Sec-Fetch-Site` ve `Origin` ile reddedilir.
+- Gönderen adresleri Gmail aramasına girmeden önce ayrıştırılıp doğrulanır; hazırlanmış bir
+  `From` başlığı sorguyu genişletemez (ör. `x@y.com OR label:inbox`).
+- Mail başlıklarından gelen her şey sayfaya girmeden önce HTML olarak kaçırılır.
+- Tek tıkla çıkış yalnız genel IP'deki `https` adreslerine, yönlendirme izlenmeden ve yalnız
+  sen onayladıktan sonra gönderilir.
+- `credentials.json`, `token.json` ve yerel veri dosyaları `.gitignore`'da.
+
+Uygulamayı bir ağa açma ya da ortak bir sunucuda çalıştırma.
 
 ## Testler
 
-Proje, gerçek bir Gmail hesabına veya ağa dokunmadan tamamen sahte (fake) bir Gmail servisine
-karşı çalışan bir `pytest` test paketi içeriyor.
+`pytest` testleri sahte bir Gmail servisine karşı çalışır; gerçek hesaba ya da ağa dokunmaz.
 
 ```bash
-source venv/bin/activate
-pip install pytest
+pip install -r requirements-dev.txt
 python -m pytest tests/ -v
 ```
 
 ## Notlar
 
-- `credentials.json` ve `token.json` gizli bilgiler içerir, `.gitignore` içinde hariç tutuldu.
-- `app.py`'nin silme özelliği nedeniyle ortak `token.json`, `gmail.modify` (okuma + değiştirme)
-  izniyle oluşturulur. `extract_senders.py`'nin kendisi Gmail'e yalnızca okuma amaçlı istekler
-  gönderir, mail silmez veya değiştirmez — ama artık aynı token'ı web uygulamasıyla paylaştığı
-  için token'ın izin kapsamı daha geniştir. Bu değişiklikten önce oluşturulmuş eski bir
-  `token.json` varsa silip (`rm token.json`) yeniden giriş yapman gerekir.
+- Token `gmail.modify` iznini (okuma + değiştirme) kullanır, çünkü web uygulaması mailleri
+  Çöp Kutusu'na taşır. `extract_senders.py` yalnız okur ama aynı token'ı paylaşır.
+- İzin değişikliğinden önce oluşmuş bir `token.json`'ın varsa sil ve yeniden giriş yap.
