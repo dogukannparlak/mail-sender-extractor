@@ -34,6 +34,16 @@ def test_extract_senders_counts_by_from_header(fake_service_factory):
     assert result == Counter({'Alice <alice@example.com>': 2, 'Bob <bob@example.com>': 1})
 
 
+def test_extract_senders_matches_from_header_case_insensitively(fake_service_factory):
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}]}],
+        get_responses={'m1': {'payload': {'headers': [{'name': 'from', 'value': 'Alice <alice@example.com>'}]}}},
+        label_response={'messagesTotal': 1},
+    )
+
+    assert extract_senders(service) == Counter({'Alice <alice@example.com>': 1})
+
+
 def test_extract_senders_paginates_using_next_page_token(fake_service_factory):
     service = fake_service_factory(
         list_pages=[

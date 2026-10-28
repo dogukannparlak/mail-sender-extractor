@@ -2,6 +2,7 @@ import os
 import re
 import csv
 import socket
+from collections import Counter
 import ipaddress
 from email.utils import parseaddr
 from functools import wraps
@@ -51,6 +52,19 @@ def read_senders_csv():
             if len(row) >= 2 and str(row[1]).strip().isdigit():
                 rows.append((row[0], int(row[1])))
     return _senders_payload(rows)
+
+
+def remove_senders_from_csv(senders):
+    """Çöpe taşınan gönderenleri kayıtlı listeden çıkarır; sayfa yenilenince geri gelmesinler."""
+    if not os.path.exists(CSV_PATH):
+        return
+    removed = set(senders)
+    remaining = Counter({
+        g['gonderen']: g['mail_sayisi']
+        for g in read_senders_csv()['gonderenler']
+        if g['gonderen'] not in removed
+    })
+    save_to_csv(remaining, filename=CSV_PATH)
 
 
 def handle_errors(f):
@@ -238,6 +252,7 @@ def api_delete():
         results.append({'sender': sender, 'email': email, 'deleted': len(message_ids)})
         total += len(message_ids)
 
+    remove_senders_from_csv(senders)
     return jsonify({'total_deleted': total, 'details': results})
 
 

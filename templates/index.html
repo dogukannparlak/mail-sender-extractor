@@ -369,7 +369,7 @@ async function togglePreview(sender, panel, btnEl) {
     if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
 
     if (!body.previews.length) {
-      panel.innerHTML = '<div class="preview-empty">Gelen kutusunda bu gönderenden mail bulunamadı.</div>';
+      panel.innerHTML = '<div class="preview-empty">Bu gönderenden mail bulunamadı.</div>';
     } else {
       panel.innerHTML = body.previews.map(p => `
         <div class="preview-item">
@@ -416,6 +416,24 @@ function describeUnsubResult(r) {
   return `– abonelik linki yok`;
 }
 
+// Link, fetch'ten sonra window.open ile açılırsa popup engelleyicisine takılır;
+// bunun yerine kullanıcının tıklayacağı bir bağlantı gösteriyoruz.
+function showUnsubResult(resultEl, r) {
+  resultEl.textContent = '';
+  const isLink = (r.status === 'manual_link' || r.status === 'manual_mailto') &&
+    /^(https?:|mailto:)/i.test(r.url || '');
+  if (!isLink) {
+    resultEl.textContent = describeUnsubResult(r);
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = r.url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = r.status === 'manual_link' ? '🔗 Çıkış sayfasını aç' : '✉️ Çıkış maili gönder';
+  resultEl.appendChild(a);
+}
+
 async function runUnsubscribe(senders, resultEl, btnEl) {
   if (btnEl) { btnEl.disabled = true; btnEl.textContent = '...'; }
   try {
@@ -425,13 +443,15 @@ async function runUnsubscribe(senders, resultEl, btnEl) {
       body: JSON.stringify({ senders })
     });
     const data = await res.json();
-    if (resultEl) {
-      const r = data.results[0];
-      resultEl.textContent = describeUnsubResult(r);
-      if (r.status === 'manual_link') window.open(r.url, '_blank');
-      if (r.status === 'manual_mailto') window.open(r.url, '_blank');
-    }
+    if (!res.ok) throw new Error(data.error || `Sunucu hatası (${res.status})`);
+    if (resultEl) showUnsubResult(resultEl, data.results[0]);
     return data.results;
+  } catch (err) {
+    if (resultEl) {
+      resultEl.textContent = `Hata: ${err.message}`;
+      return [];
+    }
+    throw err;
   } finally {
     if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Çık'; }
   }
@@ -492,9 +512,9 @@ document.getElementById('unsubBtn').addEventListener('click', async () => {
     const lines = results.map(r => `- ${r.sender}: ${describeUnsubResult(r)}`);
     document.getElementById('status').textContent =
       'Abonelik işlemi tamamlandı:\n\n' + lines.join('\n') +
-      '\n\n🔗 ve ✉️ ile işaretlenenler için linkler otomatik açılamadı, sağ üstteki gönderen satırındaki "Çık" butonuna tek tek basarak açabilirsin.';
+      '\n\n🔗 ve ✉️ ile işaretlenenler için gönderen satırındaki "Çık" butonuna bas; satırda tıklanabilir link çıkar.';
   } catch (err) {
-    document.getElementById('status').textContent = 'Hata oluştu: ' + err;
+    document.getElementById('status').textContent = 'Hata oluştu: ' + err.message;
   } finally {
     btn.textContent = 'Seçilenlerin Aboneliğinden Çık';
     updateSelection();
@@ -521,11 +541,18 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
       body: JSON.stringify({ senders: selected.map(g => g.gonderen) })
     });
     const result = await res.json();
+    if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
+
+    const removed = new Set(result.details.map(d => d.sender));
+    data.gonderenler = data.gonderenler.filter(g => !removed.has(g.gonderen));
+    data.toplam_mail_sayisi = data.gonderenler.reduce((sum, g) => sum + g.mail_sayisi, 0);
+    render();
+
     const lines = result.details.map(d => `- ${d.sender}: ${d.deleted} mail çöpe taşındı`);
     document.getElementById('status').textContent =
       `Tamamlandı. Toplam ${result.total_deleted} mail çöpe taşındı.\n\n` + lines.join('\n');
   } catch (err) {
-    document.getElementById('status').textContent = 'Hata oluştu: ' + err;
+    document.getElementById('status').textContent = 'Hata oluştu: ' + err.message;
   } finally {
     btn.textContent = 'Seçilenleri Çöpe Taşı';
     updateSelection();

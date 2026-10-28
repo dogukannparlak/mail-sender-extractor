@@ -26,7 +26,7 @@ def extract_senders(service):
             ).execute()
             headers = msg_data.get('payload', {}).get('headers', [])
             for h in headers:
-                if h['name'] == 'From':
+                if h['name'].lower() == 'from':
                     senders[h['value']] += 1
 
             processed += 1

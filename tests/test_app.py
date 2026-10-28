@@ -418,6 +418,36 @@ class TestApiDelete:
             assert c['body']['removeLabelIds'] == ['INBOX', 'UNREAD']
 
 
+    def test_deleted_senders_are_removed_from_saved_csv(self, client, monkeypatch, fake_service_factory, tmp_path):
+        csv_path = tmp_path / 'gonderenler.csv'
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['İsim/Adres', 'Mail Sayısı'])
+            writer.writerow(['Alice <alice@example.com>', '3'])
+            writer.writerow(['Bob <bob@example.com>', '2'])
+        monkeypatch.setattr(app_module, 'CSV_PATH', str(csv_path))
+        service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}])
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        resp = client.post('/api/delete', json={'senders': ['Alice <alice@example.com>']})
+
+        assert resp.status_code == 200
+        assert client.get('/api/senders').get_json() == {
+            'toplam_mail_sayisi': 2,
+            'gonderenler': [{'gonderen': 'Bob <bob@example.com>', 'mail_sayisi': 2}],
+        }
+
+    def test_delete_without_saved_csv_does_not_create_one(self, client, monkeypatch, fake_service_factory, tmp_path):
+        csv_path = tmp_path / 'gonderenler.csv'
+        monkeypatch.setattr(app_module, 'CSV_PATH', str(csv_path))
+        service = fake_service_factory(list_pages=[{'messages': []}])
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        resp = client.post('/api/delete', json={'senders': ['Alice <alice@example.com>']})
+
+        assert resp.status_code == 200
+        assert not csv_path.exists()
+
     def test_invalid_sender_rejects_whole_request_before_trashing(self, client, monkeypatch, fake_service_factory):
         service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}])
         get_service_mock = MagicMock(return_value=service)
