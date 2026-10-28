@@ -1,5 +1,4 @@
 import csv
-from collections import Counter
 
 import pytest
 
@@ -28,7 +27,6 @@ def test_extract_senders_counts_by_from_header(fake_service_factory):
             'm2': _metadata_response('Bob <bob@example.com>'),
             'm3': _metadata_response('Alice <alice@example.com>'),
         },
-        label_response={'messagesTotal': 3},
     )
 
     result = extract_senders(service)
@@ -43,7 +41,6 @@ def test_extract_senders_matches_from_header_case_insensitively(fake_service_fac
     service = fake_service_factory(
         list_pages=[{'messages': [{'id': 'm1'}]}],
         get_responses={'m1': {'payload': {'headers': [{'name': 'from', 'value': 'Alice <alice@example.com>'}]}}},
-        label_response={'messagesTotal': 1},
     )
 
     assert extract_senders(service) == {'alice@example.com': {'ad': 'Alice', 'mail_sayisi': 1, 'kategori': 'kisisel', 'abonelik': False}}
@@ -299,3 +296,41 @@ def test_csv_neutralises_formulas_and_round_trips(tmp_path):
     with open(out_file, encoding='utf-8') as f:
         assert list(csv.reader(f))[1][1] == '\'=HYPERLINK("https://evil.example")'
     assert load_csv(str(out_file)) == senders
+
+
+def test_quota_limiter_waits_when_the_minute_budget_is_spent():
+    from extract_senders import QuotaLimiter
+    now = [0.0]
+    sleeps = []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    limiter = QuotaLimiter(units_per_minute=1000, clock=lambda: now[0], sleep=sleep)
+    limiter.spend(600)
+    limiter.spend(400)   # tam sınırda: beklemez
+    assert sleeps == []
+    limiter.spend(100)   # bütçe doldu: ilk harcamanın 60 sn'den çıkmasını bekler
+    assert sleeps == [60.0]
+
+
+def test_user_rate_limit_403_is_retried():
+    import httplib2
+    from googleapiclient.errors import HttpError
+    from extract_senders import _is_retryable
+    err = HttpError(httplib2.Response({'status': 403}),
+                    b'{"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}')
+    assert _is_retryable(err)
+
+
+def test_scan_fills_the_id_index(fake_service_factory):
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}]}],
+        get_responses={'m1': _metadata_response('A <a@example.com>'), 'm2': _metadata_response('b@example.com')},
+    )
+    index = {}
+
+    extract_senders(service, id_index=index)
+
+    assert index == {'a@example.com': ['m1'], 'b@example.com': ['m2']}

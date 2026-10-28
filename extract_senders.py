@@ -2,7 +2,9 @@ from collections import Counter
 import csv
 import os
 import re
+import threading
 import time
+from collections import deque
 from email.utils import parseaddr
 
 from googleapiclient.errors import HttpError
@@ -14,6 +16,17 @@ EMAIL_RE = re.compile(r'^[^@\s"()<>,;:\\\[\]]+@[\w-]+(\.[\w-]+)+$')
 
 CSV_HEADER = ['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']
 LEGACY_CSV_HEADER = ['İsim/Adres', 'Mail Sayısı']
+
+
+def message_headers(msg):
+    """Gmail metadata yanıtındaki başlıklar; ad büyük/küçük harfe duyarsız (List-Unsubscribe = list-unsubscribe)."""
+    return {h['name'].lower(): h['value'] for h in (msg or {}).get('payload', {}).get('headers', [])}
+
+
+def from_address(msg):
+    """Mailin From adresi (küçük harf); başlık yoksa None."""
+    headers = message_headers(msg)
+    return sender_key(headers['from'])[0] if 'from' in headers else None
 
 
 def sender_key(header):
@@ -55,14 +68,14 @@ class SenderTally:
         self._categories = {}
         self._unsubscribe = {}
 
-    def add_counted(self, key, name, count, kategori=None, abonelik=None):
+    def add_counted(self, key, name, count, category=None, has_unsubscribe=None):
         self._counts[key] += count
         if name:
             self._names.setdefault(key, Counter())[name] += count
-        if kategori:
-            self._categories.setdefault(key, Counter())[kategori] += count
-        if abonelik is not None:
-            self._unsubscribe[key] = self._unsubscribe.get(key, False) or abonelik
+        if category:
+            self._categories.setdefault(key, Counter())[category] += count
+        if has_unsubscribe is not None:
+            self._unsubscribe[key] = self._unsubscribe.get(key, False) or has_unsubscribe
 
     def result(self):
         senders = {}
@@ -84,22 +97,66 @@ BATCH_SIZE = 50
 MAX_ATTEMPTS = 5
 
 
+# Gmail kullanıcı kotası dakikada 6.000 birim; mail okuma (messages.get) 20 birim,
+# yani dakikada en fazla ~300 mail okunabilir (developers.google.com/workspace/gmail/api/reference/quota,
+# 2026-10-28). Kotaya çarpıp 429 yemek yerine harcamayı önceden sınırlıyoruz; biraz pay bırakıldı.
+QUOTA_UNITS = {'get': 20, 'list': 5, 'batchModify': 50, 'untrash': 5}
+
+
+class QuotaLimiter:
+    """Son 60 saniyede harcanan birimi izler; sınır aşılacaksa bekler. units_per_minute=0 → sınırsız."""
+
+    def __init__(self, units_per_minute=5400, clock=time.monotonic, sleep=time.sleep):
+        self.units_per_minute = units_per_minute
+        self._clock, self._sleep = clock, sleep
+        self._spent = deque()  # (zaman, birim)
+        self._lock = threading.Lock()  # tarama ve diğer istekler aynı kullanıcı kotasını paylaşır
+
+    def spend(self, units):
+        if not self.units_per_minute:
+            return
+        with self._lock:
+            while True:
+                now = self._clock()
+                while self._spent and now - self._spent[0][0] >= 60:
+                    self._spent.popleft()
+                used = sum(u for _, u in self._spent)
+                if not self._spent or used + units <= self.units_per_minute:
+                    self._spent.append((now, units))
+                    return
+                self._sleep(max(60 - (now - self._spent[0][0]), 0.05))
+
+
+quota = QuotaLimiter()
+
+
+def gmail_execute(request, method):
+    """Tekil Gmail çağrısı: kotayı say, 429/5xx'te googleapiclient'ın kendi geri çekilmesiyle yeniden dene."""
+    quota.spend(QUOTA_UNITS[method])
+    return request.execute(num_retries=3)
+
+
+# 403 gövdesinde "rateLimitExceeded" ya da "userRateLimitExceeded" geçebilir.
+RATE_LIMIT_REASONS = ('ratelimitexceeded', 'backenderror')
+
+
 def _is_retryable(exc):
     if not isinstance(exc, HttpError):
         return False
     if exc.status_code == 429 or exc.status_code >= 500:
         return True
-    return exc.status_code == 403 and 'rateLimitExceeded' in str(exc.content)
+    body = str(exc.content).lower()
+    return exc.status_code == 403 and any(reason in body for reason in RATE_LIMIT_REASONS)
 
 
 def list_inbox_ids(service):
     ids = []
     next_page_token = None
     while True:
-        results = service.users().messages().list(
+        results = gmail_execute(service.users().messages().list(
             userId='me', labelIds=['INBOX'], maxResults=500,
             pageToken=next_page_token
-        ).execute()
+        ), 'list')
         ids.extend(m['id'] for m in results.get('messages', []))
         next_page_token = results.get('nextPageToken')
         if not next_page_token:
@@ -111,7 +168,7 @@ def list_inbox_ids(service):
 SKIPPABLE_STATUSES = {400, 404}
 
 
-def run_batched(service, ids, make_request, sleep=time.sleep):
+def run_batched(service, ids, make_request, sleep=time.sleep, method='get'):
     """make_request(id) isteklerini BATCH_SIZE'lık batch'lerle çalıştırır.
 
     Her id için bir kez (id, yanıt) üretir; yanıt None ise mail artık yok (404/400).
@@ -137,6 +194,7 @@ def run_batched(service, ids, make_request, sleep=time.sleep):
                 else:
                     raise exception
 
+            quota.spend(QUOTA_UNITS[method] * len(chunk))  # batch kotayı azaltmaz: her çağrı ayrı sayılır
             batch = service.new_batch_http_request(callback=callback)
             for msg_id in chunk:
                 batch.add(make_request(msg_id), request_id=msg_id)
@@ -171,29 +229,34 @@ def fetch_metadata(service, ids, headers, sleep=time.sleep):
     ), sleep)
 
 
-def extract_senders(service, progress=None, sleep=time.sleep):
-    progress = progress or print_progress
+
+def extract_senders(service, progress=lambda processed, total: None, sleep=time.sleep, id_index=None):
+    """Gelen kutusunu tarar; {adres: {'ad', 'mail_sayisi', 'kategori', 'abonelik'}} döner.
+
+    id_index verilirse {adres: [mail id]} ile doldurulur; silme sırasında bu mailler için
+    From adresini yeniden okumak (her biri 20 kota birimi) gerekmez.
+    """
     ids = list_inbox_ids(service)
     total = len(ids)
     progress(0, total)
 
     tally = SenderTally()
     fetched = fetch_metadata(service, ids, ['From', 'List-Unsubscribe'], sleep)
-    for processed, (_, msg_data) in enumerate(fetched, start=1):
+    for processed, (msg_id, msg_data) in enumerate(fetched, start=1):
         if msg_data is None:  # tarama sırasında silinmiş
             progress(processed, total)
             continue
-        headers = {h['name'].lower(): h['value'] for h in msg_data.get('payload', {}).get('headers', [])}
+        headers = message_headers(msg_data)
         if 'from' in headers:
             key, name = sender_key(headers['from'])
             has_unsubscribe = bool(headers.get('list-unsubscribe'))
             tally.add_counted(key, name, 1,
-                              kategori=message_category(msg_data.get('labelIds'), has_unsubscribe),
-                              abonelik=has_unsubscribe)
+                              category=message_category(msg_data.get('labelIds'), has_unsubscribe),
+                              has_unsubscribe=has_unsubscribe)
+            if id_index is not None:
+                id_index.setdefault(key, []).append(msg_id)
         progress(processed, total)
 
-    if progress is print_progress:
-        print()
     return tally.result()
 
 
@@ -246,13 +309,14 @@ def load_csv(filename):
                     key, name = sender_key(row[0])
                     tally.add_counted(key, name, int(row[1]))
             elif len(row) >= 3 and row[2].strip().isdigit():
-                kategori = row[3] if len(row) > 3 and row[3] in CATEGORIES else None
-                abonelik = {'1': True, '0': False}.get(row[4]) if len(row) > 4 else None
-                tally.add_counted(_csv_unsafe(row[0]), _csv_unsafe(row[1]), int(row[2]), kategori, abonelik)
+                category = row[3] if len(row) > 3 and row[3] in CATEGORIES else None
+                has_unsubscribe = {'1': True, '0': False}.get(row[4]) if len(row) > 4 else None
+                tally.add_counted(_csv_unsafe(row[0]), _csv_unsafe(row[1]), int(row[2]), category, has_unsubscribe)
     return tally.result()
 
 
 if __name__ == '__main__':
     service = gmail_auth.get_service()
-    senders = extract_senders(service)
+    senders = extract_senders(service, progress=print_progress)
+    print()
     save_to_csv(senders)

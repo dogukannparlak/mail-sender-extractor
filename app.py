@@ -5,6 +5,7 @@ import socket
 import ipaddress
 import threading
 import time
+from contextlib import contextmanager
 from email.utils import parseaddr
 from functools import wraps
 from urllib.parse import urlparse
@@ -17,24 +18,31 @@ from flask import Flask, jsonify, request, render_template
 from googleapiclient.errors import HttpError
 
 from gmail_auth import get_service
-from contextlib import contextmanager
+from google.auth.exceptions import RefreshError
 
-from extract_senders import (EMAIL_RE, extract_senders, fetch_metadata, load_csv, run_batched,
-                             save_to_csv, sender_key)
+from extract_senders import (EMAIL_RE, extract_senders, fetch_metadata, from_address, gmail_execute, load_csv,
+                             message_headers, run_batched, save_to_csv)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, 'gonderenler.csv')
 PROTECTED_PATH = os.path.join(BASE_DIR, 'korunanlar.json')
 UNDO_PATH = os.path.join(BASE_DIR, 'son_islem.json')
+# Taramada görülen mail id'leri (gönderen başına); silmede bu maillerin From'unu yeniden okumayız.
+SCAN_IDS_PATH = os.path.join(BASE_DIR, 'taranan_idler.json')
+DEMO_MODE = False
 
 app = Flask(__name__)
 
-# DNS rebinding'e karşı: tarayıcı başka bir alan adıyla gelirse istekleri reddet.
 ALLOWED_HOSTNAMES = {'localhost', '127.0.0.1', '[::1]'}
 
 
 @app.before_request
 def reject_foreign_host():
+    """Uygulama yalnız bu bilgisayardaki tarayıcıdan kullanılsın.
+
+    - Host kontrolü: DNS rebinding ile başka bir alan adından gelen istekleri reddeder.
+    - POST'ta Sec-Fetch-Site / Origin: başka bir sitenin arka planda attığı istekleri (CSRF) reddeder.
+    """
     hostname = re.sub(r':\d+$', '', request.host or '')
     if hostname not in ALLOWED_HOSTNAMES:
         return jsonify({'error': 'Bu uygulamaya yalnız localhost üzerinden erişilebilir.'}), 403
@@ -98,6 +106,11 @@ def _http_error_message(e):
     return message
 
 
+# Google OAuth uygulaması "Testing" durumundaysa yenileme anahtarı birkaç günde sona erebilir.
+LOGIN_EXPIRED_MESSAGE = ('Google oturumunun süresi dolmuş ya da izni geri alınmış. token.json dosyasını silip '
+                         'uygulamayı yeniden başlat, sonra tekrar giriş yap.')
+
+
 def handle_errors(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -111,10 +124,17 @@ def handle_errors(f):
             return jsonify({'error': str(e)}), 500
         except HttpError as e:
             return jsonify({'error': _http_error_message(e)}), 502
+        except RefreshError:
+            return jsonify({'error': LOGIN_EXPIRED_MESSAGE}), 401
         except Exception:
             app.logger.exception('Beklenmeyen hata')
             return jsonify({'error': 'Beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.'}), 500
     return wrapper
+
+
+def _json_body():
+    body = request.get_json(silent=True)
+    return body if isinstance(body, dict) else {}
 
 
 def _validated_senders(body):
@@ -139,7 +159,7 @@ SCOPE_QUERIES = {'inbox': ' in:inbox', 'all': ''}
 
 
 def _validated_scope(body):
-    scope = (body or {}).get('scope', 'inbox')
+    scope = body.get('scope', 'inbox')
     if scope not in SCOPE_QUERIES:
         raise ValueError("'scope' yalnız 'inbox' ya da 'all' olabilir.")
     return scope
@@ -150,10 +170,13 @@ def _validated_scope(body):
 DOMAIN_RE = re.compile(r'^@[\w-]+(\.[\w-]+)+$')
 
 
-def _write_json(path, payload):
+def _write_json(path, payload, compact=False):
     tmp = path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+        if compact:  # binlerce id içeren dosyalar (geri alma, tarama dizini)
+            json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
+        else:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
     os.replace(tmp, path)
 
 
@@ -180,18 +203,18 @@ def reject_protected(emails):
         raise ValueError('Korunan gönderenlere işlem yapılamaz: ' + ', '.join(blocked))
 
 
-def from_query(email, scope='all', extra=''):
-    return f'from:"{email}"' + SCOPE_QUERIES[scope] + extra
+def from_query(email, scope='all', unread_only=False):
+    return f'from:"{email}"' + SCOPE_QUERIES[scope] + (' is:unread' if unread_only else '')
 
 
-def find_message_ids(service, email, scope='all', extra=''):
+def find_message_ids(service, email, scope='all', unread_only=False):
     ids = []
     next_page_token = None
     while True:
-        resp = service.users().messages().list(
-            userId='me', q=from_query(email, scope, extra), maxResults=500,
+        resp = gmail_execute(service.users().messages().list(
+            userId='me', q=from_query(email, scope, unread_only), maxResults=500,
             pageToken=next_page_token
-        ).execute()
+        ), 'list')
         ids.extend(m['id'] for m in resp.get('messages', []))
         next_page_token = resp.get('nextPageToken')
         if not next_page_token:
@@ -199,27 +222,57 @@ def find_message_ids(service, email, scope='all', extra=''):
     return ids
 
 
-def _from_address(msg):
-    headers = {h['name'].lower(): h['value'] for h in (msg or {}).get('payload', {}).get('headers', [])}
-    return sender_key(headers['from'])[0] if 'from' in headers else None
+def load_scan_ids():
+    if not os.path.exists(SCAN_IDS_PATH):
+        return {}
+    with open(SCAN_IDS_PATH, encoding='utf-8') as f:
+        return json.load(f)
 
 
-def verified_message_ids(service, email, scope):
+# /api/count'un doğruladığı id'ler kısa süre saklanır; hemen ardından gelen silme
+# aynı doğrulamayı (mail başına 20 kota birimi) ikinci kez yapmasın.
+VERIFY_CACHE_SECONDS = 600
+_verify_cache = {}
+_verify_lock = threading.Lock()
+
+
+def _clear_verify_cache():
+    with _verify_lock:
+        _verify_cache.clear()
+
+
+def verified_message_ids(service, email, scope, scan_ids=None):
     """from: araması kelime bazlıdır; adı ya da benzer bir adresi eşleşen başka gönderenlerin
     mailleri de dönebilir (ör. korunan x@alan.com.tr). Yalnız From adresi birebir aynı olanları,
     korunan bir göndereni de kapsamıyorsa döndürür. İkinci değer: elenen mail sayısı.
+
+    Taramada bu adresten geldiği görülen mailler yeniden okunmaz; yalnız yeni ya da
+    arşivdeki mailler için From okunur.
     """
+    wanted = email.lower()
     candidates = find_message_ids(service, email, scope)
     if not candidates:
         return [], 0
+    with _verify_lock:
+        cached = _verify_cache.get((wanted, scope))
+    if cached and time.time() - cached['zaman'] < VERIFY_CACHE_SECONDS:
+        known_good, known_bad = cached['kept'], cached['dropped']
+    else:
+        known_good = set((scan_ids if scan_ids is not None else load_scan_ids()).get(wanted, []))
+        known_bad = set()
+
     protected = load_protected()
-    wanted = email.lower()
-    kept = set()
-    for msg_id, msg in fetch_metadata(service, candidates, ['From']):
-        address = _from_address(msg)
+    unknown = [i for i in candidates if i not in known_good and i not in known_bad]
+    for msg_id, msg in fetch_metadata(service, unknown, ['From']):
+        address = from_address(msg)
         if address == wanted and not is_protected(address, protected):
-            kept.add(msg_id)
-    ids = [i for i in candidates if i in kept]
+            known_good.add(msg_id)
+        else:
+            known_bad.add(msg_id)
+    with _verify_lock:
+        _verify_cache[(wanted, scope)] = {'zaman': time.time(), 'kept': known_good, 'dropped': known_bad}
+
+    ids = [i for i in candidates if i in known_good]
     return ids, len(candidates) - len(ids)
 
 
@@ -229,14 +282,16 @@ def verified_message_ids(service, email, scope):
 UNSUBSCRIBE_SCAN_LIMIT = 15
 
 
-def _read_unsubscribe_headers(service, msg_id):
-    msg = service.users().messages().get(
-        userId='me', id=msg_id, format='metadata',
-        metadataHeaders=['From', 'List-Unsubscribe', 'List-Unsubscribe-Post']
-    ).execute()
-    # Başlık adı büyük/küçük harf duyarlı olmamalı (List-Unsubscribe vs list-unsubscribe).
-    headers = {h['name'].lower(): h['value'] for h in msg.get('payload', {}).get('headers', [])}
-    return _from_address(msg), headers.get('list-unsubscribe'), headers.get('list-unsubscribe-post', '')
+def _first_unsubscribe_headers(service, email, ids):
+    """En yeniden eskiye, From'u bu adres olan ve List-Unsubscribe taşıyan ilk mailin başlıkları."""
+    fetched = dict(fetch_metadata(service, ids, ['From', 'List-Unsubscribe', 'List-Unsubscribe-Post']))
+    for msg_id in ids:
+        msg = fetched.get(msg_id)
+        headers = message_headers(msg)
+        # Başka bir gönderenin (adı bu adrese benzeyen) mailindeki link kullanılmasın.
+        if headers.get('list-unsubscribe') and from_address(msg) == email.lower():
+            return headers['list-unsubscribe'], headers.get('list-unsubscribe-post', '')
+    return None, ''
 
 
 def _resolve_host(hostname):
@@ -278,22 +333,14 @@ def find_unsubscribe_info(service, email, confirm_one_click=False):
 
     Tek tıkla çıkış geri alınamaz, bu yüzden POST yalnız kullanıcı onayından sonra gider.
     """
-    resp = service.users().messages().list(
+    resp = gmail_execute(service.users().messages().list(
         userId='me', q=from_query(email), maxResults=UNSUBSCRIBE_SCAN_LIMIT
-    ).execute()
+    ), 'list')
     messages = resp.get('messages', [])
     if not messages:
         return {'status': 'not_found'}
 
-    list_unsub = None
-    list_unsub_post = ''
-    for m in messages:
-        sender_address, candidate, candidate_post = _read_unsubscribe_headers(service, m['id'])
-        # Başka bir gönderenin (adı bu adrese benzeyen) mailindeki link kullanılmasın.
-        if candidate and sender_address == email.lower():
-            list_unsub, list_unsub_post = candidate, candidate_post
-            break
-
+    list_unsub, list_unsub_post = _first_unsubscribe_headers(service, email, [m['id'] for m in messages])
     if not list_unsub:
         return {'status': 'none'}
 
@@ -326,7 +373,7 @@ def find_unsubscribe_info(service, email, confirm_one_click=False):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', demo=DEMO_MODE)
 
 
 @app.route('/api/senders')
@@ -337,7 +384,7 @@ def api_senders():
 
 # Tarama binlerce mailde dakikalar sürer; arka planda çalışır, arayüz durumu sorar.
 _scan_lock = threading.Lock()
-_scan_state = {'running': False, 'processed': 0, 'total': 0, 'error': None, 'finished_at': None}
+_scan_state = {'running': False, 'processed': 0, 'total': 0, 'error': None, 'started_at': None, 'finished_at': None}
 _active_mutations = 0
 
 
@@ -347,6 +394,8 @@ def _mutation():
     with _scan_lock:
         if _scan_state['running']:
             raise Busy('Tarama sürerken silme ya da geri alma yapılamaz; tarama bitince tekrar dene.')
+        if _active_mutations:  # iki sekme ya da çift tıklama: ikinci işlem birincinin geri alma kaydını ezerdi
+            raise Busy('Başka bir silme ya da geri alma sürüyor; bitince tekrar dene.')
         _active_mutations += 1
     try:
         yield
@@ -362,12 +411,18 @@ def _update_scan(**changes):
 
 def _run_scan(service):
     try:
-        senders = extract_senders(service, progress=lambda done, total: _update_scan(processed=done, total=total))
+        scan_ids = {}
+        senders = extract_senders(service, progress=lambda done, total: _update_scan(processed=done, total=total),
+                                  id_index=scan_ids)
         with _csv_lock:
             save_to_csv(senders, filename=CSV_PATH)
+        _write_json(SCAN_IDS_PATH, scan_ids, compact=True)
+        _clear_verify_cache()
         _update_scan(error=None)
     except HttpError as e:
         _update_scan(error=_http_error_message(e))
+    except RefreshError:
+        _update_scan(error=LOGIN_EXPIRED_MESSAGE)
     except Exception:
         app.logger.exception('Tarama hatası')
         _update_scan(error='Tarama sırasında beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.')
@@ -383,20 +438,24 @@ def api_scan():
             return jsonify({'error': 'Tarama zaten sürüyor.', **_scan_state}), 409
         if _active_mutations:
             return jsonify({'error': 'Silme ya da geri alma sürüyor; bitince tekrar dene.', **_scan_state}), 409
-        _scan_state.update(running=True, processed=0, total=0, error=None, finished_at=None)
+        _scan_state.update(running=True, processed=0, total=0, error=None, started_at=time.time(), finished_at=None)
     try:
         service = get_service()  # giriş/kimlik hataları isteğin kendisinde dönsün
     except Exception:
         _update_scan(running=False)
         raise
     threading.Thread(target=_run_scan, args=(service,), daemon=True).start()
-    return jsonify(api_scan_status().get_json()), 202
+    return jsonify(_scan_snapshot()), 202
+
+
+def _scan_snapshot():
+    with _scan_lock:
+        return dict(_scan_state)
 
 
 @app.route('/api/scan/status')
 def api_scan_status():
-    with _scan_lock:
-        return jsonify(dict(_scan_state))
+    return jsonify(_scan_snapshot())
 
 
 @app.route('/api/protected')
@@ -408,7 +467,7 @@ def api_protected():
 @app.route('/api/protected', methods=['POST'])
 @handle_errors
 def api_protected_update():
-    body = request.get_json(silent=True) or {}
+    body = _json_body()
     value = body.get('value')
     if not isinstance(value, str):
         raise ValueError("İstek gövdesinde 'value' adında bir metin bekleniyor.")
@@ -428,6 +487,7 @@ def api_protected_update():
         entries.discard(value)
     protected[field] = sorted(entries)
     _write_json(PROTECTED_PATH, protected)
+    _clear_verify_cache()
     return jsonify(protected)
 
 
@@ -435,7 +495,7 @@ def api_protected_update():
 @handle_errors
 def api_count():
     """Silme onayında gösterilecek gerçek eşleşme sayısı (taramadaki sayı yalnız gelen kutusu)."""
-    body = request.get_json(silent=True)
+    body = _json_body()
     senders = _validated_senders(body)
     scope = _validated_scope(body)
     emails = [extract_email(sender) for sender in senders]
@@ -450,16 +510,16 @@ def api_count():
 
 def _batch_modify(service, ids, add=(), remove=()):
     for i in range(0, len(ids), 1000):
-        service.users().messages().batchModify(
+        gmail_execute(service.users().messages().batchModify(
             userId='me',
             body={'ids': ids[i:i + 1000], 'addLabelIds': list(add), 'removeLabelIds': list(remove)}
-        ).execute()
+        ), 'batchModify')
 
 
 @app.route('/api/delete', methods=['POST'])
 @handle_errors
 def api_delete():
-    body = request.get_json(silent=True)
+    body = _json_body()
     senders = _validated_senders(body)
     scope = _validated_scope(body)
     # Hepsini önce doğrula: geçersiz bir adres yüzünden işlem yarıda kalmasın.
@@ -469,37 +529,45 @@ def api_delete():
         return _delete(senders, emails, scope)
 
 
+def _trash_sender(service, email, scope, undo, scan_ids):
+    """Bir göndericinin maillerini çöpe taşır; önce geri alma kaydına ekler. (taşınan, elenen) döner."""
+    message_ids, skipped = verified_message_ids(service, email, scope, scan_ids)
+    if not message_ids:
+        return 0, skipped
+    # Geri alma için her mailin çöpe gitmeden önceki INBOX/UNREAD durumu saklanır;
+    # "tüm mailler"de arşivdeki mailler geri alınınca gelen kutusuna düşmemeli.
+    in_scope = set(message_ids)
+    inbox_ids = message_ids if scope == 'inbox' else [
+        i for i in find_message_ids(service, email, 'inbox') if i in in_scope]
+    unread_ids = [i for i in find_message_ids(service, email, scope, unread_only=True) if i in in_scope]
+    undo['ids'] += message_ids
+    undo['inbox'] += inbox_ids
+    undo['unread'] += unread_ids
+    # Çöpe taşımadan önce yaz: işlem yarıda kesilirse taşınanlar yine geri alınabilsin.
+    _write_json(UNDO_PATH, undo, compact=True)
+    _batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
+    return len(message_ids), skipped
+
+
 def _delete(senders, emails, scope):
     service = get_service()
     saved = load_saved_senders()
-    # Geri alma için her mailin çöpe gitmeden önceki INBOX/UNREAD durumu saklanır;
-    # "tüm mailler"de arşivdeki mailler geri alınınca gelen kutusuna düşmemeli.
+    scan_ids = load_scan_ids()
     undo = {'zaman': time.time(), 'scope': scope, 'ids': [], 'inbox': [], 'unread': [], 'gonderenler': {}}
     results = []
-    total = 0
     finished = []
     try:
         for sender, email in zip(senders, emails):
-            message_ids, skipped = verified_message_ids(service, email, scope)
-            if message_ids:
-                in_scope = set(message_ids)
-                inbox_ids = message_ids if scope == 'inbox' else [
-                    i for i in find_message_ids(service, email, 'inbox') if i in in_scope]
-                unread_ids = [i for i in find_message_ids(service, email, scope, ' is:unread') if i in in_scope]
-                undo['ids'] += message_ids
-                undo['inbox'] += inbox_ids
-                undo['unread'] += unread_ids
-                undo['gonderenler'][email.lower()] = saved.get(email.lower())
-                # Çöpe taşımadan önce yaz: işlem yarıda kesilirse taşınanlar yine geri alınabilsin.
-                _write_json(UNDO_PATH, undo)
-                _batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
-
+            undo['gonderenler'][email.lower()] = saved.get(email.lower())
+            deleted, skipped = _trash_sender(service, email, scope, undo, scan_ids)
+            if not deleted:
+                undo['gonderenler'].pop(email.lower())
             finished.append(email.lower())
-            results.append({'sender': sender, 'email': email, 'deleted': len(message_ids), 'skipped': skipped})
-            total += len(message_ids)
+            results.append({'sender': sender, 'email': email, 'deleted': deleted, 'skipped': skipped})
     finally:
         remove_senders_from_csv(finished)
-    return jsonify({'scope': scope, 'total_deleted': total, 'details': results})
+        _clear_verify_cache()
+    return jsonify({'scope': scope, 'total_deleted': sum(r['deleted'] for r in results), 'details': results})
 
 
 def load_undo():
@@ -527,6 +595,17 @@ def api_undo():
         return _undo()
 
 
+def _restore_senders_to_csv(undo):
+    with _csv_lock:
+        if not os.path.exists(CSV_PATH):
+            return
+        senders = load_saved_senders()
+        for address, info in undo['gonderenler'].items():
+            if info and address not in senders:
+                senders[address] = info
+        save_to_csv(senders, filename=CSV_PATH)
+
+
 def _undo():
     undo = load_undo()
     if not undo:
@@ -535,26 +614,25 @@ def _undo():
     # Resmi yol messages.untrash; çöp boşaltılmışsa ya da 30 gün geçmişse mail 404 döner, atlanır.
     messages = service.users().messages()
     restored = {msg_id for msg_id, resp in run_batched(
-        service, undo['ids'], lambda msg_id: messages.untrash(userId='me', id=msg_id)) if resp is not None}
+        service, undo['ids'], lambda msg_id: messages.untrash(userId='me', id=msg_id), method='untrash')
+        if resp is not None}
     _batch_modify(service, [i for i in undo['inbox'] if i in restored], add=['INBOX'])
     _batch_modify(service, [i for i in undo['unread'] if i in restored], add=['UNREAD'])
 
-    with _csv_lock:
-        if os.path.exists(CSV_PATH):
-            senders = load_saved_senders()
-            for address, info in undo['gonderenler'].items():
-                if info and address not in senders:
-                    senders[address] = info
-            save_to_csv(senders, filename=CSV_PATH)
+    _restore_senders_to_csv(undo)
     os.remove(UNDO_PATH)
+    _clear_verify_cache()
     return jsonify({'restored': len(restored), 'missing': len(set(undo['ids']) - restored),
                     'senders': sorted(undo['gonderenler'])})
+
+
+PREVIEW_LIMIT = 5
 
 
 @app.route('/api/preview', methods=['POST'])
 @handle_errors
 def api_preview():
-    body = request.get_json(silent=True) or {}
+    body = _json_body()
     sender = body.get('sender')
     if not isinstance(sender, str) or not sender.strip():
         raise ValueError("İstek gövdesinde 'sender' adında bir metin bekleniyor.")
@@ -562,17 +640,19 @@ def api_preview():
     scope = _validated_scope(body)
     email = extract_email(sender)
     service = get_service()
-    resp = service.users().messages().list(
-        userId='me', q=from_query(email, scope), maxResults=5
-    ).execute()
+    resp = gmail_execute(service.users().messages().list(
+        userId='me', q=from_query(email, scope), maxResults=PREVIEW_LIMIT
+    ), 'list')
+    ids = [m['id'] for m in resp.get('messages', [])]
+    fetched = dict(fetch_metadata(service, ids, ['From', 'Subject']))
 
     previews = []
-    for m in resp.get('messages', []):
-        msg = service.users().messages().get(
-            userId='me', id=m['id'], format='metadata',
-            metadataHeaders=['Subject']
-        ).execute()
-        headers = {h['name'].lower(): h['value'] for h in msg.get('payload', {}).get('headers', [])}
+    for msg_id in ids:
+        msg = fetched.get(msg_id)
+        # Silmeyle aynı kural: yalnız From adresi birebir bu gönderen olan mailler.
+        if from_address(msg) != email.lower():
+            continue
+        headers = message_headers(msg)
         internal = msg.get('internalDate')
         previews.append({
             'subject': headers.get('subject', '(konu yok)'),
@@ -586,9 +666,9 @@ def api_preview():
 @app.route('/api/unsubscribe', methods=['POST'])
 @handle_errors
 def api_unsubscribe():
-    body = request.get_json(silent=True)
+    body = _json_body()
     senders = _validated_senders(body)
-    confirm_one_click = (body or {}).get('confirm_one_click') is True
+    confirm_one_click = body.get('confirm_one_click') is True
     emails = [extract_email(sender) for sender in senders]
     reject_protected(emails)
     service = get_service()

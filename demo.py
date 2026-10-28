@@ -4,6 +4,7 @@
 Veriler (CSV, korunanlar, son işlem) geçici bir klasöre yazılır; gerçek dosyalara dokunulmaz.
 Abonelikten çıkma istekleri dışarı gitmez.
 """
+import os
 import random
 import re
 import tempfile
@@ -42,7 +43,7 @@ class _Call:
     def __init__(self, fn):
         self._fn = fn
 
-    def execute(self):
+    def execute(self, num_retries=0):
         return self._fn()
 
 
@@ -97,9 +98,6 @@ class DemoMailbox:
         return self
 
     def messages(self):
-        return self
-
-    def labels(self):
         return self
 
     def new_batch_http_request(self, callback=None):
@@ -169,7 +167,7 @@ class _DemoResponse:
 
 def enable(app_module):
     """app modülünü demo posta kutusuna ve geçici veri klasörüne bağlar."""
-    import os
+    import extract_senders
 
     mailbox = DemoMailbox()
     data_dir = tempfile.mkdtemp(prefix='mail-temizleyici-demo-')
@@ -177,6 +175,8 @@ def enable(app_module):
     app_module.CSV_PATH = os.path.join(data_dir, 'gonderenler.csv')
     app_module.PROTECTED_PATH = os.path.join(data_dir, 'korunanlar.json')
     app_module.UNDO_PATH = os.path.join(data_dir, 'son_islem.json')
+    app_module.SCAN_IDS_PATH = os.path.join(data_dir, 'taranan_idler.json')
+    extract_senders.quota.units_per_minute = 0  # sahte kutuda Gmail kotası yok
     # .example alan adları çözülmez; one-click kontrolü genel IP görsün, istek dışarı gitmesin.
     app_module._resolve_host = lambda hostname: {'93.184.215.14'}
     app_module.requests.post = lambda *args, **kwargs: _DemoResponse()
@@ -188,5 +188,4 @@ def enable(app_module):
 if __name__ == '__main__':
     import app as app_module
     enable(app_module)
-    import os
     app_module.app.run(port=int(os.environ.get('PORT', 5050)), threaded=True)

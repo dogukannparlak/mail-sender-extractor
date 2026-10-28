@@ -1,5 +1,4 @@
 import csv
-from collections import Counter
 from unittest.mock import MagicMock
 
 import httplib2
@@ -402,27 +401,12 @@ class TestApiSenders:
         assert resp.get_json() == {'toplam_mail_sayisi': 0, 'gonderenler': []}
 
 
-class _InlineThread:
-    """threading.Thread yerine: taramayı start() çağrısında hemen çalıştırır."""
-
-    def __init__(self, target, args=(), daemon=None):
-        self._target, self._args = target, args
-
-    def start(self):
-        self._target(*self._args)
-
-
-@pytest.fixture
-def inline_scan(monkeypatch):
-    monkeypatch.setattr(app_module.threading, 'Thread', _InlineThread)
-    monkeypatch.setitem(app_module._scan_state, 'running', False)
-
-
 class TestApiScan:
     def test_scans_in_background_and_persists_csv(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(app_module, 'get_service', lambda: 'fake-service')
 
-        def fake_extract(service, progress):
+        def fake_extract(service, progress, id_index):
+            id_index['a@example.com'] = ['m1', 'm2']
             progress(1, 2)
             progress(2, 2)
             return {'a@example.com': {'ad': '', 'mail_sayisi': 2}}
@@ -452,7 +436,7 @@ class TestApiScan:
     def test_scan_error_is_reported_in_status(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(app_module, 'get_service', lambda: 'fake-service')
 
-        def failing_extract(service, progress):
+        def failing_extract(service, progress, id_index):
             raise make_http_error(500, 'backend error')
         monkeypatch.setattr(app_module, 'extract_senders', failing_extract)
 
@@ -859,6 +843,70 @@ class TestVerifiedFromAddress:
         assert find_unsubscribe_info(service, 'news@legit.example') == {'status': 'none'}
 
 
+class TestPreviewSkipsOtherSenders:
+    def test_preview_hides_lookalike_mail(self, client, monkeypatch, fake_service_factory):
+        service = fake_service_factory(
+            list_pages=[{'messages': [{'id': 'own'}, {'id': 'other'}]}],
+            get_responses={
+                'own': {'payload': {'headers': [{'name': 'From', 'value': 'a@x.example'},
+                                                {'name': 'Subject', 'value': 'Gerçek'}]}},
+                'other': {'payload': {'headers': [{'name': 'From', 'value': '"a@x.example" <b@evil.example>'},
+                                                  {'name': 'Subject', 'value': 'Sahte'}]}},
+            },
+        )
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        previews = client.post('/api/preview', json={'sender': 'a@x.example'}).get_json()['previews']
+
+        assert [p['subject'] for p in previews] == ['Gerçek']
+
+
+class TestDeleteEfficiency:
+    def test_mail_seen_in_scan_is_not_read_again(self, client, monkeypatch, fake_service_factory):
+        import json as _json
+        with open(app_module.SCAN_IDS_PATH, 'w') as f:
+            _json.dump({'a@example.com': ['m1', 'm2']}, f)
+        service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}, {'id': 'new'}]}],
+                                       default_from='a@example.com')
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        body = client.post('/api/delete', json={'senders': ['a@example.com']}).get_json()
+
+        assert body['total_deleted'] == 3
+        assert [c['id'] for c in service.messages_resource.get_calls] == ['new']
+
+    def test_delete_right_after_count_reuses_verification(self, client, monkeypatch, fake_service_factory):
+        service = fake_service_factory(list_handler=lambda kw: {'messages': [{'id': 'm1'}]},
+                                       default_from='a@example.com')
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+        app_module._clear_verify_cache()
+
+        client.post('/api/count', json={'senders': ['a@example.com']})
+        client.post('/api/delete', json={'senders': ['a@example.com']})
+
+        assert len(service.messages_resource.get_calls) == 1
+
+    def test_second_concurrent_delete_is_rejected(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, '_active_mutations', 1)
+        get_service_mock = MagicMock()
+        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+
+        assert client.post('/api/delete', json={'senders': ['a@example.com']}).status_code == 409
+        get_service_mock.assert_not_called()
+
+    def test_expired_login_gives_clear_message(self, client, monkeypatch):
+        from google.auth.exceptions import RefreshError
+
+        def expired():
+            raise RefreshError('invalid_grant')
+        monkeypatch.setattr(app_module, 'get_service', expired)
+
+        resp = client.post('/api/count', json={'senders': ['a@example.com']})
+
+        assert resp.status_code == 401
+        assert 'token.json' in resp.get_json()['error']
+
+
 class TestOneClickPrivacy:
     def test_no_dns_lookup_before_confirmation(self, fake_service_factory, monkeypatch):
         def no_dns(hostname):
@@ -884,6 +932,7 @@ class TestApiPreview:
 
     def test_returns_recent_message_previews(self, client, monkeypatch, fake_service_factory):
         service = fake_service_factory(
+            default_from='alice@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -959,7 +1008,7 @@ class TestHostCheck:
 
     def test_allows_same_origin_post(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(app_module, 'get_service', lambda: 'fake')
-        monkeypatch.setattr(app_module, 'extract_senders', lambda service, progress: {})
+        monkeypatch.setattr(app_module, 'extract_senders', lambda service, progress, id_index: {})
         monkeypatch.setattr(app_module, 'save_to_csv', MagicMock())
 
         resp = client.post('/api/scan', headers={

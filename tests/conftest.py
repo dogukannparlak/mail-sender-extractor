@@ -12,7 +12,7 @@ class _Executable:
     def __init__(self, data):
         self._data = data
 
-    def execute(self):
+    def execute(self, num_retries=0):
         if isinstance(self._data, Exception):
             raise self._data
         return self._data
@@ -75,24 +75,12 @@ class FakeMessagesResource:
         return _Executable(self._batch_modify_result)
 
 
-class FakeLabelsResource:
-    def __init__(self, label_response=None):
-        self._label_response = label_response or {'messagesTotal': 0}
-
-    def get(self, **kwargs):
-        return _Executable(self._label_response)
-
-
 class FakeUsersResource:
-    def __init__(self, messages, labels):
+    def __init__(self, messages):
         self._messages = messages
-        self._labels = labels
 
     def messages(self):
         return self._messages
-
-    def labels(self):
-        return self._labels
 
 
 class FakeBatch:
@@ -128,12 +116,11 @@ class FakeBatch:
 class FakeGmailService:
     """Fakes the top-level object returned by `googleapiclient.discovery.build('gmail', 'v1', ...)`."""
 
-    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None, label_response=None,
+    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None,
                  list_handler=None, default_from=None):
         self.messages_resource = FakeMessagesResource(list_pages, get_responses, batch_modify_result, list_handler,
                                                       default_from)
-        self.labels_resource = FakeLabelsResource(label_response)
-        self._users = FakeUsersResource(self.messages_resource, self.labels_resource)
+        self._users = FakeUsersResource(self.messages_resource)
         self.batch_sizes = []
         self.batch_errors = []
 
@@ -156,3 +143,37 @@ def isolate_data_files(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, 'CSV_PATH', str(tmp_path / 'gonderenler.csv'))
     monkeypatch.setattr(app_module, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))
     monkeypatch.setattr(app_module, 'UNDO_PATH', str(tmp_path / 'son_islem.json'))
+    monkeypatch.setattr(app_module, 'SCAN_IDS_PATH', str(tmp_path / 'taranan_idler.json'))
+    # Kota sınırlayıcı testlerde gerçekten beklemesin (kendi testinde ayrıca denetleniyor).
+    import extract_senders
+    monkeypatch.setattr(extract_senders.quota, 'units_per_minute', 0)
+
+
+class InlineThread:
+    """threading.Thread yerine: hedefi start() çağrısında hemen çalıştırır (arka plan taramasını eşzamanlı yapar)."""
+
+    def __init__(self, target, args=(), daemon=None):
+        self._target, self._args = target, args
+
+    def start(self):
+        self._target(*self._args)
+
+
+@pytest.fixture
+def inline_scan(monkeypatch):
+    import app as app_module
+    monkeypatch.setattr(app_module.threading, 'Thread', InlineThread)
+    monkeypatch.setitem(app_module._scan_state, 'running', False)
+
+
+@pytest.fixture
+def demo_mode(monkeypatch):
+    """demo.enable modül özniteliklerini doğrudan değiştirir; monkeypatch test sonunda geri alsın."""
+    import app as app_module
+    import demo
+    for name in ('get_service', 'CSV_PATH', 'PROTECTED_PATH', 'UNDO_PATH', 'SCAN_IDS_PATH', '_resolve_host',
+                 'DEMO_MODE'):
+        monkeypatch.setattr(app_module, name, getattr(app_module, name))
+    monkeypatch.setattr(app_module.requests, 'post', app_module.requests.post)
+    monkeypatch.setitem(app_module._scan_state, 'running', False)
+    return demo.enable(app_module)

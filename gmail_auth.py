@@ -1,4 +1,7 @@
 import os
+import threading
+
+from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -13,14 +16,29 @@ TOKEN_PATH = os.path.join(BASE_DIR, 'token.json')
 CREDENTIALS_PATH = os.path.join(BASE_DIR, 'credentials.json')
 
 
+# Aynı anda gelen iki istek iki ayrı giriş penceresi açmasın, token.json'a yarışarak yazmasın.
+_auth_lock = threading.Lock()
+
+
 def get_service():
+    with _auth_lock:
+        return build('gmail', 'v1', credentials=_load_credentials())
+
+
+def _load_credentials():
     creds = None
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
     if not creds or not creds.valid:
+        refreshed = False
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+                refreshed = True
+            except RefreshError:
+                # Yenileme anahtarı geçersiz (süresi doldu ya da izin geri alındı): yeniden giriş gerekir.
+                creds = None
+        if not refreshed:
             if not os.path.exists(CREDENTIALS_PATH):
                 raise FileNotFoundError(
                     f"credentials.json bulunamadı ({CREDENTIALS_PATH}). "
@@ -33,4 +51,4 @@ def get_service():
         with os.fdopen(fd, 'w') as token:
             token.write(creds.to_json())
         os.chmod(TOKEN_PATH, 0o600)
-    return build('gmail', 'v1', credentials=creds)
+    return creds
