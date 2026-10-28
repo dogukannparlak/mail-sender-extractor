@@ -522,4 +522,8 @@ def api_unsubscribe():
 
 
 if __name__ == '__main__':
+    if os.environ.get('DEMO') == '1':
+        import sys
+        import demo
+        demo.enable(sys.modules[__name__])
     app.run(debug=os.environ.get('FLASK_DEBUG') == '1', port=5050, threaded=True)

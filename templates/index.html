@@ -188,6 +188,9 @@
   .select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
   .toolbar { flex-wrap: wrap; }
   .select-all[hidden] { display: none; }
+  .tool, #categoryFilterWrap { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  #categoryFilterWrap[hidden] { display: none; }
+  .unsub-result { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
   #searchInput {
     flex: 1; min-width: 160px; background: var(--card); color: var(--text);
     border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px;
@@ -230,11 +233,14 @@
         <option value="kisisel">Kişisel</option>
       </select>
     </span>
+    <span class="tool">
     <label for="viewSelect">Görünüm:</label>
     <select id="viewSelect">
       <option value="address">Adres</option>
       <option value="domain">Alan adı</option>
     </select>
+    </span>
+    <span class="tool">
     <label for="sortSelect">Sırala:</label>
     <select id="sortSelect">
       <option value="count_desc">Mail sayısı (çoktan aza)</option>
@@ -242,6 +248,7 @@
       <option value="name_asc">İsme göre (A-Z)</option>
       <option value="name_desc">İsme göre (Z-A)</option>
     </select>
+    </span>
   </div>
   <div id="senders">Yükleniyor...</div>
 </main>
