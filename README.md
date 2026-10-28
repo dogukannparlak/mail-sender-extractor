@@ -113,9 +113,12 @@ Don't expose this app on a network or run it on a shared server.
 ## Tests
 
 The `pytest` suite runs against a fake Gmail service; no real account or network is touched.
+`tests/test_ui.py` drives the page in headless Chromium against demo mode (skipped if Chromium
+isn't installed).
 
 ```bash
 pip install -r requirements-dev.txt
+python -m playwright install chromium   # only for the browser tests in tests/test_ui.py
 python -m pytest tests/ -v
 ```
 

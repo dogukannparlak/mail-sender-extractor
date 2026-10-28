@@ -116,9 +116,12 @@ Uygulamayı bir ağa açma ya da ortak bir sunucuda çalıştırma.
 ## Testler
 
 `pytest` testleri sahte bir Gmail servisine karşı çalışır; gerçek hesaba ya da ağa dokunmaz.
+`tests/test_ui.py` sayfayı demo moduna karşı headless Chromium'da kullanır (Chromium kurulu
+değilse atlanır).
 
 ```bash
 pip install -r requirements-dev.txt
+python -m playwright install chromium   # yalnız tests/test_ui.py tarayıcı testleri için
 python -m pytest tests/ -v
 ```
 
