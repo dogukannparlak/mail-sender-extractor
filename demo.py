@@ -147,6 +147,12 @@ class DemoMailbox:
             }
         return _Call(run)
 
+    def untrash(self, userId='me', id=None):
+        def run():
+            self.store[id]['labels'].discard('TRASH')
+            return {'id': id}
+        return _Call(run)
+
     def batchModify(self, userId='me', body=None):
         def run():
             for i in body['ids']:

@@ -420,7 +420,9 @@ function render() {
     // Alan adı satırının kilidi alan adını, adres satırınınki yalnız adresi korur.
     const lockValue = single ? g.gonderen : rowData.key;
     const locked = single ? isProtected(g.gonderen) : protectedList.alanlar.includes(rowData.key);
-    const anyLocked = rowData.members.some(m => isProtected(m.gonderen));
+    // Alan adı satırında korunan adresler seçime girmez; satır yalnız hepsi korunuyorsa kapanır.
+    const selectable = rowData.members.filter(m => !isProtected(m.gonderen));
+    const anyLocked = selectable.length === 0;
 
     const row = document.createElement('div');
     row.className = 'sender-row' + (anyLocked ? ' protected' : '');
@@ -443,10 +445,10 @@ function render() {
     previewPanel.className = 'sender-preview';
 
     const checkbox = row.querySelector('.sender-checkbox');
-    checkbox.rowMembers = rowData.members;
+    checkbox.rowMembers = selectable;
     syncRowCheckbox(checkbox);
     checkbox.addEventListener('change', () => {
-      rowData.members.forEach(m => checkbox.checked ? selected.add(m.gonderen) : selected.delete(m.gonderen));
+      selectable.forEach(m => checkbox.checked ? selected.add(m.gonderen) : selected.delete(m.gonderen));
       syncSelectAll();
       updateSelection();
     });
@@ -500,7 +502,7 @@ async function toggleProtected(value, makeProtected, btnEl) {
 
 function syncRowCheckbox(checkbox) {
   const picked = checkbox.rowMembers.filter(m => selected.has(m.gonderen)).length;
-  checkbox.checked = picked === checkbox.rowMembers.length;
+  checkbox.checked = picked > 0 && picked === checkbox.rowMembers.length;
   checkbox.indeterminate = picked > 0 && !checkbox.checked;
 }
 
@@ -579,8 +581,8 @@ function updateSelection() {
   document.getElementById('selectedInfo').textContent =
     (picked.length ? `${picked.length} gönderen, ${totalMail} mail seçildi` : '0 mail seçildi') +
     (hidden ? ` (${hidden} tanesi filtre yüzünden görünmüyor)` : '');
-  document.getElementById('deleteBtn').disabled = picked.length === 0;
-  document.getElementById('unsubBtn').disabled = picked.length === 0;
+  document.getElementById('deleteBtn').disabled = busy || picked.length === 0;
+  document.getElementById('unsubBtn').disabled = busy || picked.length === 0;
 }
 
 function describeUnsubResult(r) {
@@ -657,9 +659,14 @@ async function runUnsubscribe(senders, resultEl, btnEl) {
   }
 }
 
+// Tarama, silme ya da abonelik işlemi sürerken işlem butonları kapalı kalır;
+// filtre/sıralama değişince updateSelection onları yeniden açmamalı.
+let busy = false;
 function setActionButtonsDisabled(disabled) {
+  busy = disabled;
   document.getElementById('unsubBtn').disabled = disabled;
   document.getElementById('deleteBtn').disabled = disabled;
+  document.getElementById('undoBtn').disabled = disabled;
 }
 
 function showScanProgress(state) {
@@ -697,6 +704,7 @@ async function pollScan() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Gelen Kutusunu Tara';
+    setActionButtonsDisabled(false);
     updateSelection();
   }
 }
@@ -730,8 +738,7 @@ async function refreshUndo() {
 }
 
 async function undoLastDelete() {
-  const btn = document.getElementById('undoBtn');
-  btn.disabled = true;
+  setActionButtonsDisabled(true);
   document.getElementById('status').textContent = 'Son silme geri alınıyor...';
   try {
     const res = await fetch('/api/undo', { method: 'POST' });
@@ -739,11 +746,13 @@ async function undoLastDelete() {
     if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
     await load();
     document.getElementById('status').textContent =
-      `${result.restored} mail çöpten geri alındı (${result.senders.join(', ')}).`;
+      `${result.restored} mail çöpten geri alındı (${result.senders.join(', ')}).` +
+      (result.missing ? ` ${result.missing} mail artık çöpte değildi (silinmiş olabilir).` : '');
   } catch (err) {
     document.getElementById('status').textContent = 'Geri alınamadı: ' + err.message;
   } finally {
-    btn.disabled = false;
+    setActionButtonsDisabled(false);
+    updateSelection();
     refreshUndo();
   }
 }
@@ -803,7 +812,7 @@ document.getElementById('selectAll').addEventListener('change', (e) => {
 document.getElementById('unsubBtn').addEventListener('click', async () => {
   const selected = getSelected();
   const btn = document.getElementById('unsubBtn');
-  btn.disabled = true;
+  setActionButtonsDisabled(true);
   btn.textContent = 'İşleniyor...';
   document.getElementById('status').textContent = `${selected.length} gönderen için abonelik bilgisi kontrol ediliyor...`;
 
@@ -817,6 +826,7 @@ document.getElementById('unsubBtn').addEventListener('click', async () => {
     document.getElementById('status').textContent = 'Hata oluştu: ' + err.message;
   } finally {
     btn.textContent = 'Seçilenlerin Aboneliğinden Çık';
+    setActionButtonsDisabled(false);
     updateSelection();
   }
 });
@@ -825,7 +835,7 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
   const selected = getSelected();
   const senders = selected.map(g => g.gonderen);
   const btn = document.getElementById('deleteBtn');
-  btn.disabled = true;
+  setActionButtonsDisabled(true);
 
   try {
     // Taramadaki sayı yalnız gelen kutusunu sayar; onayda seçilen kapsamın gerçek sayısı görünsün.
@@ -868,8 +878,12 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
       `Tamamlandı. Toplam ${result.total_deleted} mail çöpe taşındı.\n\n` + lines.join('\n');
   } catch (err) {
     document.getElementById('status').textContent = 'Hata oluştu: ' + err.message;
+    // Silme yarıda kesildiyse bir kısmı çöpe gitmiş olabilir: listeyi ve geri al durumunu tazele.
+    load();
+    refreshUndo();
   } finally {
     btn.textContent = 'Seçilenleri Çöpe Taşı';
+    setActionButtonsDisabled(false);
     updateSelection();
   }
 });

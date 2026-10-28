@@ -17,7 +17,9 @@ from flask import Flask, jsonify, request, render_template
 from googleapiclient.errors import HttpError
 
 from gmail_auth import get_service
-from extract_senders import EMAIL_RE, extract_senders, load_csv, save_to_csv
+from contextlib import contextmanager
+
+from extract_senders import EMAIL_RE, extract_senders, load_csv, run_batched, save_to_csv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, 'gonderenler.csv')
@@ -67,13 +69,24 @@ def read_senders_csv():
     return _senders_payload(load_saved_senders())
 
 
+# CSV'yi oku-değiştir-yaz yapan işlemler (iki sekmeden silme, geri alma) birbirini ezmesin.
+_csv_lock = threading.Lock()
+
+
 def remove_senders_from_csv(senders):
     """Çöpe taşınan gönderenleri kayıtlı listeden çıkarır; sayfa yenilenince geri gelmesinler."""
-    if not os.path.exists(CSV_PATH):
+    if not senders:
         return
-    removed = set(senders)
-    remaining = {k: v for k, v in load_saved_senders().items() if k not in removed}
-    save_to_csv(remaining, filename=CSV_PATH)
+    with _csv_lock:
+        if not os.path.exists(CSV_PATH):
+            return
+        removed = set(senders)
+        remaining = {k: v for k, v in load_saved_senders().items() if k not in removed}
+        save_to_csv(remaining, filename=CSV_PATH)
+
+
+class Busy(Exception):
+    """Tarama ile silme/geri alma aynı anda çalışmasın (tarama sonucu silineni geri yazardı)."""
 
 
 def _http_error_message(e):
@@ -89,6 +102,8 @@ def handle_errors(f):
     def wrapper(*args, **kwargs):
         try:
             return f(*args, **kwargs)
+        except Busy as e:
+            return jsonify({'error': str(e)}), 409
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
         except FileNotFoundError as e:
@@ -293,6 +308,21 @@ def api_senders():
 # Tarama binlerce mailde dakikalar sürer; arka planda çalışır, arayüz durumu sorar.
 _scan_lock = threading.Lock()
 _scan_state = {'running': False, 'processed': 0, 'total': 0, 'error': None, 'finished_at': None}
+_active_mutations = 0
+
+
+@contextmanager
+def _mutation():
+    global _active_mutations
+    with _scan_lock:
+        if _scan_state['running']:
+            raise Busy('Tarama sürerken silme ya da geri alma yapılamaz; tarama bitince tekrar dene.')
+        _active_mutations += 1
+    try:
+        yield
+    finally:
+        with _scan_lock:
+            _active_mutations -= 1
 
 
 def _update_scan(**changes):
@@ -303,7 +333,8 @@ def _update_scan(**changes):
 def _run_scan(service):
     try:
         senders = extract_senders(service, progress=lambda done, total: _update_scan(processed=done, total=total))
-        save_to_csv(senders, filename=CSV_PATH)
+        with _csv_lock:
+            save_to_csv(senders, filename=CSV_PATH)
         _update_scan(error=None)
     except HttpError as e:
         _update_scan(error=_http_error_message(e))
@@ -320,6 +351,8 @@ def api_scan():
     with _scan_lock:
         if _scan_state['running']:
             return jsonify({'error': 'Tarama zaten sürüyor.', **_scan_state}), 409
+        if _active_mutations:
+            return jsonify({'error': 'Silme ya da geri alma sürüyor; bitince tekrar dene.', **_scan_state}), 409
         _scan_state.update(running=True, processed=0, total=0, error=None, finished_at=None)
     try:
         service = get_service()  # giriş/kimlik hataları isteğin kendisinde dönsün
@@ -402,33 +435,40 @@ def api_delete():
     # Hepsini önce doğrula: geçersiz bir adres yüzünden işlem yarıda kalmasın.
     emails = [extract_email(sender) for sender in senders]
     reject_protected(emails)
-    service = get_service()
+    with _mutation():
+        return _delete(senders, emails, scope)
 
+
+def _delete(senders, emails, scope):
+    service = get_service()
     saved = load_saved_senders()
     # Geri alma için her mailin çöpe gitmeden önceki INBOX/UNREAD durumu saklanır;
     # "tüm mailler"de arşivdeki mailler geri alınınca gelen kutusuna düşmemeli.
     undo = {'zaman': time.time(), 'scope': scope, 'ids': [], 'inbox': [], 'unread': [], 'gonderenler': {}}
     results = []
     total = 0
-    for sender, email in zip(senders, emails):
-        message_ids = find_message_ids(service, email, scope)
-        if message_ids:
-            in_scope = set(message_ids)
-            inbox_ids = message_ids if scope == 'inbox' else [
-                i for i in find_message_ids(service, email, 'inbox') if i in in_scope]
-            unread_ids = [i for i in find_message_ids(service, email, scope, ' is:unread') if i in in_scope]
-            undo['ids'] += message_ids
-            undo['inbox'] += inbox_ids
-            undo['unread'] += unread_ids
-            _batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
+    finished = []
+    try:
+        for sender, email in zip(senders, emails):
+            message_ids = find_message_ids(service, email, scope)
+            if message_ids:
+                in_scope = set(message_ids)
+                inbox_ids = message_ids if scope == 'inbox' else [
+                    i for i in find_message_ids(service, email, 'inbox') if i in in_scope]
+                unread_ids = [i for i in find_message_ids(service, email, scope, ' is:unread') if i in in_scope]
+                undo['ids'] += message_ids
+                undo['inbox'] += inbox_ids
+                undo['unread'] += unread_ids
+                undo['gonderenler'][email.lower()] = saved.get(email.lower())
+                # Çöpe taşımadan önce yaz: işlem yarıda kesilirse taşınanlar yine geri alınabilsin.
+                _write_json(UNDO_PATH, undo)
+                _batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
 
-        undo['gonderenler'][email.lower()] = saved.get(email.lower())
-        results.append({'sender': sender, 'email': email, 'deleted': len(message_ids)})
-        total += len(message_ids)
-
-    if total:
-        _write_json(UNDO_PATH, undo)
-    remove_senders_from_csv([email.lower() for email in emails])
+            finished.append(email.lower())
+            results.append({'sender': sender, 'email': email, 'deleted': len(message_ids)})
+            total += len(message_ids)
+    finally:
+        remove_senders_from_csv(finished)
     return jsonify({'scope': scope, 'total_deleted': total, 'details': results})
 
 
@@ -453,22 +493,32 @@ def api_undo_info():
 @handle_errors
 def api_undo():
     """Son silme işlemini geri alır: çöpten çıkarır, INBOX/UNREAD etiketlerini eski haline getirir."""
+    with _mutation():
+        return _undo()
+
+
+def _undo():
     undo = load_undo()
     if not undo:
         raise ValueError('Geri alınacak bir silme işlemi yok.')
     service = get_service()
-    _batch_modify(service, undo['ids'], remove=['TRASH'])
-    _batch_modify(service, undo['inbox'], add=['INBOX'])
-    _batch_modify(service, undo['unread'], add=['UNREAD'])
+    # Resmi yol messages.untrash; çöp boşaltılmışsa ya da 30 gün geçmişse mail 404 döner, atlanır.
+    messages = service.users().messages()
+    restored = {msg_id for msg_id, resp in run_batched(
+        service, undo['ids'], lambda msg_id: messages.untrash(userId='me', id=msg_id)) if resp is not None}
+    _batch_modify(service, [i for i in undo['inbox'] if i in restored], add=['INBOX'])
+    _batch_modify(service, [i for i in undo['unread'] if i in restored], add=['UNREAD'])
 
-    if os.path.exists(CSV_PATH):
-        senders = load_saved_senders()
-        for address, info in undo['gonderenler'].items():
-            if info and address not in senders:
-                senders[address] = info
-        save_to_csv(senders, filename=CSV_PATH)
+    with _csv_lock:
+        if os.path.exists(CSV_PATH):
+            senders = load_saved_senders()
+            for address, info in undo['gonderenler'].items():
+                if info and address not in senders:
+                    senders[address] = info
+            save_to_csv(senders, filename=CSV_PATH)
     os.remove(UNDO_PATH)
-    return jsonify({'restored': len(undo['ids']), 'senders': sorted(undo['gonderenler'])})
+    return jsonify({'restored': len(restored), 'missing': len(set(undo['ids']) - restored),
+                    'senders': sorted(undo['gonderenler'])})
 
 
 @app.route('/api/preview', methods=['POST'])

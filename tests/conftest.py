@@ -39,6 +39,12 @@ class FakeMessagesResource:
         self.list_calls = []
         self.get_calls = []
         self.batch_modify_calls = []
+        self.untrash_calls = []
+        self.untrash_responses = {}
+
+    def untrash(self, **kwargs):
+        self.untrash_calls.append(kwargs)
+        return _Executable(self.untrash_responses.get(kwargs.get('id'), {'id': kwargs.get('id')}))
 
     def list(self, **kwargs):
         self.list_calls.append(kwargs)
@@ -90,10 +96,19 @@ class FakeBatch:
         self._requests = []
 
     def add(self, request, callback=None, request_id=None):
+        # Gerçek BatchHttpRequest de aynı id'yi ikinci kez kabul etmez.
+        if request_id in {rid for _, _, rid in self._requests}:
+            raise KeyError(request_id)
+        if len(self._requests) >= 1000:
+            raise ValueError('batch en fazla 1000 istek alır')
         self._requests.append((request, callback or self._callback, request_id))
 
     def execute(self):
         self._service.batch_sizes.append(len(self._requests))
+        if self._service.batch_errors:  # batch isteğinin kendisi (dış HTTP) hata verirse
+            error = self._service.batch_errors.pop(0)
+            if error is not None:
+                raise error
         for request, callback, request_id in self._requests:
             try:
                 response, exception = request.execute(), None
@@ -111,6 +126,7 @@ class FakeGmailService:
         self.labels_resource = FakeLabelsResource(label_response)
         self._users = FakeUsersResource(self.messages_resource, self.labels_resource)
         self.batch_sizes = []
+        self.batch_errors = []
 
     def users(self):
         return self._users

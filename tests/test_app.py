@@ -644,6 +644,15 @@ class LabelledMailbox:
         self.labels = {i: set(l) for i, l in labels_by_id.items()}
         self.service = fake_service_factory(list_handler=self._list)
         self.service.messages_resource.batchModify = self._batch_modify
+        self.service.messages_resource.untrash = self._untrash
+        self.gone = set()  # çöpü boşaltılmış mailler: untrash 404 döner
+
+    def _untrash(self, userId, id):
+        from conftest import _Executable
+        if id in self.gone:
+            return _Executable(make_http_error(404, 'not found'))
+        self.labels[id].discard('TRASH')
+        return _Executable({'id': id})
 
     def _list(self, kwargs):
         q = kwargs['q']
@@ -699,6 +708,47 @@ class TestUndo:
             'a@example.com', 'b@example.com']
         assert client.get('/api/undo').get_json() == {'available': False}
         assert client.post('/api/undo').status_code == 400
+
+    def test_partial_delete_failure_can_still_be_undone(self, client, monkeypatch, fake_service_factory):
+        box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})
+        original_list = box._list
+
+        def failing_for_b(kwargs):
+            if 'b@example.com' in kwargs['q']:
+                raise make_http_error(500, 'backend error')
+            return original_list(kwargs)
+        box.service.messages_resource._list_handler = failing_for_b
+        monkeypatch.setattr(app_module, 'get_service', lambda: box.service)
+
+        resp = client.post('/api/delete', json={'senders': ['a@example.com', 'b@example.com']})
+        assert resp.status_code == 502
+        assert 'TRASH' in box.labels['m1']
+
+        assert client.post('/api/undo').status_code == 200
+        assert box.labels['m1'] == {'INBOX'}
+
+    def test_undo_skips_messages_gone_from_trash(self, client, monkeypatch, fake_service_factory):
+        box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}, 'm2': {'INBOX'}})
+        monkeypatch.setattr(app_module, 'get_service', lambda: box.service)
+        client.post('/api/delete', json={'senders': ['a@example.com']})
+        box.gone.add('m2')
+
+        result = client.post('/api/undo').get_json()
+
+        assert (result['restored'], result['missing']) == (1, 1)
+        assert box.labels['m1'] == {'INBOX'}
+        assert 'INBOX' not in box.labels['m2']
+
+    @pytest.mark.parametrize('path', ['/api/delete', '/api/undo'])
+    def test_delete_and_undo_are_blocked_while_scanning(self, client, monkeypatch, path):
+        monkeypatch.setitem(app_module._scan_state, 'running', True)
+        get_service_mock = MagicMock()
+        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+
+        resp = client.post(path, json={'senders': ['a@example.com']})
+
+        assert resp.status_code == 409
+        get_service_mock.assert_not_called()
 
     def test_delete_with_no_matches_keeps_previous_undo(self, client, monkeypatch, fake_service_factory):
         box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})

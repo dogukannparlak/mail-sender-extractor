@@ -1,5 +1,6 @@
 from collections import Counter
 import csv
+import os
 import re
 import time
 from email.utils import parseaddr
@@ -102,43 +103,72 @@ def list_inbox_ids(service):
         ids.extend(m['id'] for m in results.get('messages', []))
         next_page_token = results.get('nextPageToken')
         if not next_page_token:
-            return ids
+            # Sayfalama sırasında yeni mail gelirse aynı id iki sayfada görünebilir.
+            return list(dict.fromkeys(ids))
 
 
-def fetch_metadata(service, ids, headers, sleep=time.sleep):
-    """Mailleri BATCH_SIZE'lık batch isteklerle getirir; hız sınırına takılanları bekleyip yeniden dener.
+# Tarama sürerken silinen bir mail 404 döner; bu, bütün taramayı düşürmemeli.
+SKIPPABLE_STATUSES = {400, 404}
 
-    Her başarılı yanıt için (id, yanıt) üretir.
+
+def run_batched(service, ids, make_request, sleep=time.sleep):
+    """make_request(id) isteklerini BATCH_SIZE'lık batch'lerle çalıştırır.
+
+    Her id için bir kez (id, yanıt) üretir; yanıt None ise mail artık yok (404/400).
+    Hız sınırına takılanlar (tek istek ya da batch'in tamamı) bekleyip yeniden denenir;
+    ilerleme olan turlarda deneme sayacı sıfırlanır.
     """
-    pending = list(ids)
+    pending = list(dict.fromkeys(ids))  # aynı request_id iki kez eklenirse batch KeyError verir
     attempt = 0
     while pending:
-        done, retry = [], []
-
-        def callback(request_id, response, exception):
-            if exception is None:
-                done.append((request_id, response))
-            elif _is_retryable(exception):
-                retry.append(request_id)
-            else:
-                raise exception
-
+        retry = []
+        progressed = False
         for i in range(0, len(pending), BATCH_SIZE):
+            chunk = pending[i:i + BATCH_SIZE]
+            finished, failed = [], []
+
+            def callback(request_id, response, exception):
+                if exception is None:
+                    finished.append((request_id, response))
+                elif isinstance(exception, HttpError) and exception.status_code in SKIPPABLE_STATUSES:
+                    finished.append((request_id, None))
+                elif _is_retryable(exception):
+                    failed.append(request_id)
+                else:
+                    raise exception
+
             batch = service.new_batch_http_request(callback=callback)
-            for msg_id in pending[i:i + BATCH_SIZE]:
-                batch.add(service.users().messages().get(
-                    userId='me', id=msg_id, format='metadata', metadataHeaders=headers
-                ), request_id=msg_id)
-            batch.execute()
-            yield from done
-            done.clear()
+            for msg_id in chunk:
+                batch.add(make_request(msg_id), request_id=msg_id)
+            try:
+                batch.execute()
+            except HttpError as e:
+                if not _is_retryable(e):
+                    raise
+                done_ids = {request_id for request_id, _ in finished}
+                failed = [msg_id for msg_id in chunk if msg_id not in done_ids]
+
+            if finished:
+                progressed = True
+                yield from finished
+            if failed:
+                retry.extend(failed)
+                if i + BATCH_SIZE < len(pending):
+                    sleep(1)  # kota dolmuş; sıradaki batch'i hemen göndermeyelim
 
         if retry:
-            attempt += 1
+            attempt = 1 if progressed else attempt + 1
             if attempt >= MAX_ATTEMPTS:
                 raise RuntimeError(f'{len(retry)} mail Gmail hız sınırı yüzünden {MAX_ATTEMPTS} denemede alınamadı.')
             sleep(2 ** (attempt - 1))
-        pending = retry
+        pending = list(dict.fromkeys(retry))
+
+
+def fetch_metadata(service, ids, headers, sleep=time.sleep):
+    messages = service.users().messages()
+    return run_batched(service, ids, lambda msg_id: messages.get(
+        userId='me', id=msg_id, format='metadata', metadataHeaders=headers
+    ), sleep)
 
 
 def extract_senders(service, progress=None, sleep=time.sleep):
@@ -150,6 +180,9 @@ def extract_senders(service, progress=None, sleep=time.sleep):
     tally = SenderTally()
     fetched = fetch_metadata(service, ids, ['From', 'List-Unsubscribe'], sleep)
     for processed, (_, msg_data) in enumerate(fetched, start=1):
+        if msg_data is None:  # tarama sırasında silinmiş
+            progress(processed, total)
+            continue
         headers = {h['name'].lower(): h['value'] for h in msg_data.get('payload', {}).get('headers', [])}
         if 'from' in headers:
             key, name = sender_key(headers['from'])
@@ -175,12 +208,15 @@ def print_progress(processed, total, bar_length=30):
 
 
 def save_to_csv(senders, filename='gonderenler.csv'):
-    with open(filename, 'w', newline='', encoding='utf-8') as f:
+    # Önce geçici dosyaya yaz: okuyan biri yarım dosya görmesin.
+    tmp = filename + '.tmp'
+    with open(tmp, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
         writer.writerow(CSV_HEADER)
         for address, info in sorted(senders.items(), key=lambda kv: -kv[1]['mail_sayisi']):
             abonelik = {True: '1', False: '0'}.get(info.get('abonelik'), '')
             writer.writerow([address, info['ad'], info['mail_sayisi'], info.get('kategori', ''), abonelik])
+    os.replace(tmp, filename)
     print(f"{len(senders)} benzersiz gönderen '{filename}' dosyasına yazıldı.")
 
 

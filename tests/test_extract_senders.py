@@ -234,3 +234,57 @@ def test_sender_category_is_the_most_common_and_unsubscribe_is_any(fake_service_
 
     assert (info['kategori'], info['abonelik']) == ('promosyon', True)
     assert service.messages_resource.get_calls[0]['metadataHeaders'] == ['From', 'List-Unsubscribe']
+
+
+def test_message_deleted_during_scan_is_skipped(fake_service_factory):
+    import httplib2
+    from googleapiclient.errors import HttpError
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}]}],
+        get_responses={
+            'm1': HttpError(httplib2.Response({'status': 404}), b'{"error": {"message": "not found"}}'),
+            'm2': _metadata_response('a@example.com'),
+        },
+    )
+    seen = []
+
+    result = extract_senders(service, progress=lambda done, total: seen.append((done, total)))
+
+    assert result['a@example.com']['mail_sayisi'] == 1
+    assert seen[-1] == (2, 2)
+
+
+def test_whole_batch_rate_limit_is_retried(fake_service_factory):
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}]}],
+        get_responses={'m1': _metadata_response('a@example.com')},
+    )
+    service.batch_errors = [_rate_limit_error()]
+    sleeps = []
+
+    result = extract_senders(service, progress=lambda *a: None, sleep=sleeps.append)
+
+    assert result['a@example.com']['mail_sayisi'] == 1
+    assert service.batch_sizes == [1, 1] and sleeps == [1]
+
+
+def test_duplicate_ids_across_pages_are_counted_once(fake_service_factory):
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}], 'nextPageToken': 'p2'}, {'messages': [{'id': 'm1'}, {'id': 'm2'}]}],
+        get_responses={'m1': _metadata_response('a@example.com'), 'm2': _metadata_response('a@example.com')},
+    )
+
+    assert extract_senders(service, progress=lambda *a: None)['a@example.com']['mail_sayisi'] == 2
+
+
+def test_progress_resets_retry_budget(fake_service_factory):
+    # Her turda bir mail ilerliyorsa 5 denemeden fazla tur sürse de tarama bitmeli.
+    ids = [f'm{i}' for i in range(7)]
+    responses = {}
+    for n, msg_id in enumerate(ids):
+        responses[msg_id] = [_rate_limit_error()] * n + [_metadata_response('a@example.com')]
+    service = fake_service_factory(list_pages=[{'messages': [{'id': i} for i in ids]}], get_responses=responses)
+
+    result = extract_senders(service, progress=lambda *a: None, sleep=lambda s: None)
+
+    assert result['a@example.com']['mail_sayisi'] == 7
