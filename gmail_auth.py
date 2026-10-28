@@ -28,6 +28,9 @@ def get_service():
                 )
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
             creds = flow.run_local_server(port=0)
-        with open(TOKEN_PATH, 'w') as token:
+        # Token Gmail'e yazma yetkisi taşır; yalnız dosya sahibi okuyabilsin.
+        fd = os.open(TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w') as token:
             token.write(creds.to_json())
+        os.chmod(TOKEN_PATH, 0o600)
     return build('gmail', 'v1', credentials=creds)

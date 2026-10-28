@@ -1,7 +1,11 @@
 import os
 import re
 import csv
+import socket
+import ipaddress
+from email.utils import parseaddr
 from functools import wraps
+from urllib.parse import urlparse
 
 import requests
 from flask import Flask, jsonify, request, render_template
@@ -14,6 +18,16 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, 'gonderenler.csv')
 
 app = Flask(__name__)
+
+# DNS rebinding'e karşı: tarayıcı başka bir alan adıyla gelirse istekleri reddet.
+ALLOWED_HOSTNAMES = {'localhost', '127.0.0.1', '[::1]'}
+
+
+@app.before_request
+def reject_foreign_host():
+    hostname = re.sub(r':\d+$', '', request.host or '')
+    if hostname not in ALLOWED_HOSTNAMES:
+        return jsonify({'error': 'Bu uygulamaya yalnız localhost üzerinden erişilebilir.'}), 403
 
 
 def _senders_payload(counts):
@@ -54,8 +68,9 @@ def handle_errors(f):
                 message += (' Yetki (scope) sorunu olabilir; token.json dosyasını silip '
                              'uygulamayı yeniden başlatarak tekrar giriş yapmayı deneyin.')
             return jsonify({'error': message}), 502
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        except Exception:
+            app.logger.exception('Beklenmeyen hata')
+            return jsonify({'error': 'Beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.'}), 500
     return wrapper
 
 
@@ -66,9 +81,21 @@ def _validated_senders(body):
     return senders
 
 
+# Gmail arama sözdizimine sızabilecek karakterler (boşluk, tırnak, parantez, ':') adreste olamaz.
+EMAIL_RE = re.compile(r'^[^@\s"()<>,;:\\\[\]]+@[\w-]+(\.[\w-]+)+$')
+
+
 def extract_email(sender):
-    match = re.search(r'<(.+?)>', sender)
-    return match.group(1) if match else sender.strip()
+    # From başlığını gönderen yazar; adres doğrulanmadan Gmail sorgusuna girerse
+    # "x@y.com OR label:inbox" gibi bir değer bütün gelen kutusunu eşleştirir.
+    _, email = parseaddr(sender)
+    if not EMAIL_RE.match(email):
+        raise ValueError(f'Geçersiz gönderen adresi: {sender!r}')
+    return email
+
+
+def from_query(email):
+    return f'from:"{email}"'
 
 
 def find_message_ids(service, email):
@@ -76,7 +103,7 @@ def find_message_ids(service, email):
     next_page_token = None
     while True:
         resp = service.users().messages().list(
-            userId='me', q=f'from:{email}', maxResults=500,
+            userId='me', q=from_query(email), maxResults=500,
             pageToken=next_page_token
         ).execute()
         ids.extend(m['id'] for m in resp.get('messages', []))
@@ -102,9 +129,29 @@ def _read_unsubscribe_headers(service, msg_id):
     return headers.get('list-unsubscribe'), headers.get('list-unsubscribe-post', '')
 
 
+def _resolve_host(hostname):
+    return {info[4][0] for info in socket.getaddrinfo(hostname, 443)}
+
+
+def is_safe_one_click_url(url):
+    """One-click isteği sunucudan gider; yerel ağa/loopback'e istek atılmasını engeller."""
+    parsed = urlparse(url)
+    if parsed.scheme != 'https' or not parsed.hostname:
+        return False
+    try:
+        addresses = _resolve_host(parsed.hostname)
+    except (socket.gaierror, UnicodeError):
+        return False
+    for addr in addresses:
+        ip = ipaddress.ip_address(addr.split('%')[0])
+        if not ip.is_global:
+            return False
+    return bool(addresses)
+
+
 def find_unsubscribe_info(service, email):
     resp = service.users().messages().list(
-        userId='me', q=f'from:{email}', maxResults=UNSUBSCRIBE_SCAN_LIMIT
+        userId='me', q=from_query(email), maxResults=UNSUBSCRIBE_SCAN_LIMIT
     ).execute()
     messages = resp.get('messages', [])
     if not messages:
@@ -127,10 +174,11 @@ def find_unsubscribe_info(service, email):
     http_url = next((u for u in urls if u.startswith('http')), None)
     mailto_url = next((u for u in urls if u.startswith('mailto:')), None)
 
-    if http_url and 'one-click' in list_unsub_post.lower():
+    if http_url and 'one-click' in list_unsub_post.lower() and is_safe_one_click_url(http_url):
         try:
-            r = requests.post(http_url, data={'List-Unsubscribe': 'One-Click'}, timeout=10)
-            if r.ok:
+            r = requests.post(http_url, data={'List-Unsubscribe': 'One-Click'},
+                              timeout=10, allow_redirects=False)
+            if r.ok and not r.is_redirect:
                 return {'status': 'done', 'url': http_url}
             return {'status': 'manual_link', 'url': http_url}
         except requests.RequestException:
@@ -167,12 +215,13 @@ def api_scan():
 @handle_errors
 def api_delete():
     senders = _validated_senders(request.get_json(silent=True))
+    # Hepsini önce doğrula: geçersiz bir adres yüzünden işlem yarıda kalmasın.
+    emails = [extract_email(sender) for sender in senders]
     service = get_service()
 
     results = []
     total = 0
-    for sender in senders:
-        email = extract_email(sender)
+    for sender, email in zip(senders, emails):
         message_ids = find_message_ids(service, email)
 
         for i in range(0, len(message_ids), 1000):
@@ -203,7 +252,7 @@ def api_preview():
     email = extract_email(sender)
     service = get_service()
     resp = service.users().messages().list(
-        userId='me', q=f'from:{email}', maxResults=5
+        userId='me', q=from_query(email), maxResults=5
     ).execute()
 
     previews = []
@@ -227,11 +276,11 @@ def api_preview():
 @handle_errors
 def api_unsubscribe():
     senders = _validated_senders(request.get_json(silent=True))
+    emails = [extract_email(sender) for sender in senders]
     service = get_service()
 
     results = []
-    for sender in senders:
-        email = extract_email(sender)
+    for sender, email in zip(senders, emails):
         info = find_unsubscribe_info(service, email)
         results.append({'sender': sender, 'email': email, **info})
 
@@ -239,4 +288,4 @@ def api_unsubscribe():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5050, threaded=True)
+    app.run(debug=os.environ.get('FLASK_DEBUG') == '1', port=5050, threaded=True)

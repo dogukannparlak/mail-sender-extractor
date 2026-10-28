@@ -1,3 +1,4 @@
+import stat
 from unittest.mock import MagicMock
 
 import pytest
@@ -87,3 +88,17 @@ def test_get_service_runs_oauth_flow_when_no_token_but_credentials_exist(patched
     assert service == 'fake-service'
     flow_instance.run_local_server.assert_called_once_with(port=0)
     assert token_path.read_text() == '{"fake": "creds"}'
+
+
+def test_written_token_is_readable_only_by_owner(patched_paths, monkeypatch):
+    token_path, _ = patched_paths
+    token_path.write_text('{"existing": true}')
+    token_path.chmod(0o644)
+
+    expired_creds = FakeCreds(valid=False, expired=True, refresh_token='rt')
+    monkeypatch.setattr(gmail_auth.Credentials, 'from_authorized_user_file', lambda path, scopes: expired_creds)
+    monkeypatch.setattr(gmail_auth, 'build', MagicMock(return_value='fake-service'))
+
+    gmail_auth.get_service()
+
+    assert stat.S_IMODE(token_path.stat().st_mode) == 0o600

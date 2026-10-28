@@ -11,7 +11,9 @@ import app as app_module
 from app import (
     app,
     extract_email,
+    from_query,
     find_message_ids,
+    is_safe_one_click_url,
     find_unsubscribe_info,
     _senders_payload,
     _validated_senders,
@@ -40,6 +42,29 @@ class TestExtractEmail:
 
     def test_returns_stripped_value_when_no_brackets(self):
         assert extract_email('  bob@example.com  ') == 'bob@example.com'
+
+    def test_uses_real_address_not_bracketed_display_name(self):
+        # Görünen ad içine başka bir adres gizlenirse o adresin mailleri silinmemeli.
+        assert extract_email('"<banka@ornek.com>" <spam@kotu.com>') == 'spam@kotu.com'
+
+    def test_strips_trailing_comment(self):
+        assert extract_email('a@b.com (Ali Veli)') == 'a@b.com'
+
+    @pytest.mark.parametrize('sender', [
+        'spam@kotu.com OR label:inbox',
+        'spam@kotu.com label:inbox',
+        'Kötü <a@b.com OR in:anywhere>',
+        'adres-yok',
+        '',
+    ])
+    def test_rejects_values_that_could_change_the_gmail_query(self, sender):
+        with pytest.raises(ValueError):
+            extract_email(sender)
+
+
+class TestFromQuery:
+    def test_quotes_address(self):
+        assert from_query('a@b.com') == 'from:"a@b.com"'
 
 
 class TestSendersPayload:
@@ -94,13 +119,46 @@ class TestFindMessageIds:
         ids = find_message_ids(service, 'someone@example.com')
 
         assert ids == ['m1', 'm2', 'm3']
-        assert service.messages_resource.list_calls[0]['q'] == 'from:someone@example.com'
+        assert service.messages_resource.list_calls[0]['q'] == 'from:"someone@example.com"'
         assert service.messages_resource.list_calls[1]['pageToken'] == 'p2'
 
     def test_returns_empty_list_when_no_messages(self, fake_service_factory):
         service = fake_service_factory(list_pages=[{'messages': []}])
 
         assert find_message_ids(service, 'nobody@example.com') == []
+
+
+@pytest.fixture
+def public_dns(monkeypatch):
+    monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {'93.184.215.14'})
+
+
+class TestIsSafeOneClickUrl:
+    def test_accepts_public_https(self, public_dns):
+        assert is_safe_one_click_url('https://example.com/unsub') is True
+
+    @pytest.mark.parametrize('url', ['http://example.com/unsub', 'ftp://example.com/x', 'https:///x'])
+    def test_rejects_non_https(self, public_dns, url):
+        assert is_safe_one_click_url(url) is False
+
+    @pytest.mark.parametrize('addr', ['127.0.0.1', '10.0.0.1', '192.168.1.1', '169.254.169.254', '::1', 'fd00::1'])
+    def test_rejects_private_and_loopback_targets(self, monkeypatch, addr):
+        monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {addr})
+
+        assert is_safe_one_click_url('https://unsub.example.com/x') is False
+
+    def test_rejects_when_any_resolved_address_is_private(self, monkeypatch):
+        monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {'93.184.215.14', '127.0.0.1'})
+
+        assert is_safe_one_click_url('https://unsub.example.com/x') is False
+
+    def test_rejects_unresolvable_host(self, monkeypatch):
+        def fail(hostname):
+            raise app_module.socket.gaierror('no such host')
+
+        monkeypatch.setattr(app_module, '_resolve_host', fail)
+
+        assert is_safe_one_click_url('https://nope.invalid/x') is False
 
 
 class TestFindUnsubscribeInfo:
@@ -155,7 +213,7 @@ class TestFindUnsubscribeInfo:
             'url': 'mailto:unsub@example.com',
         }
 
-    def test_one_click_success_posts_and_returns_done(self, fake_service_factory, monkeypatch):
+    def test_one_click_success_posts_and_returns_done(self, fake_service_factory, monkeypatch, public_dns):
         service = fake_service_factory(
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
@@ -169,7 +227,7 @@ class TestFindUnsubscribeInfo:
                 }
             },
         )
-        ok_response = MagicMock(ok=True)
+        ok_response = MagicMock(ok=True, is_redirect=False)
         post_mock = MagicMock(return_value=ok_response)
         monkeypatch.setattr(requests, 'post', post_mock)
 
@@ -177,10 +235,54 @@ class TestFindUnsubscribeInfo:
 
         assert result == {'status': 'done', 'url': 'https://example.com/unsub'}
         post_mock.assert_called_once_with(
-            'https://example.com/unsub', data={'List-Unsubscribe': 'One-Click'}, timeout=10
+            'https://example.com/unsub', data={'List-Unsubscribe': 'One-Click'},
+            timeout=10, allow_redirects=False,
         )
 
-    def test_one_click_falls_back_to_manual_link_on_non_ok_response(self, fake_service_factory, monkeypatch):
+    def test_one_click_is_not_posted_to_private_network(self, fake_service_factory, monkeypatch):
+        service = fake_service_factory(
+            list_pages=[{'messages': [{'id': 'm1'}]}],
+            get_responses={
+                'm1': {
+                    'payload': {
+                        'headers': [
+                            {'name': 'List-Unsubscribe', 'value': '<https://router.local/unsub>'},
+                            {'name': 'List-Unsubscribe-Post', 'value': 'List-Unsubscribe=One-Click'},
+                        ]
+                    }
+                }
+            },
+        )
+        monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {'192.168.1.1'})
+        post_mock = MagicMock()
+        monkeypatch.setattr(requests, 'post', post_mock)
+
+        result = find_unsubscribe_info(service, 'x@example.com')
+
+        post_mock.assert_not_called()
+        assert result == {'status': 'manual_link', 'url': 'https://router.local/unsub'}
+
+    def test_one_click_redirect_is_not_treated_as_done(self, fake_service_factory, monkeypatch, public_dns):
+        service = fake_service_factory(
+            list_pages=[{'messages': [{'id': 'm1'}]}],
+            get_responses={
+                'm1': {
+                    'payload': {
+                        'headers': [
+                            {'name': 'List-Unsubscribe', 'value': '<https://example.com/unsub>'},
+                            {'name': 'List-Unsubscribe-Post', 'value': 'One-Click'},
+                        ]
+                    }
+                }
+            },
+        )
+        monkeypatch.setattr(requests, 'post', MagicMock(return_value=MagicMock(ok=True, is_redirect=True)))
+
+        result = find_unsubscribe_info(service, 'x@example.com')
+
+        assert result == {'status': 'manual_link', 'url': 'https://example.com/unsub'}
+
+    def test_one_click_falls_back_to_manual_link_on_non_ok_response(self, fake_service_factory, monkeypatch, public_dns):
         service = fake_service_factory(
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
@@ -200,7 +302,7 @@ class TestFindUnsubscribeInfo:
 
         assert result == {'status': 'manual_link', 'url': 'https://example.com/unsub'}
 
-    def test_one_click_falls_back_to_manual_link_on_request_exception(self, fake_service_factory, monkeypatch):
+    def test_one_click_falls_back_to_manual_link_on_request_exception(self, fake_service_factory, monkeypatch, public_dns):
         service = fake_service_factory(
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
@@ -316,6 +418,21 @@ class TestApiDelete:
             assert c['body']['removeLabelIds'] == ['INBOX', 'UNREAD']
 
 
+    def test_invalid_sender_rejects_whole_request_before_trashing(self, client, monkeypatch, fake_service_factory):
+        service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}])
+        get_service_mock = MagicMock(return_value=service)
+        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+
+        resp = client.post('/api/delete', json={
+            'senders': ['Alice <alice@example.com>', 'spam@kotu.com OR label:inbox'],
+        })
+
+        assert resp.status_code == 400
+        get_service_mock.assert_not_called()
+        assert service.messages_resource.list_calls == []
+        assert service.messages_resource.batch_modify_calls == []
+
+
 class TestApiPreview:
     def test_rejects_missing_sender(self, client):
         resp = client.post('/api/preview', json={})
@@ -376,3 +493,33 @@ class TestErrorHandling:
         resp = client.post('/api/scan')
 
         assert resp.status_code == 500
+
+    def test_unexpected_exception_does_not_leak_internal_message(self, client, monkeypatch):
+        def raise_runtime_error():
+            raise RuntimeError('/Users/gizli/yol ayrıntısı')
+
+        monkeypatch.setattr(app_module, 'get_service', raise_runtime_error)
+
+        resp = client.post('/api/scan')
+
+        assert 'gizli' not in resp.get_json()['error']
+
+
+class TestHostCheck:
+    @pytest.mark.parametrize('host', ['localhost', 'localhost:5050', '127.0.0.1:5050', '[::1]:5050'])
+    def test_allows_local_hosts(self, client, monkeypatch, tmp_path, host):
+        monkeypatch.setattr(app_module, 'CSV_PATH', str(tmp_path / 'missing.csv'))
+
+        resp = client.get('/api/senders', headers={'Host': host})
+
+        assert resp.status_code == 200
+
+    @pytest.mark.parametrize('host', ['evil.com', 'evil.com:5050', 'localhost.evil.com'])
+    def test_rejects_foreign_hosts(self, client, monkeypatch, host):
+        scan_mock = MagicMock()
+        monkeypatch.setattr(app_module, 'get_service', scan_mock)
+
+        resp = client.post('/api/scan', headers={'Host': host})
+
+        assert resp.status_code == 403
+        scan_mock.assert_not_called()

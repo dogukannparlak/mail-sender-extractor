@@ -233,10 +233,11 @@ function sortedSenders() {
   return entries;
 }
 
+// textContent → innerHTML yöntemi tırnakları kaçırmaz; değer attribute içine
+// (title="...") girdiğinde gönderen adı yeni attribute açabilirdi.
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
+  return String(str ?? '').replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
 }
 
 async function copyToClipboard(text, btnEl) {
