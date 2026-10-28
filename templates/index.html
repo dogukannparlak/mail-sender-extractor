@@ -194,6 +194,11 @@
   <div class="toolbar">
     <label class="select-all"><input type="checkbox" id="selectAll"> Tümünü seç</label>
     <span class="toolbar-spacer"></span>
+    <label for="viewSelect">Görünüm:</label>
+    <select id="viewSelect">
+      <option value="address">Adres</option>
+      <option value="domain">Alan adı</option>
+    </select>
     <label for="sortSelect">Sırala:</label>
     <select id="sortSelect">
       <option value="count_desc">Mail sayısı (çoktan aza)</option>
@@ -221,21 +226,50 @@
 let data = null;
 let sortMode = 'count_desc';
 let scope = 'inbox';
+let viewMode = 'address';
+// Seçim DOM'da değil burada tutulur; liste yeniden çizilince (sıralama, görünüm) kaybolmasın.
+const selected = new Set();
 
-function senderLabel(sender) {
-  const { name, email } = parseSender(sender);
-  return name || email;
+function domainOf(address) {
+  const at = address.lastIndexOf('@');
+  return at === -1 ? address : address.slice(at + 1);
 }
 
-function sortedSenders() {
-  const entries = data.gonderenler.map((g, i) => ({ g, i }));
-  entries.sort((a, b) => {
-    if (sortMode === 'name_asc') return senderLabel(a.g.gonderen).localeCompare(senderLabel(b.g.gonderen), 'tr');
-    if (sortMode === 'name_desc') return senderLabel(b.g.gonderen).localeCompare(senderLabel(a.g.gonderen), 'tr');
-    const diff = a.g.mail_sayisi - b.g.mail_sayisi;
+// Ekrandaki satırlar: adres görünümünde gönderen başına, alan adı görünümünde alan adı başına bir satır.
+function buildRows() {
+  if (viewMode === 'address') {
+    return data.gonderenler.map(g => ({
+      key: g.gonderen,
+      label: g.ad || g.gonderen,
+      sub: g.ad ? g.gonderen : '',
+      count: g.mail_sayisi,
+      members: [g],
+    }));
+  }
+  const groups = new Map();
+  data.gonderenler.forEach(g => {
+    const domain = domainOf(g.gonderen);
+    if (!groups.has(domain)) groups.set(domain, []);
+    groups.get(domain).push(g);
+  });
+  return [...groups].map(([domain, members]) => ({
+    key: '@' + domain,
+    label: domain,
+    sub: `${members.length} adres`,
+    count: members.reduce((sum, g) => sum + g.mail_sayisi, 0),
+    members,
+  }));
+}
+
+function sortedRows() {
+  const rows = buildRows();
+  rows.sort((a, b) => {
+    if (sortMode === 'name_asc') return a.label.localeCompare(b.label, 'tr');
+    if (sortMode === 'name_desc') return b.label.localeCompare(a.label, 'tr');
+    const diff = a.count - b.count;
     return sortMode === 'count_asc' ? diff : -diff;
   });
-  return entries;
+  return rows;
 }
 
 // textContent → innerHTML yöntemi tırnakları kaçırmaz; değer attribute içine
@@ -257,26 +291,23 @@ async function copyToClipboard(text, btnEl) {
   }
 }
 
-function parseSender(sender) {
-  const m = sender.match(/^(.*)<([^>]+)>\s*$/);
-  if (m) {
-    const name = m[1].trim().replace(/^"+|"+$/g, '');
-    return { name, email: m[2].trim() };
-  }
-  return { name: '', email: sender.trim() };
-}
-
 async function load() {
   try {
     const res = await fetch('/api/senders');
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
-    data = body;
-    render();
+    setData(body);
   } catch (err) {
     document.getElementById('senders').innerHTML =
       `<p class="error-state">Gönderenler yüklenemedi: ${escapeHtml(err.message)}</p>`;
   }
+}
+
+function setData(body) {
+  data = body;
+  const known = new Set(data.gonderenler.map(g => g.gonderen));
+  [...selected].forEach(key => { if (!known.has(key)) selected.delete(key); });
+  render();
 }
 
 function render() {
@@ -297,45 +328,53 @@ function render() {
   const list = document.createElement('div');
   list.className = 'sender-list';
 
-  sortedSenders().forEach(({ g, i }) => {
+  sortedRows().forEach(rowData => {
     const item = document.createElement('div');
     item.className = 'sender-item';
+    const single = rowData.members.length === 1 && viewMode === 'address';
+    const g = rowData.members[0];
 
     const row = document.createElement('div');
     row.className = 'sender-row';
-    const { name, email } = parseSender(g.gonderen);
+    const title = single && g.ad ? `${g.ad} <${g.gonderen}>` : rowData.key;
     row.innerHTML = `
-      <input type="checkbox" class="sender-checkbox" data-i="${i}">
-      <div class="sender-info" title="${escapeHtml(g.gonderen)}">
-        <span class="sender-name">${escapeHtml(name || email)}</span>
-        ${name ? `<span class="sender-email">${escapeHtml(email)}</span>` : ''}
+      <input type="checkbox" class="sender-checkbox">
+      <div class="sender-info" title="${escapeHtml(title)}">
+        <span class="sender-name">${escapeHtml(rowData.label)}</span>
+        ${rowData.sub ? `<span class="sender-email">${escapeHtml(rowData.sub)}</span>` : ''}
       </div>
-      <span class="sender-count">${g.mail_sayisi}</span>
-      <button class="preview-btn" type="button">Önizle</button>
-      <button class="copy-btn" type="button" title="E-posta adresini kopyala">Kopyala</button>
-      <button class="unsub-btn" type="button">Çık</button>
-      <span class="unsub-result"></span>
+      <span class="sender-count">${rowData.count}</span>
+      <button class="preview-btn" type="button">${single ? 'Önizle' : 'Adresler'}</button>
+      <button class="copy-btn" type="button" title="${single ? 'E-posta adresini' : 'Alan adını'} kopyala">Kopyala</button>
+      ${single ? '<button class="unsub-btn" type="button">Çık</button><span class="unsub-result"></span>' : ''}
     `;
 
     const previewPanel = document.createElement('div');
     previewPanel.className = 'sender-preview';
 
-    row.querySelector('.sender-checkbox').addEventListener('change', () => {
+    const checkbox = row.querySelector('.sender-checkbox');
+    checkbox.rowMembers = rowData.members;
+    syncRowCheckbox(checkbox);
+    checkbox.addEventListener('change', () => {
+      rowData.members.forEach(m => checkbox.checked ? selected.add(m.gonderen) : selected.delete(m.gonderen));
       syncSelectAll();
       updateSelection();
     });
     row.querySelector('.preview-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      togglePreview(g.gonderen, previewPanel, e.target);
+      if (single) togglePreview(g.gonderen, previewPanel, e.target);
+      else toggleMembers(rowData.members, previewPanel, e.target);
     });
     row.querySelector('.copy-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      copyToClipboard(email, e.target);
+      copyToClipboard(single ? g.gonderen : domainOf(g.gonderen), e.target);
     });
-    row.querySelector('.unsub-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      runUnsubscribe([g.gonderen], row.querySelector('.unsub-result'), e.target);
-    });
+    if (single) {
+      row.querySelector('.unsub-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        runUnsubscribe([g.gonderen], row.querySelector('.unsub-result'), e.target);
+      });
+    }
 
     item.appendChild(row);
     item.appendChild(previewPanel);
@@ -345,6 +384,26 @@ function render() {
   container.appendChild(list);
   syncSelectAll();
   updateSelection();
+}
+
+function syncRowCheckbox(checkbox) {
+  const picked = checkbox.rowMembers.filter(m => selected.has(m.gonderen)).length;
+  checkbox.checked = picked === checkbox.rowMembers.length;
+  checkbox.indeterminate = picked > 0 && !checkbox.checked;
+}
+
+function toggleMembers(members, panel, btnEl) {
+  const open = panel.classList.toggle('open');
+  btnEl.textContent = open ? 'Gizle' : 'Adresler';
+  if (!open) return;
+  panel.innerHTML = members
+    .slice().sort((a, b) => b.mail_sayisi - a.mail_sayisi)
+    .map(m => `
+      <div class="preview-item">
+        <div class="preview-subject">${escapeHtml(m.gonderen)} · ${m.mail_sayisi} mail</div>
+        ${m.ad ? `<div class="preview-snippet">${escapeHtml(m.ad)}</div>` : ''}
+      </div>
+    `).join('');
 }
 
 function formatDate(ms) {
@@ -393,24 +452,20 @@ function syncSelectAll() {
   const boxes = [...document.querySelectorAll('.sender-checkbox')];
   const selectAll = document.getElementById('selectAll');
   selectAll.checked = boxes.length > 0 && boxes.every(b => b.checked);
-  selectAll.indeterminate = boxes.some(b => b.checked) && !selectAll.checked;
+  selectAll.indeterminate = boxes.some(b => b.checked || b.indeterminate) && !selectAll.checked;
 }
 
 function getSelected() {
-  const selected = [];
-  document.querySelectorAll('.sender-checkbox:checked').forEach(cb => {
-    selected.push(data.gonderenler[cb.dataset.i]);
-  });
-  return selected;
+  return data ? data.gonderenler.filter(g => selected.has(g.gonderen)) : [];
 }
 
 function updateSelection() {
-  const selected = getSelected();
-  const totalMail = selected.reduce((sum, g) => sum + g.mail_sayisi, 0);
+  const picked = getSelected();
+  const totalMail = picked.reduce((sum, g) => sum + g.mail_sayisi, 0);
   document.getElementById('selectedInfo').textContent =
-    selected.length ? `${selected.length} gönderen, ${totalMail} mail seçildi` : '0 mail seçildi';
-  document.getElementById('deleteBtn').disabled = selected.length === 0;
-  document.getElementById('unsubBtn').disabled = selected.length === 0;
+    picked.length ? `${picked.length} gönderen, ${totalMail} mail seçildi` : '0 mail seçildi';
+  document.getElementById('deleteBtn').disabled = picked.length === 0;
+  document.getElementById('unsubBtn').disabled = picked.length === 0;
 }
 
 function describeUnsubResult(r) {
@@ -479,8 +534,7 @@ async function scanInbox() {
     const res = await fetch('/api/scan', { method: 'POST' });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
-    data = result;
-    render();
+    setData(result);
     document.getElementById('status').textContent =
       `Tarama tamamlandı. Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen.`;
   } catch (err) {
@@ -504,9 +558,18 @@ document.getElementById('scopeSelect').addEventListener('change', (e) => {
   if (data) render();  // açık önizlemeler eski kapsamla yüklendi; kapatıp yeniden yükletelim
 });
 
+document.getElementById('viewSelect').addEventListener('change', (e) => {
+  viewMode = e.target.value;
+  if (data) render();
+});
+
+// Yalnız ekranda görünen satırları seçer/bırakır.
 document.getElementById('selectAll').addEventListener('change', (e) => {
   const checked = e.target.checked;
-  document.querySelectorAll('.sender-checkbox').forEach(cb => cb.checked = checked);
+  document.querySelectorAll('.sender-checkbox').forEach(cb => {
+    cb.rowMembers.forEach(m => checked ? selected.add(m.gonderen) : selected.delete(m.gonderen));
+    syncRowCheckbox(cb);
+  });
   updateSelection();
 });
 
@@ -566,9 +629,11 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
     if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
 
     const removed = new Set(result.details.map(d => d.sender));
-    data.gonderenler = data.gonderenler.filter(g => !removed.has(g.gonderen));
-    data.toplam_mail_sayisi = data.gonderenler.reduce((sum, g) => sum + g.mail_sayisi, 0);
-    render();
+    const remaining = data.gonderenler.filter(g => !removed.has(g.gonderen));
+    setData({
+      toplam_mail_sayisi: remaining.reduce((sum, g) => sum + g.mail_sayisi, 0),
+      gonderenler: remaining,
+    });
 
     const lines = result.details.map(d => `- ${d.sender}: ${d.deleted} mail çöpe taşındı`);
     document.getElementById('status').textContent =

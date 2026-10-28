@@ -1,8 +1,6 @@
 import os
 import re
-import csv
 import socket
-from collections import Counter
 import ipaddress
 from email.utils import parseaddr
 from functools import wraps
@@ -16,7 +14,7 @@ from flask import Flask, jsonify, request, render_template
 from googleapiclient.errors import HttpError
 
 from gmail_auth import get_service
-from extract_senders import extract_senders, save_to_csv
+from extract_senders import EMAIL_RE, extract_senders, load_csv, save_to_csv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, 'gonderenler.csv')
@@ -41,27 +39,27 @@ def reject_foreign_host():
             return jsonify({'error': 'Başka sitelerden gelen istekler kabul edilmiyor.'}), 403
 
 
-def _senders_payload(counts):
-    """Counter veya (gonderen, sayi) çiftlerinden frontend'in beklediği düz listeyi üretir."""
-    items = counts.most_common() if hasattr(counts, 'most_common') else list(counts)
-    gonderenler = [{'gonderen': sender, 'mail_sayisi': count} for sender, count in items]
+def _senders_payload(senders):
+    """{adres: {'ad', 'mail_sayisi', ...}} sözlüğünden frontend'in beklediği düz listeyi üretir.
+
+    `gonderen` alanı adrestir; API'ye geri gönderilen kimlik budur.
+    """
+    gonderenler = [
+        {'gonderen': address, **info}
+        for address, info in sorted(senders.items(), key=lambda kv: -kv[1]['mail_sayisi'])
+    ]
     return {
         'toplam_mail_sayisi': sum(g['mail_sayisi'] for g in gonderenler),
         'gonderenler': gonderenler,
     }
 
 
+def load_saved_senders():
+    return load_csv(CSV_PATH) if os.path.exists(CSV_PATH) else {}
+
+
 def read_senders_csv():
-    if not os.path.exists(CSV_PATH):
-        return {'toplam_mail_sayisi': 0, 'gonderenler': []}
-    rows = []
-    with open(CSV_PATH, encoding='utf-8') as f:
-        reader = csv.reader(f)
-        next(reader, None)  # başlık satırı
-        for row in reader:
-            if len(row) >= 2 and str(row[1]).strip().isdigit():
-                rows.append((row[0], int(row[1])))
-    return _senders_payload(rows)
+    return _senders_payload(load_saved_senders())
 
 
 def remove_senders_from_csv(senders):
@@ -69,11 +67,7 @@ def remove_senders_from_csv(senders):
     if not os.path.exists(CSV_PATH):
         return
     removed = set(senders)
-    remaining = Counter({
-        g['gonderen']: g['mail_sayisi']
-        for g in read_senders_csv()['gonderenler']
-        if g['gonderen'] not in removed
-    })
+    remaining = {k: v for k, v in load_saved_senders().items() if k not in removed}
     save_to_csv(remaining, filename=CSV_PATH)
 
 
@@ -103,10 +97,6 @@ def _validated_senders(body):
     if not isinstance(senders, list):
         raise ValueError("İstek gövdesinde 'senders' adında bir liste bekleniyor.")
     return senders
-
-
-# Gmail arama sözdizimine sızabilecek karakterler (boşluk, tırnak, parantez, ':') adreste olamaz.
-EMAIL_RE = re.compile(r'^[^@\s"()<>,;:\\\[\]]+@[\w-]+(\.[\w-]+)+$')
 
 
 def extract_email(sender):
@@ -305,7 +295,7 @@ def api_delete():
         results.append({'sender': sender, 'email': email, 'deleted': len(message_ids)})
         total += len(message_ids)
 
-    remove_senders_from_csv(senders)
+    remove_senders_from_csv([email.lower() for email in emails])
     return jsonify({'scope': scope, 'total_deleted': total, 'details': results})
 
 

@@ -95,3 +95,10 @@ class FakeGmailService:
 @pytest.fixture
 def fake_service_factory():
     return FakeGmailService
+
+
+@pytest.fixture(autouse=True)
+def isolate_data_files(tmp_path, monkeypatch):
+    """Testler gerçek gonderenler.csv / json dosyalarına asla yazmasın."""
+    import app as app_module
+    monkeypatch.setattr(app_module, 'CSV_PATH', str(tmp_path / 'gonderenler.csv'))

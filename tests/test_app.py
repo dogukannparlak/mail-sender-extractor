@@ -68,26 +68,20 @@ class TestFromQuery:
 
 
 class TestSendersPayload:
-    def test_from_counter_orders_by_count_desc_and_sums_total(self):
-        payload = _senders_payload(Counter({'a': 1, 'b': 5}))
+    def test_orders_by_count_desc_and_sums_total(self):
+        payload = _senders_payload({
+            'a@x.com': {'ad': 'A', 'mail_sayisi': 1},
+            'b@x.com': {'ad': '', 'mail_sayisi': 5},
+        })
 
         assert payload['toplam_mail_sayisi'] == 6
         assert payload['gonderenler'] == [
-            {'gonderen': 'b', 'mail_sayisi': 5},
-            {'gonderen': 'a', 'mail_sayisi': 1},
-        ]
-
-    def test_from_plain_pairs_preserves_input_order(self):
-        payload = _senders_payload([('x', 2), ('y', 3)])
-
-        assert payload['toplam_mail_sayisi'] == 5
-        assert payload['gonderenler'] == [
-            {'gonderen': 'x', 'mail_sayisi': 2},
-            {'gonderen': 'y', 'mail_sayisi': 3},
+            {'gonderen': 'b@x.com', 'ad': '', 'mail_sayisi': 5},
+            {'gonderen': 'a@x.com', 'ad': 'A', 'mail_sayisi': 1},
         ]
 
     def test_empty_input_yields_zero_total_and_empty_list(self):
-        assert _senders_payload([]) == {'toplam_mail_sayisi': 0, 'gonderenler': []}
+        assert _senders_payload({}) == {'toplam_mail_sayisi': 0, 'gonderenler': []}
 
 
 class TestValidatedSenders:
@@ -372,10 +366,23 @@ class TestApiSenders:
         assert resp.get_json() == {
             'toplam_mail_sayisi': 5,
             'gonderenler': [
-                {'gonderen': 'a@example.com', 'mail_sayisi': 3},
-                {'gonderen': 'b@example.com', 'mail_sayisi': 2},
+                {'gonderen': 'a@example.com', 'ad': '', 'mail_sayisi': 3},
+                {'gonderen': 'b@example.com', 'ad': '', 'mail_sayisi': 2},
             ],
         }
+
+    def test_legacy_csv_is_merged_by_address(self, client, monkeypatch, tmp_path):
+        csv_path = tmp_path / 'gonderenler.csv'
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['İsim/Adres', 'Mail Sayısı'])
+            writer.writerow(['"Ali (Classroom)" <no-reply@classroom.google.com>', '5'])
+            writer.writerow(['"Ayşe (Classroom)" <No-Reply@classroom.google.com>', '2'])
+        monkeypatch.setattr(app_module, 'CSV_PATH', str(csv_path))
+
+        assert client.get('/api/senders').get_json()['gonderenler'] == [
+            {'gonderen': 'no-reply@classroom.google.com', 'ad': 'Ali (Classroom)', 'mail_sayisi': 7},
+        ]
 
     def test_missing_csv_returns_empty_payload(self, client, monkeypatch, tmp_path):
         monkeypatch.setattr(app_module, 'CSV_PATH', str(tmp_path / 'missing.csv'))
@@ -389,7 +396,8 @@ class TestApiSenders:
 class TestApiScan:
     def test_scans_and_persists_csv(self, client, monkeypatch):
         monkeypatch.setattr(app_module, 'get_service', lambda: 'fake-service')
-        monkeypatch.setattr(app_module, 'extract_senders', lambda service: Counter({'a@example.com': 2}))
+        monkeypatch.setattr(app_module, 'extract_senders',
+                            lambda service: {'a@example.com': {'ad': '', 'mail_sayisi': 2}})
         save_mock = MagicMock()
         monkeypatch.setattr(app_module, 'save_to_csv', save_mock)
 
@@ -398,7 +406,7 @@ class TestApiScan:
         assert resp.status_code == 200
         assert resp.get_json() == {
             'toplam_mail_sayisi': 2,
-            'gonderenler': [{'gonderen': 'a@example.com', 'mail_sayisi': 2}],
+            'gonderenler': [{'gonderen': 'a@example.com', 'ad': '', 'mail_sayisi': 2}],
         }
         save_mock.assert_called_once()
 
@@ -445,7 +453,7 @@ class TestApiDelete:
         assert resp.status_code == 200
         assert client.get('/api/senders').get_json() == {
             'toplam_mail_sayisi': 2,
-            'gonderenler': [{'gonderen': 'Bob <bob@example.com>', 'mail_sayisi': 2}],
+            'gonderenler': [{'gonderen': 'bob@example.com', 'ad': 'Bob', 'mail_sayisi': 2}],
         }
 
     def test_delete_without_saved_csv_does_not_create_one(self, client, monkeypatch, fake_service_factory, tmp_path):
