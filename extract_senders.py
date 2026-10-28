@@ -207,6 +207,18 @@ def print_progress(processed, total, bar_length=30):
         print(f'\rTaranan mail sayısı: {processed}', end='', flush=True)
 
 
+# Görünen adı gönderen yazar; "=HYPERLINK(...)" gibi bir ad CSV Excel'de açılınca formül olur.
+FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
+
+def _csv_safe(value):
+    return "'" + value if value.startswith(FORMULA_PREFIXES) else value
+
+
+def _csv_unsafe(value):
+    return value[1:] if value.startswith("'") and value[1:].startswith(FORMULA_PREFIXES) else value
+
+
 def save_to_csv(senders, filename='gonderenler.csv'):
     # Önce geçici dosyaya yaz: okuyan biri yarım dosya görmesin.
     tmp = filename + '.tmp'
@@ -215,7 +227,8 @@ def save_to_csv(senders, filename='gonderenler.csv'):
         writer.writerow(CSV_HEADER)
         for address, info in sorted(senders.items(), key=lambda kv: -kv[1]['mail_sayisi']):
             abonelik = {True: '1', False: '0'}.get(info.get('abonelik'), '')
-            writer.writerow([address, info['ad'], info['mail_sayisi'], info.get('kategori', ''), abonelik])
+            writer.writerow([_csv_safe(address), _csv_safe(info['ad']), info['mail_sayisi'],
+                             info.get('kategori', ''), abonelik])
     os.replace(tmp, filename)
     print(f"{len(senders)} benzersiz gönderen '{filename}' dosyasına yazıldı.")
 
@@ -235,7 +248,7 @@ def load_csv(filename):
             elif len(row) >= 3 and row[2].strip().isdigit():
                 kategori = row[3] if len(row) > 3 and row[3] in CATEGORIES else None
                 abonelik = {'1': True, '0': False}.get(row[4]) if len(row) > 4 else None
-                tally.add_counted(row[0], row[1], int(row[2]), kategori, abonelik)
+                tally.add_counted(_csv_unsafe(row[0]), _csv_unsafe(row[1]), int(row[2]), kategori, abonelik)
     return tally.result()
 
 

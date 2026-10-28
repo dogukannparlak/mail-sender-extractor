@@ -288,3 +288,14 @@ def test_progress_resets_retry_budget(fake_service_factory):
     result = extract_senders(service, progress=lambda *a: None, sleep=lambda s: None)
 
     assert result['a@example.com']['mail_sayisi'] == 7
+
+
+def test_csv_neutralises_formulas_and_round_trips(tmp_path):
+    senders = {'a@example.com': {'ad': '=HYPERLINK("https://evil.example")', 'mail_sayisi': 1}}
+    out_file = tmp_path / 'out.csv'
+
+    save_to_csv(senders, filename=str(out_file))
+
+    with open(out_file, encoding='utf-8') as f:
+        assert list(csv.reader(f))[1][1] == '\'=HYPERLINK("https://evil.example")'
+    assert load_csv(str(out_file)) == senders

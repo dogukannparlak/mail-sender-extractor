@@ -174,6 +174,7 @@ class TestFindUnsubscribeInfo:
 
     def test_none_when_no_messages_carry_the_header(self, fake_service_factory):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={'m1': {'payload': {'headers': []}}},
         )
@@ -182,6 +183,7 @@ class TestFindUnsubscribeInfo:
 
     def test_manual_link_for_http_url_without_one_click(self, fake_service_factory):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -201,6 +203,7 @@ class TestFindUnsubscribeInfo:
 
     def test_manual_mailto_when_only_mailto_present(self, fake_service_factory):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -220,6 +223,7 @@ class TestFindUnsubscribeInfo:
 
     def test_one_click_success_posts_and_returns_done(self, fake_service_factory, monkeypatch, public_dns):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -246,6 +250,7 @@ class TestFindUnsubscribeInfo:
 
     def test_one_click_is_not_posted_to_private_network(self, fake_service_factory, monkeypatch):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -269,6 +274,7 @@ class TestFindUnsubscribeInfo:
 
     def test_one_click_redirect_is_not_treated_as_done(self, fake_service_factory, monkeypatch, public_dns):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -289,6 +295,7 @@ class TestFindUnsubscribeInfo:
 
     def test_one_click_falls_back_to_manual_link_on_non_ok_response(self, fake_service_factory, monkeypatch, public_dns):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -309,6 +316,7 @@ class TestFindUnsubscribeInfo:
 
     def test_one_click_falls_back_to_manual_link_on_request_exception(self, fake_service_factory, monkeypatch, public_dns):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={
                 'm1': {
@@ -329,6 +337,7 @@ class TestFindUnsubscribeInfo:
 
     def test_skips_messages_without_header_to_find_one_that_has_it(self, fake_service_factory):
         service = fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}]}],
             get_responses={
                 'm1': {'payload': {'headers': []}},
@@ -473,7 +482,7 @@ class TestApiDelete:
 
     def test_trashes_messages_in_chunks_of_1000(self, client, monkeypatch, fake_service_factory):
         message_ids = [{'id': f'm{i}'} for i in range(1500)]
-        service = fake_service_factory(list_pages=[{'messages': message_ids}])
+        service = fake_service_factory(list_pages=[{'messages': message_ids}], default_from='alice@example.com')
         monkeypatch.setattr(app_module, 'get_service', lambda: service)
 
         resp = client.post('/api/delete', json={'senders': ['Alice <alice@example.com>']})
@@ -481,7 +490,8 @@ class TestApiDelete:
         assert resp.status_code == 200
         body = resp.get_json()
         assert body['total_deleted'] == 1500
-        assert body['details'] == [{'sender': 'Alice <alice@example.com>', 'email': 'alice@example.com', 'deleted': 1500}]
+        assert body['details'] == [{'sender': 'Alice <alice@example.com>', 'email': 'alice@example.com', 'deleted': 1500,
+                                   'skipped': 0}]
 
         calls = service.messages_resource.batch_modify_calls
         assert [len(c['body']['ids']) for c in calls] == [1000, 500]
@@ -540,7 +550,7 @@ def _scope_aware_service(fake_service_factory, inbox_ids, archived_ids):
     def handler(kwargs):
         ids = inbox_ids if 'in:inbox' in kwargs['q'] else inbox_ids + archived_ids
         return {'messages': [{'id': i} for i in ids]}
-    return fake_service_factory(list_handler=handler)
+    return fake_service_factory(list_handler=handler, default_from='a@example.com')
 
 
 class TestDeleteScope:
@@ -580,7 +590,8 @@ class TestDeleteScope:
         deleted = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': scope}).get_json()
 
         assert count['total'] == expected
-        assert count['details'] == [{'sender': 'a@example.com', 'email': 'a@example.com', 'count': expected}]
+        assert count['details'] == [{'sender': 'a@example.com', 'email': 'a@example.com', 'count': expected,
+                                     'skipped': 0}]
         assert deleted['total_deleted'] == count['total']
 
     def test_count_does_not_modify_anything(self, client, monkeypatch, fake_service_factory):
@@ -642,7 +653,7 @@ class LabelledMailbox:
 
     def __init__(self, fake_service_factory, labels_by_id):
         self.labels = {i: set(l) for i, l in labels_by_id.items()}
-        self.service = fake_service_factory(list_handler=self._list)
+        self.service = fake_service_factory(list_handler=self._list, default_from='A <a@example.com>')
         self.service.messages_resource.batchModify = self._batch_modify
         self.service.messages_resource.untrash = self._untrash
         self.gone = set()  # çöpü boşaltılmış mailler: untrash 404 döner
@@ -763,6 +774,7 @@ class TestUndo:
 class TestOneClickConfirmation:
     def _service(self, fake_service_factory):
         return fake_service_factory(
+            default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
             get_responses={'m1': {'payload': {'headers': [
                 {'name': 'List-Unsubscribe', 'value': '<https://example.com/u>'},
@@ -802,6 +814,66 @@ class TestOneClickConfirmation:
 
         post_mock.assert_called_once()
         assert resp.get_json()['results'][0]['status'] == 'done'
+
+
+def _from_msg(value):
+    return {'payload': {'headers': [{'name': 'From', 'value': value}]}}
+
+
+class TestVerifiedFromAddress:
+    """Gmail'in from: araması kelime bazlı; dönen her mailin From adresi birebir kontrol edilir."""
+
+    def _service(self, fake_service_factory):
+        return fake_service_factory(
+            list_handler=lambda kwargs: {'messages': [{'id': 'own'}, {'id': 'lookalike'}, {'id': 'by_name'}]},
+            get_responses={
+                'own': _from_msg('Bilgi <bilgi@garanti.com>'),
+                'lookalike': _from_msg('Banka <bilgi@garanti.com.tr>'),
+                'by_name': _from_msg('"bilgi@garanti.com" <x@evil.example>'),
+            },
+        )
+
+    def test_delete_trashes_only_exact_sender(self, client, monkeypatch, fake_service_factory):
+        service = self._service(fake_service_factory)
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        body = client.post('/api/delete', json={'senders': ['bilgi@garanti.com']}).get_json()
+
+        assert body['details'][0]['deleted'] == 1 and body['details'][0]['skipped'] == 2
+        assert service.messages_resource.batch_modify_calls[0]['body']['ids'] == ['own']
+
+    def test_count_uses_the_same_check(self, client, monkeypatch, fake_service_factory):
+        service = self._service(fake_service_factory)
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        assert client.post('/api/count', json={'senders': ['bilgi@garanti.com']}).get_json()['total'] == 1
+
+    def test_unsubscribe_ignores_links_from_other_senders(self, fake_service_factory):
+        unsub = [{'name': 'List-Unsubscribe', 'value': '<https://evil.example/u>'}]
+        service = fake_service_factory(
+            list_pages=[{'messages': [{'id': 'm1'}]}],
+            get_responses={'m1': {'payload': {'headers': [
+                {'name': 'From', 'value': '"news@legit.example" <x@evil.example>'}] + unsub}}},
+        )
+
+        assert find_unsubscribe_info(service, 'news@legit.example') == {'status': 'none'}
+
+
+class TestOneClickPrivacy:
+    def test_no_dns_lookup_before_confirmation(self, fake_service_factory, monkeypatch):
+        def no_dns(hostname):
+            raise AssertionError('onaydan önce DNS sorgusu yapıldı')
+        monkeypatch.setattr(app_module, '_resolve_host', no_dns)
+        service = fake_service_factory(
+            default_from='x@example.com',
+            list_pages=[{'messages': [{'id': 'm1'}]}],
+            get_responses={'m1': {'payload': {'headers': [
+                {'name': 'List-Unsubscribe', 'value': '<https://track.example/u>'},
+                {'name': 'List-Unsubscribe-Post', 'value': 'List-Unsubscribe=One-Click'},
+            ]}}},
+        )
+
+        assert find_unsubscribe_info(service, 'x@example.com')['status'] == 'one_click_available'
 
 
 class TestApiPreview:

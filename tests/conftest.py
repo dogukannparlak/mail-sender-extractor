@@ -31,8 +31,10 @@ class FakeMessagesResource:
     so tests can assert on query params (e.g. `q=from:...`, chunk sizes).
     """
 
-    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None, list_handler=None):
+    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None, list_handler=None,
+                 default_from=None):
         self._list_pages = list(list_pages or [])
+        self._default_from = default_from
         self._list_handler = list_handler
         self._get_responses = get_responses or {}
         self._batch_modify_result = batch_modify_result if batch_modify_result is not None else {}
@@ -60,6 +62,12 @@ class FakeMessagesResource:
         response = self._get_responses.get(msg_id, {})
         if isinstance(response, list):  # art arda çağrılarda sırayla dön (ör. önce 429, sonra başarı)
             response = response.pop(0) if len(response) > 1 else response[0]
+        if self._default_from and isinstance(response, dict):
+            # Uygulama silmeden önce her mailin From adresini doğrular; test mailleri bu gönderenden gelsin.
+            headers = response.get('payload', {}).get('headers', [])
+            if not any(h['name'].lower() == 'from' for h in headers):
+                response = {**response, 'payload': {**response.get('payload', {}),
+                            'headers': headers + [{'name': 'From', 'value': self._default_from}]}}
         return _Executable(response)
 
     def batchModify(self, **kwargs):
@@ -121,8 +129,9 @@ class FakeGmailService:
     """Fakes the top-level object returned by `googleapiclient.discovery.build('gmail', 'v1', ...)`."""
 
     def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None, label_response=None,
-                 list_handler=None):
-        self.messages_resource = FakeMessagesResource(list_pages, get_responses, batch_modify_result, list_handler)
+                 list_handler=None, default_from=None):
+        self.messages_resource = FakeMessagesResource(list_pages, get_responses, batch_modify_result, list_handler,
+                                                      default_from)
         self.labels_resource = FakeLabelsResource(label_response)
         self._users = FakeUsersResource(self.messages_resource, self.labels_resource)
         self.batch_sizes = []

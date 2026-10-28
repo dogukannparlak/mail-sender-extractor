@@ -19,7 +19,8 @@ from googleapiclient.errors import HttpError
 from gmail_auth import get_service
 from contextlib import contextmanager
 
-from extract_senders import EMAIL_RE, extract_senders, load_csv, run_batched, save_to_csv
+from extract_senders import (EMAIL_RE, extract_senders, fetch_metadata, load_csv, run_batched,
+                             save_to_csv, sender_key)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, 'gonderenler.csv')
@@ -198,6 +199,30 @@ def find_message_ids(service, email, scope='all', extra=''):
     return ids
 
 
+def _from_address(msg):
+    headers = {h['name'].lower(): h['value'] for h in (msg or {}).get('payload', {}).get('headers', [])}
+    return sender_key(headers['from'])[0] if 'from' in headers else None
+
+
+def verified_message_ids(service, email, scope):
+    """from: araması kelime bazlıdır; adı ya da benzer bir adresi eşleşen başka gönderenlerin
+    mailleri de dönebilir (ör. korunan x@alan.com.tr). Yalnız From adresi birebir aynı olanları,
+    korunan bir göndereni de kapsamıyorsa döndürür. İkinci değer: elenen mail sayısı.
+    """
+    candidates = find_message_ids(service, email, scope)
+    if not candidates:
+        return [], 0
+    protected = load_protected()
+    wanted = email.lower()
+    kept = set()
+    for msg_id, msg in fetch_metadata(service, candidates, ['From']):
+        address = _from_address(msg)
+        if address == wanted and not is_protected(address, protected):
+            kept.add(msg_id)
+    ids = [i for i in candidates if i in kept]
+    return ids, len(candidates) - len(ids)
+
+
 # Bir gönderenin en yeni maili çoğu zaman işlemsel (sipariş/onay) olur ve
 # List-Unsubscribe başlığı taşımaz; bülten mailleri birkaç mail geride olabilir.
 # Bu yüzden tek mail yerine en yeni birkaç maile bakıyoruz.
@@ -207,18 +232,18 @@ UNSUBSCRIBE_SCAN_LIMIT = 15
 def _read_unsubscribe_headers(service, msg_id):
     msg = service.users().messages().get(
         userId='me', id=msg_id, format='metadata',
-        metadataHeaders=['List-Unsubscribe', 'List-Unsubscribe-Post']
+        metadataHeaders=['From', 'List-Unsubscribe', 'List-Unsubscribe-Post']
     ).execute()
     # Başlık adı büyük/küçük harf duyarlı olmamalı (List-Unsubscribe vs list-unsubscribe).
     headers = {h['name'].lower(): h['value'] for h in msg.get('payload', {}).get('headers', [])}
-    return headers.get('list-unsubscribe'), headers.get('list-unsubscribe-post', '')
+    return _from_address(msg), headers.get('list-unsubscribe'), headers.get('list-unsubscribe-post', '')
 
 
 def _resolve_host(hostname):
     return {info[4][0] for info in socket.getaddrinfo(hostname, 443)}
 
 
-def is_safe_one_click_url(url):
+def is_safe_one_click_url(url, resolve=True):
     """One-click isteği sunucudan gider; yerel ağa/loopback'e istek atılmasını engeller."""
     # urlparse ile requests (urllib3) URL'yi farklı ayrıştırabilir:
     # "https://127.0.0.1\\@x.com/" urlparse'a göre x.com, requests'e göre 127.0.0.1.
@@ -235,6 +260,8 @@ def is_safe_one_click_url(url):
         return False
     if (u3.host or '').strip('[]').lower() != parsed.hostname.lower():
         return False
+    if not resolve:  # onaydan önce DNS sorgusu bile gönderene "çıkmaya çalıştı" bilgisini sızdırır
+        return True
     try:
         addresses = _resolve_host(parsed.hostname)
     except (socket.gaierror, UnicodeError):
@@ -261,8 +288,9 @@ def find_unsubscribe_info(service, email, confirm_one_click=False):
     list_unsub = None
     list_unsub_post = ''
     for m in messages:
-        candidate, candidate_post = _read_unsubscribe_headers(service, m['id'])
-        if candidate:
+        sender_address, candidate, candidate_post = _read_unsubscribe_headers(service, m['id'])
+        # Başka bir gönderenin (adı bu adrese benzeyen) mailindeki link kullanılmasın.
+        if candidate and sender_address == email.lower():
             list_unsub, list_unsub_post = candidate, candidate_post
             break
 
@@ -275,9 +303,11 @@ def find_unsubscribe_info(service, email, confirm_one_click=False):
     http_url = next((u for u in urls if u.startswith('http')), None)
     mailto_url = next((u for u in urls if u.startswith('mailto:')), None)
 
-    if http_url and 'one-click' in list_unsub_post.lower() and is_safe_one_click_url(http_url):
+    if http_url and 'one-click' in list_unsub_post.lower() and is_safe_one_click_url(http_url, resolve=False):
         if not confirm_one_click:
             return {'status': 'one_click_available', 'url': http_url}
+        if not is_safe_one_click_url(http_url):
+            return {'status': 'manual_link', 'url': http_url}
         try:
             r = requests.post(http_url, data={'List-Unsubscribe': 'One-Click'},
                               timeout=10, allow_redirects=False)
@@ -411,10 +441,10 @@ def api_count():
     emails = [extract_email(sender) for sender in senders]
     service = get_service()
 
-    details = [
-        {'sender': sender, 'email': email, 'count': len(find_message_ids(service, email, scope))}
-        for sender, email in zip(senders, emails)
-    ]
+    details = []
+    for sender, email in zip(senders, emails):
+        ids, skipped = verified_message_ids(service, email, scope)
+        details.append({'sender': sender, 'email': email, 'count': len(ids), 'skipped': skipped})
     return jsonify({'scope': scope, 'total': sum(d['count'] for d in details), 'details': details})
 
 
@@ -450,7 +480,7 @@ def _delete(senders, emails, scope):
     finished = []
     try:
         for sender, email in zip(senders, emails):
-            message_ids = find_message_ids(service, email, scope)
+            message_ids, skipped = verified_message_ids(service, email, scope)
             if message_ids:
                 in_scope = set(message_ids)
                 inbox_ids = message_ids if scope == 'inbox' else [
@@ -465,7 +495,7 @@ def _delete(senders, emails, scope):
                 _batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
 
             finished.append(email.lower())
-            results.append({'sender': sender, 'email': email, 'deleted': len(message_ids)})
+            results.append({'sender': sender, 'email': email, 'deleted': len(message_ids), 'skipped': skipped})
             total += len(message_ids)
     finally:
         remove_senders_from_csv(finished)

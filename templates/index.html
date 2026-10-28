@@ -849,8 +849,11 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
     if (!countRes.ok) throw new Error(count.error || `Sunucu hatası (${countRes.status})`);
 
     const scopeText = scope === 'all' ? 'tüm maillerde (arşiv dahil)' : 'gelen kutusunda';
+    const skipped = count.details.reduce((sum, d) => sum + (d.skipped || 0), 0);
     const ok = confirm(
-      `${selected.length} gönderenden ${scopeText} bulunan ${count.total} mail Çöp Kutusu'na taşınacak.\n\nDevam edilsin mi?`
+      `${selected.length} gönderenden ${scopeText} bulunan ${count.total} mail Çöp Kutusu'na taşınacak.` +
+      (skipped ? `\n\nAramaya takılan ${skipped} mail, gönderen adresi birebir aynı olmadığı (ya da korunduğu) için dışarıda bırakıldı.` : '') +
+      '\n\nDevam edilsin mi?'
     );
     if (!ok) return;
 
