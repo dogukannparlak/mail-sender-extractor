@@ -7,18 +7,11 @@ import pytest
 import requests
 from googleapiclient.errors import HttpError
 
-import app as app_module
+from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
 from conftest import TEST_ACCOUNT, acct_paths
-from app import (
-    app,
-    extract_email,
-    from_query,
-    find_message_ids,
-    is_safe_one_click_url,
-    find_unsubscribe_info,
-    _senders_payload,
-    _validated_senders,
-)
+from mail_temizleyici.web import app, _senders_payload, _validated_senders
+from mail_temizleyici.mailbox import extract_email, from_query, find_message_ids
+from mail_temizleyici.unsubscribe import is_safe_one_click_url, find_unsubscribe_info
 
 
 @pytest.fixture
@@ -125,7 +118,7 @@ class TestFindMessageIds:
 
 @pytest.fixture
 def public_dns(monkeypatch):
-    monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {'93.184.215.14'})
+    monkeypatch.setattr(unsubscribe, '_resolve_host', lambda hostname: {'93.184.215.14'})
 
 
 class TestIsSafeOneClickUrl:
@@ -149,20 +142,20 @@ class TestIsSafeOneClickUrl:
 
     @pytest.mark.parametrize('addr', ['127.0.0.1', '10.0.0.1', '192.168.1.1', '169.254.169.254', '::1', 'fd00::1'])
     def test_rejects_private_and_loopback_targets(self, monkeypatch, addr):
-        monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {addr})
+        monkeypatch.setattr(unsubscribe, '_resolve_host', lambda hostname: {addr})
 
         assert is_safe_one_click_url('https://unsub.example.com/x') is False
 
     def test_rejects_when_any_resolved_address_is_private(self, monkeypatch):
-        monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {'93.184.215.14', '127.0.0.1'})
+        monkeypatch.setattr(unsubscribe, '_resolve_host', lambda hostname: {'93.184.215.14', '127.0.0.1'})
 
         assert is_safe_one_click_url('https://unsub.example.com/x') is False
 
     def test_rejects_unresolvable_host(self, monkeypatch):
         def fail(hostname):
-            raise app_module.socket.gaierror('no such host')
+            raise unsubscribe.socket.gaierror('no such host')
 
-        monkeypatch.setattr(app_module, '_resolve_host', fail)
+        monkeypatch.setattr(unsubscribe, '_resolve_host', fail)
 
         assert is_safe_one_click_url('https://nope.invalid/x') is False
 
@@ -264,7 +257,7 @@ class TestFindUnsubscribeInfo:
                 }
             },
         )
-        monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {'192.168.1.1'})
+        monkeypatch.setattr(unsubscribe, '_resolve_host', lambda hostname: {'192.168.1.1'})
         post_mock = MagicMock()
         monkeypatch.setattr(requests, 'post', post_mock)
 
@@ -402,14 +395,14 @@ class TestApiSenders:
 
 class TestApiScan:
     def test_scans_in_background_and_persists_csv(self, client, monkeypatch, inline_scan):
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: 'fake-service')
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake-service')
 
         def fake_extract(service, progress, id_index):
             id_index['a@example.com'] = ['m1', 'm2']
             progress(1, 2)
             progress(2, 2)
             return {'a@example.com': {'ad': '', 'mail_sayisi': 2}}
-        monkeypatch.setattr(app_module, 'extract_senders', fake_extract)
+        monkeypatch.setattr(web, 'extract_senders', fake_extract)
 
         resp = client.post('/api/scan')
         status = client.get('/api/scan/status').get_json()
@@ -423,9 +416,9 @@ class TestApiScan:
         }
 
     def test_second_scan_while_running_is_rejected(self, client, monkeypatch, inline_scan):
-        monkeypatch.setitem(app_module._scans, TEST_ACCOUNT, dict(app_module._scan_state(TEST_ACCOUNT), running=True))
+        monkeypatch.setitem(state.scans, TEST_ACCOUNT, dict(state.scan_state(TEST_ACCOUNT), running=True))
         get_service_mock = MagicMock()
-        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+        monkeypatch.setattr(accounts, 'get_service', get_service_mock)
 
         resp = client.post('/api/scan')
 
@@ -433,11 +426,11 @@ class TestApiScan:
         get_service_mock.assert_not_called()
 
     def test_scan_error_is_reported_in_status(self, client, monkeypatch, inline_scan):
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: 'fake-service')
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake-service')
 
         def failing_extract(service, progress, id_index):
             raise make_http_error(500, 'backend error')
-        monkeypatch.setattr(app_module, 'extract_senders', failing_extract)
+        monkeypatch.setattr(web, 'extract_senders', failing_extract)
 
         client.post('/api/scan')
         status = client.get('/api/scan/status').get_json()
@@ -448,7 +441,7 @@ class TestApiScan:
     def test_login_error_is_returned_directly_and_frees_the_lock(self, client, monkeypatch, inline_scan):
         def missing_credentials(*_):
             raise FileNotFoundError('credentials.json bulunamadı')
-        monkeypatch.setattr(app_module, 'get_service', missing_credentials)
+        monkeypatch.setattr(accounts, 'get_service', missing_credentials)
 
         resp = client.post('/api/scan')
 
@@ -466,7 +459,7 @@ class TestApiDelete:
     def test_trashes_messages_in_chunks_of_1000(self, client, monkeypatch, fake_service_factory):
         message_ids = [{'id': f'm{i}'} for i in range(1500)]
         service = fake_service_factory(list_pages=[{'messages': message_ids}], default_from='alice@example.com')
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/delete', json={'senders': ['Alice <alice@example.com>']})
 
@@ -491,7 +484,7 @@ class TestApiDelete:
             writer.writerow(['Alice <alice@example.com>', '3'])
             writer.writerow(['Bob <bob@example.com>', '2'])
         service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}])
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/delete', json={'senders': ['Alice <alice@example.com>']})
 
@@ -504,7 +497,7 @@ class TestApiDelete:
     def test_delete_without_saved_csv_does_not_create_one(self, client, monkeypatch, fake_service_factory, tmp_path):
         csv_path = Path(acct_paths().csv)
         service = fake_service_factory(list_pages=[{'messages': []}])
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/delete', json={'senders': ['Alice <alice@example.com>']})
 
@@ -514,7 +507,7 @@ class TestApiDelete:
     def test_invalid_sender_rejects_whole_request_before_trashing(self, client, monkeypatch, fake_service_factory):
         service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}])
         get_service_mock = MagicMock(return_value=service)
-        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+        monkeypatch.setattr(accounts, 'get_service', get_service_mock)
 
         resp = client.post('/api/delete', json={
             'senders': ['Alice <alice@example.com>', 'spam@kotu.com OR label:inbox'],
@@ -537,7 +530,7 @@ def _scope_aware_service(fake_service_factory, inbox_ids, archived_ids):
 class TestDeleteScope:
     def test_default_scope_is_inbox_like_the_scan(self, client, monkeypatch, fake_service_factory):
         service = _scope_aware_service(fake_service_factory, ['i1', 'i2'], ['a1'])
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/delete', json={'senders': ['a@example.com']})
 
@@ -546,7 +539,7 @@ class TestDeleteScope:
 
     def test_all_scope_includes_archived_mail(self, client, monkeypatch, fake_service_factory):
         service = _scope_aware_service(fake_service_factory, ['i1', 'i2'], ['a1'])
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': 'all'})
 
@@ -555,7 +548,7 @@ class TestDeleteScope:
 
     def test_unknown_scope_is_rejected_before_gmail(self, client, monkeypatch):
         get_service_mock = MagicMock()
-        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+        monkeypatch.setattr(accounts, 'get_service', get_service_mock)
 
         resp = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': 'in:anywhere'})
 
@@ -565,7 +558,7 @@ class TestDeleteScope:
     @pytest.mark.parametrize('scope, expected', [('inbox', 2), ('all', 3)])
     def test_count_matches_what_delete_trashes(self, client, monkeypatch, fake_service_factory, scope, expected):
         service = _scope_aware_service(fake_service_factory, ['i1', 'i2'], ['a1'])
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         count = client.post('/api/count', json={'senders': ['a@example.com'], 'scope': scope}).get_json()
         deleted = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': scope}).get_json()
@@ -577,7 +570,7 @@ class TestDeleteScope:
 
     def test_count_does_not_modify_anything(self, client, monkeypatch, fake_service_factory):
         service = _scope_aware_service(fake_service_factory, ['i1'], [])
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         client.post('/api/count', json={'senders': ['a@example.com']})
 
@@ -585,7 +578,7 @@ class TestDeleteScope:
 
     def test_preview_uses_the_same_scope(self, client, monkeypatch, fake_service_factory):
         service = _scope_aware_service(fake_service_factory, [], [])
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         client.post('/api/preview', json={'sender': 'a@example.com', 'scope': 'inbox'})
 
@@ -596,7 +589,7 @@ class TestProtectedSenders:
     def test_protected_address_is_never_trashed(self, client, monkeypatch, fake_service_factory):
         service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}])
         get_service_mock = MagicMock(return_value=service)
-        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+        monkeypatch.setattr(accounts, 'get_service', get_service_mock)
         client.post('/api/protected', json={'value': 'Banka@Ornek.com'})
 
         resp = client.post('/api/delete', json={'senders': ['a@example.com', 'Banka <banka@ornek.com>']})
@@ -607,15 +600,15 @@ class TestProtectedSenders:
 
     @pytest.mark.parametrize('email', ['x@garanti.com.tr', 'x@mail.garanti.com.tr'])
     def test_protected_domain_covers_subdomains(self, client, monkeypatch, email):
-        monkeypatch.setattr(app_module, 'get_service', MagicMock())
+        monkeypatch.setattr(accounts, 'get_service', MagicMock())
         client.post('/api/protected', json={'value': '@garanti.com.tr'})
 
         assert client.post('/api/delete', json={'senders': [email]}).status_code == 400
         assert client.post('/api/unsubscribe', json={'senders': [email]}).status_code == 400
 
     def test_lookalike_domain_is_not_protected(self):
-        protected = {'adresler': [], 'alanlar': ['@garanti.com.tr']}
-        assert not app_module.is_protected('x@notgaranti.com.tr', protected)
+        rules = {'adresler': [], 'alanlar': ['@garanti.com.tr']}
+        assert not protected.is_protected('x@notgaranti.com.tr', rules)
 
     def test_unprotect_removes_entry(self, client):
         client.post('/api/protected', json={'value': 'a@b.com'})
@@ -672,7 +665,7 @@ class TestUndo:
     @pytest.mark.parametrize('scope', ['inbox', 'all'])
     def test_delete_then_undo_restores_original_labels(self, client, monkeypatch, fake_service_factory, scope):
         box = LabelledMailbox(fake_service_factory, self.LABELS)
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: box.service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: box.service)
         before = {i: set(l) for i, l in box.labels.items()}
 
         deleted = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': scope}).get_json()
@@ -685,11 +678,11 @@ class TestUndo:
         assert box.labels == before
 
     def test_undo_restores_csv_rows_and_is_single_use(self, client, monkeypatch, fake_service_factory, tmp_path):
-        from extract_senders import save_to_csv
+        from mail_temizleyici.scanner import save_to_csv
         save_to_csv({'a@example.com': {'ad': 'A', 'mail_sayisi': 2}, 'b@example.com': {'ad': '', 'mail_sayisi': 1}},
                     filename=acct_paths().csv)
         box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: box.service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: box.service)
 
         client.post('/api/delete', json={'senders': ['a@example.com']})
         info = client.get('/api/undo').get_json()
@@ -710,7 +703,7 @@ class TestUndo:
                 raise make_http_error(500, 'backend error')
             return original_list(kwargs)
         box.service.messages_resource._list_handler = failing_for_b
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: box.service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: box.service)
 
         resp = client.post('/api/delete', json={'senders': ['a@example.com', 'b@example.com']})
         assert resp.status_code == 502
@@ -721,7 +714,7 @@ class TestUndo:
 
     def test_undo_skips_messages_gone_from_trash(self, client, monkeypatch, fake_service_factory):
         box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}, 'm2': {'INBOX'}})
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: box.service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: box.service)
         client.post('/api/delete', json={'senders': ['a@example.com']})
         box.gone.add('m2')
 
@@ -733,9 +726,9 @@ class TestUndo:
 
     @pytest.mark.parametrize('path', ['/api/delete', '/api/undo'])
     def test_delete_and_undo_are_blocked_while_scanning(self, client, monkeypatch, path):
-        monkeypatch.setitem(app_module._scans, TEST_ACCOUNT, dict(app_module._scan_state(TEST_ACCOUNT), running=True))
+        monkeypatch.setitem(state.scans, TEST_ACCOUNT, dict(state.scan_state(TEST_ACCOUNT), running=True))
         get_service_mock = MagicMock()
-        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+        monkeypatch.setattr(accounts, 'get_service', get_service_mock)
 
         resp = client.post(path, json={'senders': ['a@example.com']})
 
@@ -744,7 +737,7 @@ class TestUndo:
 
     def test_delete_with_no_matches_keeps_previous_undo(self, client, monkeypatch, fake_service_factory):
         box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: box.service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: box.service)
         client.post('/api/delete', json={'senders': ['a@example.com']})
 
         client.post('/api/delete', json={'senders': ['a@example.com']})  # artık eşleşme yok
@@ -765,9 +758,9 @@ class TestOneClickConfirmation:
 
     def test_no_post_is_sent_without_confirmation(self, client, monkeypatch, fake_service_factory, public_dns):
         post_mock = MagicMock()
-        monkeypatch.setattr(app_module.requests, 'post', post_mock)
+        monkeypatch.setattr(unsubscribe.requests, 'post', post_mock)
         service = self._service(fake_service_factory)
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/unsubscribe', json={'senders': ['x@example.com']})
 
@@ -777,9 +770,9 @@ class TestOneClickConfirmation:
     @pytest.mark.parametrize('flag', ['true', 1, 'yes'])
     def test_only_boolean_true_confirms(self, client, monkeypatch, fake_service_factory, public_dns, flag):
         post_mock = MagicMock()
-        monkeypatch.setattr(app_module.requests, 'post', post_mock)
+        monkeypatch.setattr(unsubscribe.requests, 'post', post_mock)
         service = self._service(fake_service_factory)
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         client.post('/api/unsubscribe', json={'senders': ['x@example.com'], 'confirm_one_click': flag})
 
@@ -787,9 +780,9 @@ class TestOneClickConfirmation:
 
     def test_confirmed_request_posts_once(self, client, monkeypatch, fake_service_factory, public_dns):
         post_mock = MagicMock(return_value=MagicMock(ok=True, is_redirect=False))
-        monkeypatch.setattr(app_module.requests, 'post', post_mock)
+        monkeypatch.setattr(unsubscribe.requests, 'post', post_mock)
         service = self._service(fake_service_factory)
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/unsubscribe', json={'senders': ['x@example.com'], 'confirm_one_click': True})
 
@@ -816,7 +809,7 @@ class TestVerifiedFromAddress:
 
     def test_delete_trashes_only_exact_sender(self, client, monkeypatch, fake_service_factory):
         service = self._service(fake_service_factory)
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         body = client.post('/api/delete', json={'senders': ['bilgi@garanti.com']}).get_json()
 
@@ -825,7 +818,7 @@ class TestVerifiedFromAddress:
 
     def test_count_uses_the_same_check(self, client, monkeypatch, fake_service_factory):
         service = self._service(fake_service_factory)
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         assert client.post('/api/count', json={'senders': ['bilgi@garanti.com']}).get_json()['total'] == 1
 
@@ -851,7 +844,7 @@ class TestPreviewSkipsOtherSenders:
                                                   {'name': 'Subject', 'value': 'Sahte'}]}},
             },
         )
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         previews = client.post('/api/preview', json={'sender': 'a@x.example'}).get_json()['previews']
 
@@ -865,7 +858,7 @@ class TestDeleteEfficiency:
             _json.dump({'a@example.com': ['m1', 'm2']}, f)
         service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}, {'id': 'new'}]}],
                                        default_from='a@example.com')
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         body = client.post('/api/delete', json={'senders': ['a@example.com']}).get_json()
 
@@ -875,8 +868,8 @@ class TestDeleteEfficiency:
     def test_delete_right_after_count_reuses_verification(self, client, monkeypatch, fake_service_factory):
         service = fake_service_factory(list_handler=lambda kw: {'messages': [{'id': 'm1'}]},
                                        default_from='a@example.com')
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
-        app_module._clear_verify_cache()
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
+        mailbox.clear_verify_cache()
 
         client.post('/api/count', json={'senders': ['a@example.com']})
         client.post('/api/delete', json={'senders': ['a@example.com']})
@@ -884,9 +877,9 @@ class TestDeleteEfficiency:
         assert len(service.messages_resource.get_calls) == 1
 
     def test_second_concurrent_delete_is_rejected(self, client, monkeypatch):
-        monkeypatch.setitem(app_module._mutations, TEST_ACCOUNT, 1)
+        monkeypatch.setitem(state.mutations, TEST_ACCOUNT, 1)
         get_service_mock = MagicMock()
-        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+        monkeypatch.setattr(accounts, 'get_service', get_service_mock)
 
         assert client.post('/api/delete', json={'senders': ['a@example.com']}).status_code == 409
         get_service_mock.assert_not_called()
@@ -896,7 +889,7 @@ class TestDeleteEfficiency:
 
         def expired(*_):
             raise RefreshError('invalid_grant')
-        monkeypatch.setattr(app_module, 'get_service', expired)
+        monkeypatch.setattr(accounts, 'get_service', expired)
 
         resp = client.post('/api/count', json={'senders': ['a@example.com']})
 
@@ -908,7 +901,7 @@ class TestOneClickPrivacy:
     def test_no_dns_lookup_before_confirmation(self, fake_service_factory, monkeypatch):
         def no_dns(hostname):
             raise AssertionError('onaydan önce DNS sorgusu yapıldı')
-        monkeypatch.setattr(app_module, '_resolve_host', no_dns)
+        monkeypatch.setattr(unsubscribe, '_resolve_host', no_dns)
         service = fake_service_factory(
             default_from='x@example.com',
             list_pages=[{'messages': [{'id': 'm1'}]}],
@@ -939,7 +932,7 @@ class TestApiPreview:
                 }
             },
         )
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: service)
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: service)
 
         resp = client.post('/api/preview', json={'sender': 'Alice <alice@example.com>'})
 
@@ -956,7 +949,7 @@ class TestErrorHandling:
         def raise_http_error(*_):
             raise make_http_error(403, 'insufficient scope')
 
-        monkeypatch.setattr(app_module, 'get_service', raise_http_error)
+        monkeypatch.setattr(accounts, 'get_service', raise_http_error)
 
         resp = client.post('/api/scan')
 
@@ -967,7 +960,7 @@ class TestErrorHandling:
         def raise_missing_credentials(*_):
             raise FileNotFoundError('credentials.json bulunamadi')
 
-        monkeypatch.setattr(app_module, 'get_service', raise_missing_credentials)
+        monkeypatch.setattr(accounts, 'get_service', raise_missing_credentials)
 
         resp = client.post('/api/scan')
 
@@ -977,7 +970,7 @@ class TestErrorHandling:
         def raise_runtime_error(*_):
             raise RuntimeError('boom')
 
-        monkeypatch.setattr(app_module, 'get_service', raise_runtime_error)
+        monkeypatch.setattr(accounts, 'get_service', raise_runtime_error)
 
         resp = client.post('/api/scan')
 
@@ -987,7 +980,7 @@ class TestErrorHandling:
         def raise_runtime_error(*_):
             raise RuntimeError('/Users/gizli/yol ayrıntısı')
 
-        monkeypatch.setattr(app_module, 'get_service', raise_runtime_error)
+        monkeypatch.setattr(accounts, 'get_service', raise_runtime_error)
 
         resp = client.post('/api/scan')
 
@@ -1003,9 +996,9 @@ class TestHostCheck:
         assert resp.status_code == 200
 
     def test_allows_same_origin_post(self, client, monkeypatch, inline_scan):
-        monkeypatch.setattr(app_module, 'get_service', lambda *_: 'fake')
-        monkeypatch.setattr(app_module, 'extract_senders', lambda service, progress, id_index: {})
-        monkeypatch.setattr(app_module, 'save_to_csv', MagicMock())
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake')
+        monkeypatch.setattr(web, 'extract_senders', lambda service, progress, id_index: {})
+        monkeypatch.setattr(accounts, 'save_to_csv', MagicMock())
 
         resp = client.post('/api/scan', headers={
             'Origin': 'http://localhost:5050', 'Sec-Fetch-Site': 'same-origin',
@@ -1021,7 +1014,7 @@ class TestHostCheck:
     ])
     def test_rejects_cross_site_post_even_with_local_host(self, client, monkeypatch, headers):
         scan_mock = MagicMock()
-        monkeypatch.setattr(app_module, 'get_service', scan_mock)
+        monkeypatch.setattr(accounts, 'get_service', scan_mock)
 
         resp = client.post('/api/scan', headers=headers)
 
@@ -1031,7 +1024,7 @@ class TestHostCheck:
     @pytest.mark.parametrize('host', ['evil.com', 'evil.com:5050', 'localhost.evil.com'])
     def test_rejects_foreign_hosts(self, client, monkeypatch, host):
         scan_mock = MagicMock()
-        monkeypatch.setattr(app_module, 'get_service', scan_mock)
+        monkeypatch.setattr(accounts, 'get_service', scan_mock)
 
         resp = client.post('/api/scan', headers={'Host': host})
 

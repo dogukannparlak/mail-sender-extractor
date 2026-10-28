@@ -147,28 +147,28 @@ TEST_ACCOUNT = 'ben@example.com'
 
 
 def acct_paths():
-    import app as app_module
-    return app_module.AccountPaths(TEST_ACCOUNT)
+    from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+    return accounts.AccountPaths(TEST_ACCOUNT)
 
 
 @pytest.fixture(autouse=True)
 def isolate_data_files(tmp_path, monkeypatch):
     """Testler gerçek gonderenler.csv / json dosyalarına asla yazmasın."""
-    import app as app_module
+    from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
     # Tek bir test hesabı: account alanı verilmeyen istekler onu kullanır.
     accounts_dir = tmp_path / 'hesaplar'
     (accounts_dir / TEST_ACCOUNT).mkdir(parents=True)
     (accounts_dir / TEST_ACCOUNT / 'token.json').write_text('{}')
-    monkeypatch.setattr(app_module, 'ACCOUNTS_DIR', str(accounts_dir))
-    monkeypatch.setattr(app_module, 'EXTRA_ACCOUNT_TOKENS', {})
-    monkeypatch.setattr(app_module, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))
-    monkeypatch.setattr(app_module, 'LEGACY_TOKEN_PATH', str(tmp_path / 'token.json'))
-    monkeypatch.setattr(app_module, '_scans', {})
-    monkeypatch.setattr(app_module, '_mutations', {})
-    app_module._clear_verify_cache()
+    monkeypatch.setattr(accounts, 'ACCOUNTS_DIR', str(accounts_dir))
+    monkeypatch.setattr(accounts, 'EXTRA_ACCOUNT_TOKENS', {})
+    monkeypatch.setattr(protected, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))
+    monkeypatch.setattr(accounts, 'LEGACY_TOKEN_PATH', str(tmp_path / 'token.json'))
+    monkeypatch.setattr(state, 'scans', {})
+    monkeypatch.setattr(state, 'mutations', {})
+    mailbox.clear_verify_cache()
     # Kota sınırlayıcı testlerde gerçekten beklemesin (kendi testinde ayrıca denetleniyor).
-    import extract_senders
-    monkeypatch.setattr(extract_senders.quota, 'units_per_minute', 0)
+    from mail_temizleyici import gmail
+    monkeypatch.setattr(gmail.quota, 'units_per_minute', 0)
 
 
 class InlineThread:
@@ -183,17 +183,18 @@ class InlineThread:
 
 @pytest.fixture
 def inline_scan(monkeypatch):
-    import app as app_module
-    monkeypatch.setattr(app_module.threading, 'Thread', InlineThread)
+    from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+    monkeypatch.setattr(web.threading, 'Thread', InlineThread)
 
 
 @pytest.fixture
 def demo_mode(monkeypatch):
     """demo.enable modül özniteliklerini doğrudan değiştirir; monkeypatch test sonunda geri alsın."""
-    import app as app_module
-    import demo
-    for name in ('get_service', 'ACCOUNTS_DIR', 'EXTRA_ACCOUNT_TOKENS', 'PROTECTED_PATH', 'LEGACY_TOKEN_PATH',
-                 '_resolve_host', 'DEMO_MODE'):
-        monkeypatch.setattr(app_module, name, getattr(app_module, name))
-    monkeypatch.setattr(app_module.requests, 'post', app_module.requests.post)
-    return demo.enable(app_module)
+    from mail_temizleyici import accounts, demo, gmail, protected, unsubscribe, web
+    for module, name in ((accounts, 'get_service'), (accounts, 'ACCOUNTS_DIR'), (accounts, 'EXTRA_ACCOUNT_TOKENS'),
+                         (accounts, 'LEGACY_TOKEN_PATH'), (protected, 'PROTECTED_PATH'),
+                         (unsubscribe, '_resolve_host'), (web, 'DEMO_MODE')):
+        monkeypatch.setattr(module, name, getattr(module, name))
+    monkeypatch.setattr(unsubscribe.requests, 'post', unsubscribe.requests.post)
+    monkeypatch.setattr(gmail.quota, 'units_per_minute', gmail.quota.units_per_minute)
+    return demo.enable()

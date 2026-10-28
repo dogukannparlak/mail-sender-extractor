@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-import gmail_auth
+from mail_temizleyici import auth as gmail_auth
 
 
 class FakeCreds:

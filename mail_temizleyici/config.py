@@ -4,10 +4,12 @@ Gerçek ortam değişkenleri .env'deki değerin önüne geçer (ör. `DEMO=1 pyt
 Biçim: her satırda `AD=değer`; `#` ile başlayan satırlar yorumdur. Örnek: .env.example
 """
 import os
+import re
 
-from extract_senders import EMAIL_RE
+from .gmail import EMAIL_RE
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Proje klasörü (paketin bir üstü): .env, credentials.json ve veriler burada.
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # MAIL_TEMIZLEYICI_ENV_FILE başka bir dosyayı gösterebilir; boş verilirse .env hiç okunmaz (testler böyle çalışır).
 ENV_PATH = os.environ.get('MAIL_TEMIZLEYICI_ENV_FILE', os.path.join(BASE_DIR, '.env'))
 
@@ -60,18 +62,23 @@ def _int(name, value, minimum):
     return number
 
 
+def _account_order(key):
+    number = key.rsplit('_', 1)[-1]
+    return int(number) if number.isdigit() else 0
+
+
 def _extra_accounts(value):
     """EXTRA_ACCOUNTS=adres=token_yolu, adres=token_yolu"""
     accounts = {}
     for item in filter(None, (part.strip() for part in value.split(','))):
         if '=' not in item:
-            raise ConfigError(f'EXTRA_ACCOUNTS öğesi "adres=token_dosyası" biçiminde olmalı: {item!r}')
+            raise ConfigError(f'ACCOUNT_n / EXTRA_ACCOUNTS: "adres=token_dosyası" biçiminde olmalı: {item!r}')
         address, token = (x.strip() for x in item.split('=', 1))
         address = address.lower()
         if not EMAIL_RE.match(address):
-            raise ConfigError(f'EXTRA_ACCOUNTS içinde geçersiz adres: {address!r}')
+            raise ConfigError(f'ACCOUNT_n / EXTRA_ACCOUNTS içinde geçersiz adres: {address!r}')
         if not token:
-            raise ConfigError(f'EXTRA_ACCOUNTS: {address} için token dosyası yolu boş')
+            raise ConfigError(f'ACCOUNT_n / EXTRA_ACCOUNTS: {address} için token dosyası yolu boş')
         accounts[address] = _path(token)
     return accounts
 
@@ -88,10 +95,16 @@ class Settings:
         self.default_scope = get('DEFAULT_SCOPE', 'inbox')
         if self.default_scope not in ('inbox', 'all'):
             raise ConfigError(f"DEFAULT_SCOPE yalnız 'inbox' ya da 'all' olabilir, verilen: {self.default_scope!r}")
-        self.extra_accounts = _extra_accounts(get('EXTRA_ACCOUNTS', ''))
+        # İki yazım da olur: ACCOUNT_1=adres=token_yolu (satır başına bir hesap) ve EXTRA_ACCOUNTS=a=x, b=y
+        numbered = [env[k] for k in sorted(env, key=_account_order) if re.fullmatch(r'ACCOUNT_\d+', k) and env[k].strip()]
+        self.extra_accounts = _extra_accounts(', '.join(numbered + [get('EXTRA_ACCOUNTS', '')]))
 
 
 def load_settings(env_path=ENV_PATH, environ=None):
     environ = os.environ if environ is None else environ
     merged = {**read_env_file(env_path), **{k: v for k, v in environ.items()}}
     return Settings(merged)
+
+
+# Uygulamanın kullandığı ayarlar (içe aktarılınca bir kez okunur). Hatalı .env → ConfigError.
+settings = load_settings()

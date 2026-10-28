@@ -16,3 +16,5 @@ taranan_idler.json
 .coverage
 hesaplar/
 .env
+tokenlar/*
+!tokenlar/README.md

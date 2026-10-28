@@ -114,23 +114,25 @@ cp .env.example .env
 | `FLASK_DEBUG` | `0` | Flask hata ayıklama modu (yalnız geliştirirken) |
 | `CREDENTIALS_PATH` | `credentials.json` | Google OAuth istemci dosyan |
 | `ACCOUNTS_DIR` | `hesaplar` | Her hesap için bir alt klasör içeren klasör |
-| `EXTRA_ACCOUNTS` | boş | Token dosyası başka yerde duran hesaplar: `adres=token_yolu, adres=token_yolu` |
+| `ACCOUNT_1`, `ACCOUNT_2`, … | boş | Token dosyası elinde olan her hesap için bir satır: `adres=token_yolu` (ör. `tokenlar/ikinci.json`) |
+| `EXTRA_ACCOUNTS` | boş | Aynısı tek satırda: `adres=token_yolu, adres=token_yolu` |
 | `GMAIL_QUOTA_PER_MINUTE` | `5400` | Uygulamanın kendine izin verdiği dakikalık kota birimi (Gmail sınırı 6.000) |
 | `DEFAULT_SCOPE` | `inbox` | Taşıma/önizlemenin varsayılan kapsamı: `inbox` ya da `all` |
 
 Komut satırında verilen değer `.env`'nin önüne geçer (`DEMO=1 python app.py`). Göreli yollar proje
 klasörüne göredir; `~` açılır. Hatalı bir değer uygulamayı açılışta, hangi ayar olduğunu yazarak
-durdurur. `EXTRA_ACCOUNTS`'taki hesaplar sayfadan çıkarılamaz (token dosyası senin); satırı sil.
+durdurur. `ACCOUNT_n` / `EXTRA_ACCOUNTS` hesapları sayfadan çıkarılamaz (token dosyası senin); satırı sil.
 
 ### Yalnız CSV (CLI)
 
 ```bash
-python extract_senders.py
+python extract_senders.py                   # tek hesap varsa onu
+python extract_senders.py biri@gmail.com    # belirli bir hesap
 ```
 
-`gonderenler.csv` dosyasına adres başına bir satır yazar: adres, görünen ad, sayı, kategori ve
-abonelik linki görülüp görülmediği. Eski CSV dosyaları (ham `From` başlığı + sayı) hâlâ okunur
-ve adrese göre birleştirilir.
+O hesabın `hesaplar/<adres>/gonderenler.csv` dosyasını yazar: adres başına bir satır, görünen ad,
+sayı, kategori ve abonelik linki görülüp görülmediği. Eski CSV dosyaları (ham `From` başlığı +
+sayı) hâlâ okunur ve adrese göre birleştirilir.
 
 ## Nasıl çalışır
 
@@ -147,12 +149,23 @@ Flask app.py ── Host / Origin kontrolü ── Gmail API (google-api-python-
                      son_islem.json} · korunanlar.json (ortak)
 ```
 
-| Dosya | İçinde ne var |
+Proje klasöründeki giriş dosyaları: `app.py` (web uygulaması), `demo.py` (demo modu),
+`extract_senders.py` (CLI). Kod `mail_temizleyici/` paketinde, her iş için bir modül:
+
+| Modül | Ne yapar |
 |---|---|
-| `app.py` | Web sunucusu ve API: tarama, sayım, silme, geri alma, önizleme, abonelik, korunanlar |
-| `extract_senders.py` | Tarama mantığı (batch okuma, gruplama, kategori) ve CSV okuma/yazma; ayrıca CLI |
-| `gmail_auth.py` | Hesap başına OAuth girişi; token'lar `0600` izniyle yazılır |
-| `demo.py` | Demo modu için sahte posta kutusu |
+| `config.py` | `.env`'i okur, değerleri denetler |
+| `auth.py` | Google girişi, hesap başına bir token (`0600`) |
+| `gmail.py` | Gmail API ortak parçaları: adres ayrıştırma, kota sınırlayıcı, yeniden denemeli batch |
+| `scanner.py` | Gelen kutusu taraması: adres başına sayım, görünen ad, kategori; CSV okuma/yazma |
+| `accounts.py` | Hesap klasörleri, hesap listesi, eski tek hesaplı dosyaların taşınması |
+| `protected.py` | Korunan gönderenler (bütün hesaplarda ortak) |
+| `state.py` | Hesap başına tarama/taşıma durumu ve kilitler |
+| `mailbox.py` | Sayma, Çöp Kutusu'na taşıma, geri alma, önizleme (gönderen birebir kontrolüyle) |
+| `unsubscribe.py` | List-Unsubscribe ve SSRF korumalı tek tıkla çıkış |
+| `web.py` | Flask uygulaması: sayfa, JSON API, istek denetimi, hata eşleme |
+| `demo.py` | Demo modu için sahte posta kutuları |
+| `templates/index.html` | Sayfa (düz JS, derleme adımı yok) |
 
 ## Güvenlik notları
 

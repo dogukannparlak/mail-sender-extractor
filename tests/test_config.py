@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-import app as app_module
-import config
+from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_temizleyici import config
 from conftest import TEST_ACCOUNT
 
 
@@ -65,22 +65,42 @@ def test_extra_account_with_external_token_is_listed_and_cannot_be_removed(tmp_p
     token = tmp_path / 'disarida' / 'okul.json'
     token.parent.mkdir()
     token.write_text('{}')
-    monkeypatch.setattr(app_module, 'EXTRA_ACCOUNT_TOKENS', {'okul@ogr.example': str(token)})
-    client = app_module.app.test_client()
+    monkeypatch.setattr(accounts, 'EXTRA_ACCOUNT_TOKENS', {'okul@ogr.example': str(token)})
+    client = web.app.test_client()
 
     assert client.get('/api/accounts').get_json()['accounts'] == sorted(['okul@ogr.example', TEST_ACCOUNT])
-    assert app_module.AccountPaths('okul@ogr.example').token == str(token)
+    assert accounts.AccountPaths('okul@ogr.example').token == str(token)
     resp = client.post('/api/accounts/remove', json={'account': 'okul@ogr.example'})
     assert resp.status_code == 400 and 'EXTRA_ACCOUNTS' in resp.get_json()['error']
     assert token.exists()
 
 
 def test_extra_account_without_token_file_is_hidden(tmp_path, monkeypatch):
-    monkeypatch.setattr(app_module, 'EXTRA_ACCOUNT_TOKENS', {'okul@ogr.example': str(tmp_path / 'yok.json')})
+    monkeypatch.setattr(accounts, 'EXTRA_ACCOUNT_TOKENS', {'okul@ogr.example': str(tmp_path / 'yok.json')})
 
-    assert app_module.list_accounts() == [TEST_ACCOUNT]
+    assert accounts.list_accounts() == [TEST_ACCOUNT]
 
 
 def test_env_example_parses():
     settings = config.load_settings(os.path.join(config.BASE_DIR, '.env.example'), environ={})
     assert settings.port == 5050
+
+
+def test_numbered_account_lines_are_read_in_order(tmp_path):
+    env = write_env(tmp_path, '''
+ACCOUNT_2=ikinci@gmail.example=tokenlar/ikinci.json
+ACCOUNT_10=onuncu@gmail.example=tokenlar/onuncu.json
+ACCOUNT_1=birinci@gmail.example=tokenlar/birinci.json
+ACCOUNT_3=
+EXTRA_ACCOUNTS=ek@gmail.example=/tmp/ek.json
+''')
+    settings = config.load_settings(env, environ={})
+
+    assert list(settings.extra_accounts) == [
+        'birinci@gmail.example', 'ikinci@gmail.example', 'onuncu@gmail.example', 'ek@gmail.example']
+    assert settings.extra_accounts['birinci@gmail.example'] == os.path.join(config.BASE_DIR, 'tokenlar', 'birinci.json')
+
+
+def test_bad_numbered_account_line_names_the_problem(tmp_path):
+    with pytest.raises(config.ConfigError, match='geçersiz adres'):
+        config.load_settings(write_env(tmp_path, 'ACCOUNT_1=adres-yok=tokenlar/x.json'), environ={})

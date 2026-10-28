@@ -111,24 +111,26 @@ cp .env.example .env
 | `FLASK_DEBUG` | `0` | Flask debug mode (development only) |
 | `CREDENTIALS_PATH` | `credentials.json` | Your Google OAuth client file |
 | `ACCOUNTS_DIR` | `hesaplar` | Folder with one sub-folder per account |
-| `EXTRA_ACCOUNTS` | empty | Accounts whose token file lives elsewhere: `address=token_path, address=token_path` |
+| `ACCOUNT_1`, `ACCOUNT_2`, … | empty | One line per account whose token file you already have: `address=token_path` (e.g. `tokenlar/second.json`) |
+| `EXTRA_ACCOUNTS` | empty | The same on one line: `address=token_path, address=token_path` |
 | `GMAIL_QUOTA_PER_MINUTE` | `5400` | Quota units per minute the app allows itself (Gmail's limit is 6,000) |
 | `DEFAULT_SCOPE` | `inbox` | Default delete/preview scope: `inbox` or `all` |
 
 A value given on the command line wins over `.env` (`DEMO=1 python app.py`). Relative paths are
 relative to the project folder; `~` is expanded. A wrong value stops the app at start with a
-message naming the setting. Accounts listed in `EXTRA_ACCOUNTS` can't be removed from the page
+message naming the setting. Accounts listed in `ACCOUNT_n` / `EXTRA_ACCOUNTS` can't be removed from the page
 (the token file is yours); delete the line instead.
 
 ### CSV only (CLI)
 
 ```bash
-python extract_senders.py
+python extract_senders.py                    # the only account, if there is just one
+python extract_senders.py someone@gmail.com  # a specific account
 ```
 
-Writes `gonderenler.csv` with one row per address: address, display name, count, category and
-whether an unsubscribe link was seen. Older CSV files (raw `From` header + count) are still read
-and merged by address.
+Writes that account's `hesaplar/<address>/gonderenler.csv`: one row per address with display name,
+count, category and whether an unsubscribe link was seen. Older CSV files (raw `From` header +
+count) are still read and merged by address.
 
 ## How it works
 
@@ -145,12 +147,23 @@ Flask app.py ── Host / Origin checks ── Gmail API (google-api-python-cli
                    son_islem.json} · korunanlar.json (shared)
 ```
 
-| File | What it holds |
+Entry points in the project folder: `app.py` (web app), `demo.py` (demo mode), `extract_senders.py`
+(CLI). The code lives in the `mail_temizleyici/` package, one module per job:
+
+| Module | What it does |
 |---|---|
-| `app.py` | Web server and API: scan, count, delete, undo, preview, unsubscribe, protected list |
-| `extract_senders.py` | Scan logic (batched fetch, grouping, categories) and CSV read/write; also a CLI |
-| `gmail_auth.py` | OAuth sign-in per account; tokens are written with `0600` permissions |
-| `demo.py` | Fake mailbox for demo mode |
+| `config.py` | Reads `.env` and checks the values |
+| `auth.py` | Google sign-in, one token per account (`0600`) |
+| `gmail.py` | Shared Gmail API parts: address parsing, quota limiter, batch requests with retry |
+| `scanner.py` | Inbox scan: count per address, display name, categories; CSV read/write |
+| `accounts.py` | Account folders, account list, moving the old single-account files |
+| `protected.py` | Protected senders (shared by all accounts) |
+| `state.py` | Per-account scan/delete state and locks |
+| `mailbox.py` | Count, move to Trash, undo, preview (with exact sender check) |
+| `unsubscribe.py` | List-Unsubscribe and one-click unsubscribe with SSRF checks |
+| `web.py` | Flask app: page, JSON API, request checks, error mapping |
+| `demo.py` | Fake mailboxes for demo mode |
+| `templates/index.html` | The page (plain JS, no build step) |
 
 ## Security notes
 

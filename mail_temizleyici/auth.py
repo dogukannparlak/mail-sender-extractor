@@ -1,3 +1,4 @@
+"""Google OAuth girişi ve hesap başına token dosyaları."""
 import os
 import threading
 
@@ -11,7 +12,7 @@ from googleapiclient.discovery import build
 # okunur çağrılar yapsa da aynı token.json paylaşıldığından ortak scope kullanılır.
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # proje klasörü
 TOKEN_PATH = os.path.join(BASE_DIR, 'token.json')
 CREDENTIALS_PATH = os.path.join(BASE_DIR, 'credentials.json')
 

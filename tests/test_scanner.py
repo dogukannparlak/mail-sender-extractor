@@ -2,7 +2,8 @@ import csv
 
 import pytest
 
-from extract_senders import extract_senders, load_csv, message_category, save_to_csv, sender_key
+from mail_temizleyici.scanner import extract_senders, load_csv, message_category, save_to_csv
+from mail_temizleyici.gmail import sender_key
 
 
 def _metadata_response(sender_header_value):
@@ -299,7 +300,7 @@ def test_csv_neutralises_formulas_and_round_trips(tmp_path):
 
 
 def test_quota_limiter_waits_when_the_minute_budget_is_spent():
-    from extract_senders import QuotaLimiter
+    from mail_temizleyici.gmail import QuotaLimiter
     now = [0.0]
     sleeps = []
 
@@ -318,7 +319,7 @@ def test_quota_limiter_waits_when_the_minute_budget_is_spent():
 def test_user_rate_limit_403_is_retried():
     import httplib2
     from googleapiclient.errors import HttpError
-    from extract_senders import _is_retryable
+    from mail_temizleyici.gmail import _is_retryable
     err = HttpError(httplib2.Response({'status': 403}),
                     b'{"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}')
     assert _is_retryable(err)

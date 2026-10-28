@@ -12,8 +12,8 @@ playwright_sync = pytest.importorskip('playwright.sync_api')
 
 from werkzeug.serving import make_server
 
-import app as app_module
-from demo import DEMO_SENDERS
+from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_temizleyici.demo import DEMO_SENDERS
 
 ADDRESSES = {address for _, address, *_ in DEMO_SENDERS}
 WITH_UNSUBSCRIBE = {address for _, address, _, _, unsub, _ in DEMO_SENDERS if unsub}
@@ -32,7 +32,7 @@ def ui_browser():
 
 @pytest.fixture(scope='module')
 def server_url():
-    server = make_server('127.0.0.1', 0, app_module.app, threaded=True)
+    server = make_server('127.0.0.1', 0, web.app, threaded=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f'http://127.0.0.1:{server.server_port}'
     server.shutdown()
