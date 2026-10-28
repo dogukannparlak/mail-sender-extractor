@@ -69,7 +69,8 @@
     background: var(--card); color: var(--text); border: 1px solid var(--border);
     border-radius: 6px; padding: 5px 8px; font-size: 13px; max-width: 260px;
   }
-  #accountSelect[hidden] { display: none; }
+  #accountSelect[hidden], #accountLabel[hidden] { display: none; }
+  #accountLabel { font-size: 13px; color: var(--muted); }
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   main { max-width: 920px; margin: 0 auto; padding: 20px 32px calc(var(--bar-height) + 40px); }
 
@@ -210,8 +211,8 @@
 <header>
   <h1>Mail Temizleyici{% if demo %} <span class="demo-badge" title="Sahte verilerle çalışıyor; Gmail'e bağlı değil">DEMO</span>{% endif %}</h1>
   <div class="account-bar">
-    <label for="accountSelect" class="visually-hidden">Hesap</label>
-    <select id="accountSelect" aria-label="Gmail hesabı" hidden></select>
+    <label for="accountSelect" id="accountLabel" hidden>Taranan hesap:</label>
+    <select id="accountSelect" hidden></select>
     <button id="addAccountBtn" type="button" class="small-btn">+ Hesap ekle</button>
     <button id="removeAccountBtn" type="button" class="small-btn" hidden>Hesabı çıkar</button>
   </div>
@@ -944,6 +945,7 @@ function renderAccounts() {
   select.replaceChildren(...state.accounts.map(a => el('option', { value: a }, a)));
   select.value = state.account || '';
   select.hidden = state.accounts.length === 0;
+  $('accountLabel').hidden = select.hidden;
   $('removeAccountBtn').hidden = state.accounts.length === 0;
   $('scanBtn').disabled = state.busy || !state.account;
 }
