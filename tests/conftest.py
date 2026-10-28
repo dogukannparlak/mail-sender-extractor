@@ -52,6 +52,8 @@ class FakeMessagesResource:
         self.get_calls.append(kwargs)
         msg_id = kwargs.get('id')
         response = self._get_responses.get(msg_id, {})
+        if isinstance(response, list):  # art arda çağrılarda sırayla dön (ör. önce 429, sonra başarı)
+            response = response.pop(0) if len(response) > 1 else response[0]
         return _Executable(response)
 
     def batchModify(self, **kwargs):
@@ -79,6 +81,27 @@ class FakeUsersResource:
         return self._labels
 
 
+class FakeBatch:
+    """`service.new_batch_http_request()`: istekleri toplar, execute'ta callback'leri çağırır."""
+
+    def __init__(self, service, callback):
+        self._service = service
+        self._callback = callback
+        self._requests = []
+
+    def add(self, request, callback=None, request_id=None):
+        self._requests.append((request, callback or self._callback, request_id))
+
+    def execute(self):
+        self._service.batch_sizes.append(len(self._requests))
+        for request, callback, request_id in self._requests:
+            try:
+                response, exception = request.execute(), None
+            except Exception as e:  # gerçek batch de hatayı callback'e verir
+                response, exception = None, e
+            callback(request_id, response, exception)
+
+
 class FakeGmailService:
     """Fakes the top-level object returned by `googleapiclient.discovery.build('gmail', 'v1', ...)`."""
 
@@ -87,9 +110,13 @@ class FakeGmailService:
         self.messages_resource = FakeMessagesResource(list_pages, get_responses, batch_modify_result, list_handler)
         self.labels_resource = FakeLabelsResource(label_response)
         self._users = FakeUsersResource(self.messages_resource, self.labels_resource)
+        self.batch_sizes = []
 
     def users(self):
         return self._users
+
+    def new_batch_http_request(self, callback=None):
+        return FakeBatch(self, callback)
 
 
 @pytest.fixture

@@ -156,6 +156,7 @@
     margin-bottom: 20px;
   }
   #scanBtn { padding: 8px 16px; font-size: 13px; }
+  #status progress { width: 100%; height: 10px; accent-color: var(--accent); }
   .empty-state { color: var(--muted); }
   .error-state { color: var(--accent); }
   .toolbar {
@@ -522,28 +523,64 @@ function setActionButtonsDisabled(disabled) {
   document.getElementById('deleteBtn').disabled = disabled;
 }
 
-async function scanInbox() {
-  const btn = document.getElementById('scanBtn');
-  const originalText = btn.textContent;
-  btn.disabled = true;
-  btn.textContent = 'Taranıyor...';
-  setActionButtonsDisabled(true);
-  document.getElementById('status').textContent = 'Gelen kutusu taranıyor, bu biraz sürebilir...';
+function showScanProgress(state) {
+  const pct = state.total ? Math.floor(state.processed / state.total * 100) : 0;
+  document.getElementById('scanBtn').textContent = state.total ? `Taranıyor %${pct}` : 'Taranıyor...';
+  const status = document.getElementById('status');
+  status.innerHTML = state.total
+    ? `<progress max="${state.total}" value="${state.processed}"></progress>
+       <div>${state.processed} / ${state.total} mail tarandı (%${pct})</div>`
+    : 'Gelen kutusundaki mailler listeleniyor...';
+}
 
+// Tarama sunucuda arka planda sürer; bitene kadar durumu yokla.
+async function pollScan() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true;
+  setActionButtonsDisabled(true);
   try {
-    const res = await fetch('/api/scan', { method: 'POST' });
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
-    setData(result);
-    document.getElementById('status').textContent =
-      `Tarama tamamlandı. Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen.`;
+    while (true) {
+      const res = await fetch('/api/scan/status');
+      const state = await res.json();
+      if (!res.ok) throw new Error(state.error || `Sunucu hatası (${res.status})`);
+      if (!state.running) {
+        if (state.error) throw new Error(state.error);
+        await load();
+        document.getElementById('status').textContent =
+          `Tarama tamamlandı. Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen.`;
+        return;
+      }
+      showScanProgress(state);
+      await new Promise(r => setTimeout(r, 700));
+    }
   } catch (err) {
     document.getElementById('status').textContent = 'Tarama sırasında hata oluştu: ' + err.message;
   } finally {
     btn.disabled = false;
-    btn.textContent = originalText;
+    btn.textContent = 'Gelen Kutusunu Tara';
     updateSelection();
   }
+}
+
+async function scanInbox() {
+  try {
+    const res = await fetch('/api/scan', { method: 'POST' });
+    const result = await res.json();
+    // 409: başka bir sekmede başlamış tarama; onu izlemeye devam et.
+    if (!res.ok && res.status !== 409) throw new Error(result.error || `Sunucu hatası (${res.status})`);
+    showScanProgress(result);
+    await pollScan();
+  } catch (err) {
+    document.getElementById('status').textContent = 'Tarama başlatılamadı: ' + err.message;
+  }
+}
+
+async function resumeScanIfRunning() {
+  try {
+    const res = await fetch('/api/scan/status');
+    const state = await res.json();
+    if (res.ok && state.running) pollScan();
+  } catch (err) { /* durum alınamazsa sayfa normal açılır */ }
 }
 
 document.getElementById('scanBtn').addEventListener('click', scanInbox);
@@ -646,7 +683,7 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
   }
 });
 
-load();
+load().then(resumeScanIfRunning);
 </script>
 </body>
 </html>

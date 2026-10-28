@@ -143,3 +143,52 @@ def test_load_csv_round_trips_save_to_csv(tmp_path):
     save_to_csv(senders, filename=str(out_file))
 
     assert load_csv(str(out_file)) == senders
+
+
+def _rate_limit_error():
+    import httplib2
+    from googleapiclient.errors import HttpError
+    return HttpError(httplib2.Response({'status': 429}), b'{"error": {"message": "rate limit"}}')
+
+
+def test_scans_250_messages_in_batches_of_50(fake_service_factory):
+    ids = [{'id': f'm{i}'} for i in range(250)]
+    service = fake_service_factory(
+        list_pages=[{'messages': ids[:200], 'nextPageToken': 'p2'}, {'messages': ids[200:]}],
+        get_responses={m['id']: _metadata_response('a@example.com') for m in ids},
+    )
+    seen = []
+
+    result = extract_senders(service, progress=lambda done, total: seen.append((done, total)))
+
+    assert service.batch_sizes == [50] * 5
+    assert result == {'a@example.com': {'ad': '', 'mail_sayisi': 250}}
+    assert seen[0] == (0, 250) and seen[-1] == (250, 250)
+
+
+def test_rate_limited_messages_are_retried_after_a_pause(fake_service_factory):
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}]}],
+        get_responses={
+            'm1': _metadata_response('a@example.com'),
+            'm2': [_rate_limit_error(), _metadata_response('b@example.com')],
+        },
+    )
+    sleeps = []
+
+    result = extract_senders(service, progress=lambda *a: None, sleep=sleeps.append)
+
+    assert set(result) == {'a@example.com', 'b@example.com'}
+    assert service.batch_sizes == [2, 1]
+    assert sleeps == [1]
+
+
+def test_gives_up_after_repeated_rate_limits(fake_service_factory):
+    import pytest
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}]}],
+        get_responses={'m1': [_rate_limit_error()]},
+    )
+
+    with pytest.raises(RuntimeError):
+        extract_senders(service, progress=lambda *a: None, sleep=lambda s: None)

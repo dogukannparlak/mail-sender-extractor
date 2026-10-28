@@ -393,22 +393,75 @@ class TestApiSenders:
         assert resp.get_json() == {'toplam_mail_sayisi': 0, 'gonderenler': []}
 
 
+class _InlineThread:
+    """threading.Thread yerine: taramayı start() çağrısında hemen çalıştırır."""
+
+    def __init__(self, target, args=(), daemon=None):
+        self._target, self._args = target, args
+
+    def start(self):
+        self._target(*self._args)
+
+
+@pytest.fixture
+def inline_scan(monkeypatch):
+    monkeypatch.setattr(app_module.threading, 'Thread', _InlineThread)
+    monkeypatch.setitem(app_module._scan_state, 'running', False)
+
+
 class TestApiScan:
-    def test_scans_and_persists_csv(self, client, monkeypatch):
+    def test_scans_in_background_and_persists_csv(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(app_module, 'get_service', lambda: 'fake-service')
-        monkeypatch.setattr(app_module, 'extract_senders',
-                            lambda service: {'a@example.com': {'ad': '', 'mail_sayisi': 2}})
-        save_mock = MagicMock()
-        monkeypatch.setattr(app_module, 'save_to_csv', save_mock)
+
+        def fake_extract(service, progress):
+            progress(1, 2)
+            progress(2, 2)
+            return {'a@example.com': {'ad': '', 'mail_sayisi': 2}}
+        monkeypatch.setattr(app_module, 'extract_senders', fake_extract)
 
         resp = client.post('/api/scan')
+        status = client.get('/api/scan/status').get_json()
 
-        assert resp.status_code == 200
-        assert resp.get_json() == {
+        assert resp.status_code == 202
+        assert status['running'] is False and status['error'] is None
+        assert (status['processed'], status['total']) == (2, 2)
+        assert client.get('/api/senders').get_json() == {
             'toplam_mail_sayisi': 2,
             'gonderenler': [{'gonderen': 'a@example.com', 'ad': '', 'mail_sayisi': 2}],
         }
-        save_mock.assert_called_once()
+
+    def test_second_scan_while_running_is_rejected(self, client, monkeypatch, inline_scan):
+        monkeypatch.setitem(app_module._scan_state, 'running', True)
+        get_service_mock = MagicMock()
+        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+
+        resp = client.post('/api/scan')
+
+        assert resp.status_code == 409
+        get_service_mock.assert_not_called()
+
+    def test_scan_error_is_reported_in_status(self, client, monkeypatch, inline_scan):
+        monkeypatch.setattr(app_module, 'get_service', lambda: 'fake-service')
+
+        def failing_extract(service, progress):
+            raise make_http_error(500, 'backend error')
+        monkeypatch.setattr(app_module, 'extract_senders', failing_extract)
+
+        client.post('/api/scan')
+        status = client.get('/api/scan/status').get_json()
+
+        assert status['running'] is False
+        assert 'Gmail API hatası (500)' in status['error']
+
+    def test_login_error_is_returned_directly_and_frees_the_lock(self, client, monkeypatch, inline_scan):
+        def missing_credentials():
+            raise FileNotFoundError('credentials.json bulunamadı')
+        monkeypatch.setattr(app_module, 'get_service', missing_credentials)
+
+        resp = client.post('/api/scan')
+
+        assert resp.status_code == 500
+        assert client.get('/api/scan/status').get_json()['running'] is False
 
 
 class TestApiDelete:
@@ -628,16 +681,16 @@ class TestHostCheck:
 
         assert resp.status_code == 200
 
-    def test_allows_same_origin_post(self, client, monkeypatch):
+    def test_allows_same_origin_post(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(app_module, 'get_service', lambda: 'fake')
-        monkeypatch.setattr(app_module, 'extract_senders', lambda service: Counter())
+        monkeypatch.setattr(app_module, 'extract_senders', lambda service, progress: {})
         monkeypatch.setattr(app_module, 'save_to_csv', MagicMock())
 
         resp = client.post('/api/scan', headers={
             'Origin': 'http://localhost:5050', 'Sec-Fetch-Site': 'same-origin',
         })
 
-        assert resp.status_code == 200
+        assert resp.status_code == 202
 
     @pytest.mark.parametrize('headers', [
         {'Sec-Fetch-Site': 'cross-site'},

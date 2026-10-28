@@ -1,7 +1,10 @@
 from collections import Counter
 import csv
 import re
+import time
 from email.utils import parseaddr
+
+from googleapiclient.errors import HttpError
 
 import gmail_auth
 
@@ -50,39 +53,84 @@ class SenderTally:
         }
 
 
-def extract_senders(service):
-    tally = SenderTally()
+# Gmail, 50'den büyük batch'lerde hız sınırına takılabileceğini söylüyor.
+BATCH_SIZE = 50
+MAX_ATTEMPTS = 5
+
+
+def _is_retryable(exc):
+    if not isinstance(exc, HttpError):
+        return False
+    if exc.status_code == 429 or exc.status_code >= 500:
+        return True
+    return exc.status_code == 403 and 'rateLimitExceeded' in str(exc.content)
+
+
+def list_inbox_ids(service):
+    ids = []
     next_page_token = None
-    processed = 0
-
-    label = service.users().labels().get(userId='me', id='INBOX').execute()
-    total_estimate = label.get('messagesTotal', 0)
-
     while True:
         results = service.users().messages().list(
             userId='me', labelIds=['INBOX'], maxResults=500,
             pageToken=next_page_token
         ).execute()
-
-        messages = results.get('messages', [])
-        for msg in messages:
-            msg_data = service.users().messages().get(
-                userId='me', id=msg['id'],
-                format='metadata', metadataHeaders=['From']
-            ).execute()
-            headers = msg_data.get('payload', {}).get('headers', [])
-            for h in headers:
-                if h['name'].lower() == 'from':
-                    tally.add(h['value'])
-
-            processed += 1
-            print_progress(processed, total_estimate)
-
+        ids.extend(m['id'] for m in results.get('messages', []))
         next_page_token = results.get('nextPageToken')
         if not next_page_token:
-            break
+            return ids
 
-    print()
+
+def fetch_metadata(service, ids, headers, sleep=time.sleep):
+    """Mailleri BATCH_SIZE'lık batch isteklerle getirir; hız sınırına takılanları bekleyip yeniden dener.
+
+    Her başarılı yanıt için (id, yanıt) üretir.
+    """
+    pending = list(ids)
+    attempt = 0
+    while pending:
+        done, retry = [], []
+
+        def callback(request_id, response, exception):
+            if exception is None:
+                done.append((request_id, response))
+            elif _is_retryable(exception):
+                retry.append(request_id)
+            else:
+                raise exception
+
+        for i in range(0, len(pending), BATCH_SIZE):
+            batch = service.new_batch_http_request(callback=callback)
+            for msg_id in pending[i:i + BATCH_SIZE]:
+                batch.add(service.users().messages().get(
+                    userId='me', id=msg_id, format='metadata', metadataHeaders=headers
+                ), request_id=msg_id)
+            batch.execute()
+            yield from done
+            done.clear()
+
+        if retry:
+            attempt += 1
+            if attempt >= MAX_ATTEMPTS:
+                raise RuntimeError(f'{len(retry)} mail Gmail hız sınırı yüzünden {MAX_ATTEMPTS} denemede alınamadı.')
+            sleep(2 ** (attempt - 1))
+        pending = retry
+
+
+def extract_senders(service, progress=None, sleep=time.sleep):
+    progress = progress or print_progress
+    ids = list_inbox_ids(service)
+    total = len(ids)
+    progress(0, total)
+
+    tally = SenderTally()
+    for processed, (_, msg_data) in enumerate(fetch_metadata(service, ids, ['From'], sleep), start=1):
+        for h in msg_data.get('payload', {}).get('headers', []):
+            if h['name'].lower() == 'from':
+                tally.add(h['value'])
+        progress(processed, total)
+
+    if progress is print_progress:
+        print()
     return tally.result()
 
 

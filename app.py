@@ -2,6 +2,8 @@ import os
 import re
 import socket
 import ipaddress
+import threading
+import time
 from email.utils import parseaddr
 from functools import wraps
 from urllib.parse import urlparse
@@ -71,6 +73,14 @@ def remove_senders_from_csv(senders):
     save_to_csv(remaining, filename=CSV_PATH)
 
 
+def _http_error_message(e):
+    message = f'Gmail API hatası ({e.status_code}): {e.reason}'
+    if e.status_code == 403:
+        message += (' Yetki (scope) sorunu olabilir; token.json dosyasını silip '
+                    'uygulamayı yeniden başlatarak tekrar giriş yapmayı deneyin.')
+    return message
+
+
 def handle_errors(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -81,11 +91,7 @@ def handle_errors(f):
         except FileNotFoundError as e:
             return jsonify({'error': str(e)}), 500
         except HttpError as e:
-            message = f'Gmail API hatası ({e.status_code}): {e.reason}'
-            if e.status_code == 403:
-                message += (' Yetki (scope) sorunu olabilir; token.json dosyasını silip '
-                             'uygulamayı yeniden başlatarak tekrar giriş yapmayı deneyin.')
-            return jsonify({'error': message}), 502
+            return jsonify({'error': _http_error_message(e)}), 502
         except Exception:
             app.logger.exception('Beklenmeyen hata')
             return jsonify({'error': 'Beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.'}), 500
@@ -240,13 +246,50 @@ def api_senders():
     return jsonify(read_senders_csv())
 
 
+# Tarama binlerce mailde dakikalar sürer; arka planda çalışır, arayüz durumu sorar.
+_scan_lock = threading.Lock()
+_scan_state = {'running': False, 'processed': 0, 'total': 0, 'error': None, 'finished_at': None}
+
+
+def _update_scan(**changes):
+    with _scan_lock:
+        _scan_state.update(changes)
+
+
+def _run_scan(service):
+    try:
+        senders = extract_senders(service, progress=lambda done, total: _update_scan(processed=done, total=total))
+        save_to_csv(senders, filename=CSV_PATH)
+        _update_scan(error=None)
+    except HttpError as e:
+        _update_scan(error=_http_error_message(e))
+    except Exception:
+        app.logger.exception('Tarama hatası')
+        _update_scan(error='Tarama sırasında beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.')
+    finally:
+        _update_scan(running=False, finished_at=time.time())
+
+
 @app.route('/api/scan', methods=['POST'])
 @handle_errors
 def api_scan():
-    service = get_service()
-    counts = extract_senders(service)
-    save_to_csv(counts, filename=CSV_PATH)
-    return jsonify(_senders_payload(counts))
+    with _scan_lock:
+        if _scan_state['running']:
+            return jsonify({'error': 'Tarama zaten sürüyor.', **_scan_state}), 409
+        _scan_state.update(running=True, processed=0, total=0, error=None, finished_at=None)
+    try:
+        service = get_service()  # giriş/kimlik hataları isteğin kendisinde dönsün
+    except Exception:
+        _update_scan(running=False)
+        raise
+    threading.Thread(target=_run_scan, args=(service,), daemon=True).start()
+    return jsonify(api_scan_status().get_json()), 202
+
+
+@app.route('/api/scan/status')
+def api_scan_status():
+    with _scan_lock:
+        return jsonify(dict(_scan_state))
 
 
 @app.route('/api/count', methods=['POST'])
