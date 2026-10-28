@@ -129,3 +129,4 @@ def isolate_data_files(tmp_path, monkeypatch):
     """Testler gerçek gonderenler.csv / json dosyalarına asla yazmasın."""
     import app as app_module
     monkeypatch.setattr(app_module, 'CSV_PATH', str(tmp_path / 'gonderenler.csv'))
+    monkeypatch.setattr(app_module, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))

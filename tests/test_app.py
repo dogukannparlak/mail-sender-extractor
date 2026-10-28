@@ -600,6 +600,43 @@ class TestDeleteScope:
         assert service.messages_resource.list_calls[0]['q'] == 'from:"a@example.com" in:inbox'
 
 
+class TestProtectedSenders:
+    def test_protected_address_is_never_trashed(self, client, monkeypatch, fake_service_factory):
+        service = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}])
+        get_service_mock = MagicMock(return_value=service)
+        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+        client.post('/api/protected', json={'value': 'Banka@Ornek.com'})
+
+        resp = client.post('/api/delete', json={'senders': ['a@example.com', 'Banka <banka@ornek.com>']})
+
+        assert resp.status_code == 400
+        assert 'banka@ornek.com' in resp.get_json()['error']
+        get_service_mock.assert_not_called()
+
+    @pytest.mark.parametrize('email', ['x@garanti.com.tr', 'x@mail.garanti.com.tr'])
+    def test_protected_domain_covers_subdomains(self, client, monkeypatch, email):
+        monkeypatch.setattr(app_module, 'get_service', MagicMock())
+        client.post('/api/protected', json={'value': '@garanti.com.tr'})
+
+        assert client.post('/api/delete', json={'senders': [email]}).status_code == 400
+        assert client.post('/api/unsubscribe', json={'senders': [email]}).status_code == 400
+
+    def test_lookalike_domain_is_not_protected(self):
+        protected = {'adresler': [], 'alanlar': ['@garanti.com.tr']}
+        assert not app_module.is_protected('x@notgaranti.com.tr', protected)
+
+    def test_unprotect_removes_entry(self, client):
+        client.post('/api/protected', json={'value': 'a@b.com'})
+        resp = client.post('/api/protected', json={'value': 'a@b.com', 'protected': False})
+
+        assert resp.get_json() == {'adresler': [], 'alanlar': []}
+        assert client.get('/api/protected').get_json() == {'adresler': [], 'alanlar': []}
+
+    @pytest.mark.parametrize('value', ['garanti.com.tr', 'a@b.com OR x', '@', 42])
+    def test_rejects_invalid_entries(self, client, value):
+        assert client.post('/api/protected', json={'value': value}).status_code == 400
+
+
 class TestApiPreview:
     def test_rejects_missing_sender(self, client):
         resp = client.post('/api/preview', json={})

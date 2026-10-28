@@ -9,3 +9,6 @@ portfolio.md
 .DS_Store
 INCELEME.md
 inceleme/
+korunanlar.json
+son_islem.json
+*.json.tmp

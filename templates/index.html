@@ -115,6 +115,12 @@
     white-space: nowrap;
   }
   .preview-btn:hover { background: rgba(128,128,128,0.1); }
+  .lock-btn {
+    background: transparent; border: 1px solid var(--border); padding: 3px 8px;
+    font-size: 13px; border-radius: 6px;
+  }
+  .lock-btn:hover { background: rgba(128,128,128,0.1); }
+  .sender-row.protected .sender-name { opacity: 0.7; }
   .action-bar {
     position: fixed;
     bottom: 0; left: 0; right: 0;
@@ -253,6 +259,15 @@ function passesFilters(g) {
   if (categoryFilter && g.kategori !== categoryFilter) return false;
   return true;
 }
+let protectedList = { adresler: [], alanlar: [] };
+// Sunucudaki is_protected ile aynı kural: alan adı alt alan adlarını da kapsar.
+function isProtected(address) {
+  const email = address.toLowerCase();
+  const domain = domainOf(email);
+  return protectedList.adresler.includes(email) ||
+    protectedList.alanlar.some(d => domain === d.slice(1) || domain.endsWith('.' + d.slice(1)));
+}
+
 // Seçim DOM'da değil burada tutulur; liste yeniden çizilince (sıralama, görünüm) kaybolmasın.
 const selected = new Set();
 
@@ -320,9 +335,12 @@ async function copyToClipboard(text, btnEl) {
 
 async function load() {
   try {
-    const res = await fetch('/api/senders');
+    const [res, protRes] = await Promise.all([fetch('/api/senders'), fetch('/api/protected')]);
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
+    const prot = await protRes.json();
+    if (!protRes.ok) throw new Error(prot.error || `Sunucu hatası (${protRes.status})`);
+    protectedList = prot;
     setData(body);
   } catch (err) {
     document.getElementById('senders').innerHTML =
@@ -333,7 +351,7 @@ async function load() {
 function setData(body) {
   data = body;
   const known = new Set(data.gonderenler.map(g => g.gonderen));
-  [...selected].forEach(key => { if (!known.has(key)) selected.delete(key); });
+  [...selected].forEach(key => { if (!known.has(key) || isProtected(key)) selected.delete(key); });
   render();
 }
 
@@ -371,12 +389,16 @@ function render() {
     item.className = 'sender-item';
     const single = rowData.members.length === 1 && viewMode === 'address';
     const g = rowData.members[0];
+    // Alan adı satırının kilidi alan adını, adres satırınınki yalnız adresi korur.
+    const lockValue = single ? g.gonderen : rowData.key;
+    const locked = single ? isProtected(g.gonderen) : protectedList.alanlar.includes(rowData.key);
+    const anyLocked = rowData.members.some(m => isProtected(m.gonderen));
 
     const row = document.createElement('div');
-    row.className = 'sender-row';
+    row.className = 'sender-row' + (anyLocked ? ' protected' : '');
     const title = single && g.ad ? `${g.ad} <${g.gonderen}>` : rowData.key;
     row.innerHTML = `
-      <input type="checkbox" class="sender-checkbox">
+      <input type="checkbox" class="sender-checkbox" ${anyLocked ? 'disabled title="Korunan gönderen"' : ''}>
       <div class="sender-info" title="${escapeHtml(title)}">
         <span class="sender-name">${escapeHtml(rowData.label)}${single && CATEGORY_LABELS[g.kategori]
           ? ` <span class="badge badge-${g.kategori}">${CATEGORY_LABELS[g.kategori]}</span>` : ''}</span>
@@ -385,7 +407,8 @@ function render() {
       <span class="sender-count">${rowData.count}</span>
       <button class="preview-btn" type="button">${single ? 'Önizle' : 'Adresler'}</button>
       <button class="copy-btn" type="button" title="${single ? 'E-posta adresini' : 'Alan adını'} kopyala">Kopyala</button>
-      ${single ? '<button class="unsub-btn" type="button">Çık</button><span class="unsub-result"></span>' : ''}
+      <button class="lock-btn" type="button" title="${locked ? 'Korumayı kaldır' : 'Koru: seçilemez ve silinemez'}">${locked ? '🔒' : '🔓'}</button>
+      ${single ? `<button class="unsub-btn" type="button" ${anyLocked ? 'disabled' : ''}>Çık</button><span class="unsub-result"></span>` : ''}
     `;
 
     const previewPanel = document.createElement('div');
@@ -408,6 +431,10 @@ function render() {
       e.stopPropagation();
       copyToClipboard(single ? g.gonderen : domainOf(g.gonderen), e.target);
     });
+    row.querySelector('.lock-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleProtected(lockValue, !locked, e.target);
+    });
     if (single) {
       row.querySelector('.unsub-btn').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -423,6 +450,24 @@ function render() {
   container.appendChild(list);
   syncSelectAll();
   updateSelection();
+}
+
+async function toggleProtected(value, makeProtected, btnEl) {
+  btnEl.disabled = true;
+  try {
+    const res = await fetch('/api/protected', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value, protected: makeProtected })
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
+    protectedList = body;
+    setData(data);
+  } catch (err) {
+    btnEl.disabled = false;
+    document.getElementById('status').textContent = 'Koruma değiştirilemedi: ' + err.message;
+  }
 }
 
 function syncRowCheckbox(checkbox) {
@@ -488,7 +533,7 @@ async function togglePreview(sender, panel, btnEl) {
 }
 
 function syncSelectAll() {
-  const boxes = [...document.querySelectorAll('.sender-checkbox')];
+  const boxes = [...document.querySelectorAll('.sender-checkbox:not(:disabled)')];
   const selectAll = document.getElementById('selectAll');
   selectAll.checked = boxes.length > 0 && boxes.every(b => b.checked);
   selectAll.indeterminate = boxes.some(b => b.checked || b.indeterminate) && !selectAll.checked;
@@ -646,7 +691,7 @@ document.getElementById('viewSelect').addEventListener('change', (e) => {
 // Yalnız ekranda görünen satırları seçer/bırakır.
 document.getElementById('selectAll').addEventListener('change', (e) => {
   const checked = e.target.checked;
-  document.querySelectorAll('.sender-checkbox').forEach(cb => {
+  document.querySelectorAll('.sender-checkbox:not(:disabled)').forEach(cb => {
     cb.rowMembers.forEach(m => checked ? selected.add(m.gonderen) : selected.delete(m.gonderen));
     syncRowCheckbox(cb);
   });

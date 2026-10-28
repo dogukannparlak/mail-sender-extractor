@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import socket
 import ipaddress
 import threading
@@ -20,6 +21,7 @@ from extract_senders import EMAIL_RE, extract_senders, load_csv, save_to_csv
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, 'gonderenler.csv')
+PROTECTED_PATH = os.path.join(BASE_DIR, 'korunanlar.json')
 
 app = Flask(__name__)
 
@@ -124,6 +126,41 @@ def _validated_scope(body):
     if scope not in SCOPE_QUERIES:
         raise ValueError("'scope' yalnız 'inbox' ya da 'all' olabilir.")
     return scope
+
+
+# Korunan gönderenler (banka, okul...): seçilemez, silinemez, abonelikten çıkılamaz.
+# Alan adı girdisi ("@garanti.com.tr") alt alan adlarını da kapsar.
+DOMAIN_RE = re.compile(r'^@[\w-]+(\.[\w-]+)+$')
+
+
+def _write_json(path, payload):
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def load_protected():
+    if not os.path.exists(PROTECTED_PATH):
+        return {'adresler': [], 'alanlar': []}
+    with open(PROTECTED_PATH, encoding='utf-8') as f:
+        stored = json.load(f)
+    return {'adresler': sorted(stored.get('adresler', [])), 'alanlar': sorted(stored.get('alanlar', []))}
+
+
+def is_protected(email, protected):
+    email = email.lower()
+    domain = email.rsplit('@', 1)[-1]
+    if email in protected['adresler']:
+        return True
+    return any(domain == d[1:] or domain.endswith('.' + d[1:]) for d in protected['alanlar'])
+
+
+def reject_protected(emails):
+    protected = load_protected()
+    blocked = [email for email in emails if is_protected(email, protected)]
+    if blocked:
+        raise ValueError('Korunan gönderenlere işlem yapılamaz: ' + ', '.join(blocked))
 
 
 def from_query(email, scope='all', extra=''):
@@ -292,6 +329,38 @@ def api_scan_status():
         return jsonify(dict(_scan_state))
 
 
+@app.route('/api/protected')
+@handle_errors
+def api_protected():
+    return jsonify(load_protected())
+
+
+@app.route('/api/protected', methods=['POST'])
+@handle_errors
+def api_protected_update():
+    body = request.get_json(silent=True) or {}
+    value = body.get('value')
+    if not isinstance(value, str):
+        raise ValueError("İstek gövdesinde 'value' adında bir metin bekleniyor.")
+    value = value.strip().lower()
+    if DOMAIN_RE.match(value):
+        field = 'alanlar'
+    elif EMAIL_RE.match(value):
+        field = 'adresler'
+    else:
+        raise ValueError(f'Geçersiz adres ya da alan adı: {value!r} (alan adı için "@ornek.com" yaz).')
+
+    protected = load_protected()
+    entries = set(protected[field])
+    if body.get('protected', True):
+        entries.add(value)
+    else:
+        entries.discard(value)
+    protected[field] = sorted(entries)
+    _write_json(PROTECTED_PATH, protected)
+    return jsonify(protected)
+
+
 @app.route('/api/count', methods=['POST'])
 @handle_errors
 def api_count():
@@ -317,6 +386,7 @@ def api_delete():
     scope = _validated_scope(body)
     # Hepsini önce doğrula: geçersiz bir adres yüzünden işlem yarıda kalmasın.
     emails = [extract_email(sender) for sender in senders]
+    reject_protected(emails)
     service = get_service()
 
     results = []
@@ -379,6 +449,7 @@ def api_preview():
 def api_unsubscribe():
     senders = _validated_senders(request.get_json(silent=True))
     emails = [extract_email(sender) for sender in senders]
+    reject_protected(emails)
     service = get_service()
 
     results = []
