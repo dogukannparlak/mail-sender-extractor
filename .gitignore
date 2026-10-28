@@ -14,3 +14,4 @@ son_islem.json
 *.json.tmp
 taranan_idler.json
 .coverage
+hesaplar/

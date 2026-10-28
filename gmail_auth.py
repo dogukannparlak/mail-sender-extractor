@@ -20,15 +20,52 @@ CREDENTIALS_PATH = os.path.join(BASE_DIR, 'credentials.json')
 _auth_lock = threading.Lock()
 
 
-def get_service():
+def get_service(token_path=None):
+    """token_path'teki hesap için Gmail servisi; token yoksa ya da geçersizse giriş penceresi açar."""
     with _auth_lock:
-        return build('gmail', 'v1', credentials=_load_credentials())
+        return build('gmail', 'v1', credentials=_load_credentials(token_path or TOKEN_PATH))
 
 
-def _load_credentials():
+def account_email(service):
+    return service.users().getProfile(userId='me').execute()['emailAddress'].lower()
+
+
+def add_account(accounts_dir):
+    """Yeni bir Google hesabıyla giriş yapar; token'ı <accounts_dir>/<adres>/token.json'a yazar, adresi döner.
+
+    prompt=select_account: tarayıcıda açık olan hesap sessizce seçilmesin, kullanıcı hangisi olduğunu seçsin.
+    """
+    with _auth_lock:
+        creds = _sign_in(prompt='select_account')
+        email = account_email(build('gmail', 'v1', credentials=creds))
+        folder = os.path.join(accounts_dir, email)
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        _save_token(creds, os.path.join(folder, 'token.json'))
+    return email
+
+
+def _sign_in(**kwargs):
+    if not os.path.exists(CREDENTIALS_PATH):
+        raise FileNotFoundError(
+            f"credentials.json bulunamadı ({CREDENTIALS_PATH}). "
+            "README.md'deki kurulum adımlarına bakın."
+        )
+    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
+    return flow.run_local_server(port=0, **kwargs)
+
+
+def _save_token(creds, token_path):
+    # Token Gmail'e yazma yetkisi taşır; yalnız dosya sahibi okuyabilsin.
+    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as token:
+        token.write(creds.to_json())
+    os.chmod(token_path, 0o600)
+
+
+def _load_credentials(token_path):
     creds = None
-    if os.path.exists(TOKEN_PATH):
-        creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
     if not creds or not creds.valid:
         refreshed = False
         if creds and creds.expired and creds.refresh_token:
@@ -39,16 +76,6 @@ def _load_credentials():
                 # Yenileme anahtarı geçersiz (süresi doldu ya da izin geri alındı): yeniden giriş gerekir.
                 creds = None
         if not refreshed:
-            if not os.path.exists(CREDENTIALS_PATH):
-                raise FileNotFoundError(
-                    f"credentials.json bulunamadı ({CREDENTIALS_PATH}). "
-                    "README.md'deki kurulum adımlarına bakın."
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-            creds = flow.run_local_server(port=0)
-        # Token Gmail'e yazma yetkisi taşır; yalnız dosya sahibi okuyabilsin.
-        fd = os.open(TOKEN_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, 'w') as token:
-            token.write(creds.to_json())
-        os.chmod(TOKEN_PATH, 0o600)
+            creds = _sign_in()
+        _save_token(creds, token_path)
     return creds

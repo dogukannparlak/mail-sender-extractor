@@ -30,6 +30,21 @@ DEMO_SENDERS = [
     ('Yemek Siparişi', 'indirim@yemek.example', 26, 'CATEGORY_PROMOTIONS', True, True),
 ]
 
+# İkinci demo hesabı (iş/okul): farklı gönderenler, hesap geçişi görünsün.
+DEMO_WORK_SENDERS = [
+    ('Proje Yönetim Aracı', 'bildirim@proje.example', 45, 'CATEGORY_UPDATES', True, True),
+    ('Kod Deposu', 'noreply@kod.example', 38, 'CATEGORY_UPDATES', True, False),
+    ('Takvim', 'takvim@ofis.example', 21, 'CATEGORY_UPDATES', False, False),
+    ('Etkinlik Duyuruları', 'etkinlik@konferans.example', 17, 'CATEGORY_PROMOTIONS', True, True),
+    ('Ekip Lideri', 'lider@ofis.example', 9, 'CATEGORY_PERSONAL', False, False),
+    ('Örnek Banka', 'bilgi@ornekbanka.example', 6, 'CATEGORY_UPDATES', False, False),
+]
+
+DEMO_ACCOUNTS = {
+    'demo@ornek.example': (DEMO_SENDERS, 7),
+    'is@ornek.example': (DEMO_WORK_SENDERS, 11),
+}
+
 SUBJECTS = {
     'CATEGORY_PROMOTIONS': ['%50 indirim bugün bitiyor', 'Sana özel kampanya', 'Sepetinde ürün kaldı'],
     'CATEGORY_UPDATES': ['Haftalık özet', 'Hesap hareketin', 'Yeni duyuru yayınlandı'],
@@ -63,12 +78,12 @@ class _Batch:
 class DemoMailbox:
     """googleapiclient'ın uygulamada kullanılan kısmını taklit eder: list, get, batchModify, batch."""
 
-    def __init__(self, seed=7):
+    def __init__(self, senders=DEMO_SENDERS, seed=7):
         rng = random.Random(seed)
         now_ms = int(time.time() * 1000)
         self.store = {}
         n = 0
-        for name, address, count, tab, unsubscribe, one_click in DEMO_SENDERS:
+        for name, address, count, tab, unsubscribe, one_click in senders:
             for _ in range(count):
                 n += 1
                 labels = {tab}
@@ -169,20 +184,25 @@ def enable(app_module):
     """app modülünü demo posta kutusuna ve geçici veri klasörüne bağlar."""
     import extract_senders
 
-    mailbox = DemoMailbox()
+    mailboxes = {account: DemoMailbox(senders, seed) for account, (senders, seed) in DEMO_ACCOUNTS.items()}
     data_dir = tempfile.mkdtemp(prefix='mail-temizleyici-demo-')
-    app_module.get_service = lambda: mailbox
-    app_module.CSV_PATH = os.path.join(data_dir, 'gonderenler.csv')
+    app_module.ACCOUNTS_DIR = os.path.join(data_dir, 'hesaplar')
+    for account in mailboxes:
+        os.makedirs(os.path.join(app_module.ACCOUNTS_DIR, account))
+        # Hesap listesi token dosyasına bakar; demo'da token hiç okunmaz (get_service sahte kutuyu döner).
+        with open(os.path.join(app_module.ACCOUNTS_DIR, account, 'token.json'), 'w') as f:
+            f.write('{}')
+    app_module.get_service = lambda account: mailboxes[account]
     app_module.PROTECTED_PATH = os.path.join(data_dir, 'korunanlar.json')
-    app_module.UNDO_PATH = os.path.join(data_dir, 'son_islem.json')
-    app_module.SCAN_IDS_PATH = os.path.join(data_dir, 'taranan_idler.json')
+    app_module.LEGACY_TOKEN_PATH = os.path.join(data_dir, 'token.json')
     extract_senders.quota.units_per_minute = 0  # sahte kutuda Gmail kotası yok
     # .example alan adları çözülmez; one-click kontrolü genel IP görsün, istek dışarı gitmesin.
     app_module._resolve_host = lambda hostname: {'93.184.215.14'}
     app_module.requests.post = lambda *args, **kwargs: _DemoResponse()
     app_module.DEMO_MODE = True
-    print(f'DEMO modu: sahte posta kutusu ({len(mailbox.store)} mail), veriler {data_dir}')
-    return mailbox
+    total = sum(len(m.store) for m in mailboxes.values())
+    print(f'DEMO modu: {len(mailboxes)} sahte hesap ({total} mail), veriler {data_dir}')
+    return mailboxes
 
 
 if __name__ == '__main__':

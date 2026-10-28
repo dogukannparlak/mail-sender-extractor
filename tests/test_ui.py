@@ -66,7 +66,7 @@ def test_header_text_is_shown_as_text_not_html(ui_browser, server_url, demo_mode
     context = ui_browser.new_context()
     page = context.new_page()
     evil = '<img src=x onerror="window.__xss=1">"Kötü" Ad'
-    page.route('**/api/senders', lambda route: route.fulfill(content_type='application/json', body=json.dumps({
+    page.route('**/api/senders?*', lambda route: route.fulfill(content_type='application/json', body=json.dumps({
         'toplam_mail_sayisi': 1,
         'gonderenler': [{'gonderen': 'x@kotu.example', 'ad': evil, 'mail_sayisi': 1}],
     })))
@@ -91,7 +91,7 @@ def test_search_and_select_visible_only(ui_page):
     assert page.inner_text('#selectAllLabel') == 'Görünenleri seç (2)'
     page.check('#selectAll')
     page.fill('#searchInput', '')
-    assert page.inner_text('#selectedInfo').startswith('2 gönderen seçildi')
+    assert '2 gönderen seçildi' in page.inner_text('#selectedInfo')
 
 
 def test_empty_filter_offers_reset(ui_page):
@@ -121,7 +121,7 @@ def test_locked_sender_cannot_be_selected_and_keeps_focus(ui_page):
     # Liste yeniden çizildi ama klavye odağı aynı satırın kilit butonunda kaldı.
     assert page.evaluate("document.activeElement.closest('.sender-row').dataset.key") == 'bilgi@ornekbanka.example'
     page.check('#selectAll')
-    assert page.inner_text('#selectedInfo').startswith(f'{len(ADDRESSES) - 1} gönderen seçildi')
+    assert f'{len(ADDRESSES) - 1} gönderen seçildi' in page.inner_text('#selectedInfo')
 
 
 def test_delete_shows_real_count_then_undo_from_notice(ui_page):
@@ -139,7 +139,7 @@ def test_delete_shows_real_count_then_undo_from_notice(ui_page):
     assert 'null' not in page.inner_text('#confirmContent')
     confirm(page)
 
-    page.wait_for_selector(f"#notice >> text={total} mail Çöp Kutusu'na taşındı.")
+    page.wait_for_selector(f"#notice >> text={total} mail Çöp Kutusu'na taşındı (demo@ornek.example).")
     assert row(page, 'kampanya@ornekmarket.example').count() == 0
     page.locator('#notice').get_by_role('button', name='Geri al').click()
     page.wait_for_selector("#notice >> text=Çöp Kutusu'ndan geri alındı")
@@ -188,7 +188,7 @@ def test_bulk_unsubscribe_writes_results_into_rows(ui_page):
 ])
 def test_server_errors_are_readable(ui_page, status, body):
     page = ui_page
-    page.route('**/api/count', lambda route: route.fulfill(status=status, content_type='text/html', body=body))
+    page.route('**/api/count*', lambda route: route.fulfill(status=status, content_type='text/html', body=body))
     row(page, 'haber@teknohafta.example').locator('.sender-checkbox').check()
     page.click('#deleteBtn')
     expected = 'Gmail API hatası (502): test' if body.startswith('{') else 'Sunucu hatası (502)'
@@ -201,3 +201,38 @@ def test_mobile_layout_has_no_horizontal_scroll(ui_browser, server_url, demo_mod
     overflow = page.evaluate('document.documentElement.scrollWidth - document.documentElement.clientWidth')
     assert overflow <= 0
     context.close()
+
+
+def test_switching_accounts_shows_that_accounts_list(ui_page):
+    page = ui_page
+    assert page.input_value('#accountSelect') == 'demo@ornek.example'
+    row(page, 'kampanya@ornekmarket.example').locator('.sender-checkbox').check()
+
+    page.select_option('#accountSelect', 'is@ornek.example')
+    page.wait_for_selector('text=Henüz veri yok')
+    page.click('#scanBtn')
+    page.wait_for_selector('#notice >> text=Tarama tamamlandı')
+
+    assert row(page, 'bildirim@proje.example').count() == 1
+    assert row(page, 'kampanya@ornekmarket.example').count() == 0
+    # Seçim önceki hesaba aitti; yeni hesapta seçim yok.
+    assert page.inner_text('#selectedInfo') == 'is@ornek.example · Seçim yok'
+
+    page.select_option('#accountSelect', 'demo@ornek.example')
+    page.wait_for_selector('.sender-row')
+    assert row(page, 'kampanya@ornekmarket.example').count() == 1
+
+
+def test_confirm_dialog_names_the_account(ui_page):
+    page = ui_page
+    row(page, 'haber@teknohafta.example').locator('.sender-checkbox').check()
+    page.click('#deleteBtn')
+    page.wait_for_selector('#confirmDialog[open]')
+    assert 'Hesap: demo@ornek.example' in page.inner_text('#confirmContent')
+    page.locator('#confirmCancel').click()
+
+
+def test_add_account_is_explained_in_demo(ui_page):
+    page = ui_page
+    page.click('#addAccountBtn')
+    page.wait_for_selector('#notice.error >> text=Demo modunda hesap eklenmez')

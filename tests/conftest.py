@@ -136,14 +136,28 @@ def fake_service_factory():
     return FakeGmailService
 
 
+TEST_ACCOUNT = 'ben@example.com'
+
+
+def acct_paths():
+    import app as app_module
+    return app_module.AccountPaths(TEST_ACCOUNT)
+
+
 @pytest.fixture(autouse=True)
 def isolate_data_files(tmp_path, monkeypatch):
     """Testler gerçek gonderenler.csv / json dosyalarına asla yazmasın."""
     import app as app_module
-    monkeypatch.setattr(app_module, 'CSV_PATH', str(tmp_path / 'gonderenler.csv'))
+    # Tek bir test hesabı: account alanı verilmeyen istekler onu kullanır.
+    accounts_dir = tmp_path / 'hesaplar'
+    (accounts_dir / TEST_ACCOUNT).mkdir(parents=True)
+    (accounts_dir / TEST_ACCOUNT / 'token.json').write_text('{}')
+    monkeypatch.setattr(app_module, 'ACCOUNTS_DIR', str(accounts_dir))
     monkeypatch.setattr(app_module, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))
-    monkeypatch.setattr(app_module, 'UNDO_PATH', str(tmp_path / 'son_islem.json'))
-    monkeypatch.setattr(app_module, 'SCAN_IDS_PATH', str(tmp_path / 'taranan_idler.json'))
+    monkeypatch.setattr(app_module, 'LEGACY_TOKEN_PATH', str(tmp_path / 'token.json'))
+    monkeypatch.setattr(app_module, '_scans', {})
+    monkeypatch.setattr(app_module, '_mutations', {})
+    app_module._clear_verify_cache()
     # Kota sınırlayıcı testlerde gerçekten beklemesin (kendi testinde ayrıca denetleniyor).
     import extract_senders
     monkeypatch.setattr(extract_senders.quota, 'units_per_minute', 0)
@@ -163,7 +177,6 @@ class InlineThread:
 def inline_scan(monkeypatch):
     import app as app_module
     monkeypatch.setattr(app_module.threading, 'Thread', InlineThread)
-    monkeypatch.setitem(app_module._scan_state, 'running', False)
 
 
 @pytest.fixture
@@ -171,9 +184,7 @@ def demo_mode(monkeypatch):
     """demo.enable modül özniteliklerini doğrudan değiştirir; monkeypatch test sonunda geri alsın."""
     import app as app_module
     import demo
-    for name in ('get_service', 'CSV_PATH', 'PROTECTED_PATH', 'UNDO_PATH', 'SCAN_IDS_PATH', '_resolve_host',
-                 'DEMO_MODE'):
+    for name in ('get_service', 'ACCOUNTS_DIR', 'PROTECTED_PATH', 'LEGACY_TOKEN_PATH', '_resolve_host', 'DEMO_MODE'):
         monkeypatch.setattr(app_module, name, getattr(app_module, name))
     monkeypatch.setattr(app_module.requests, 'post', app_module.requests.post)
-    monkeypatch.setitem(app_module._scan_state, 'running', False)
     return demo.enable(app_module)

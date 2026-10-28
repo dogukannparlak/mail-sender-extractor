@@ -64,6 +64,13 @@
     padding: 2px 8px; border-radius: 10px; border: 1px solid currentColor; color: var(--link);
   }
   .summary { color: var(--muted); font-size: 14px; }
+  .account-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  #accountSelect {
+    background: var(--card); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 13px; max-width: 260px;
+  }
+  #accountSelect[hidden] { display: none; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   main { max-width: 920px; margin: 0 auto; padding: 20px 32px calc(var(--bar-height) + 40px); }
 
   /* Bildirim alanı: işlem sonucu, ilerleme ve hatalar burada; sabit çubuğun arkasında kalmaz. */
@@ -202,8 +209,14 @@
 
 <header>
   <h1>Mail Temizleyici{% if demo %} <span class="demo-badge" title="Sahte verilerle çalışıyor; Gmail'e bağlı değil">DEMO</span>{% endif %}</h1>
+  <div class="account-bar">
+    <label for="accountSelect" class="visually-hidden">Hesap</label>
+    <select id="accountSelect" aria-label="Gmail hesabı" hidden></select>
+    <button id="addAccountBtn" type="button" class="small-btn">+ Hesap ekle</button>
+    <button id="removeAccountBtn" type="button" class="small-btn" hidden>Hesabı çıkar</button>
+  </div>
   <span class="summary" id="grandTotal"></span>
-  <button id="scanBtn" type="button">Gelen Kutusunu Tara</button>
+  <button id="scanBtn" type="button" disabled>Gelen Kutusunu Tara</button>
 </header>
 
 <main>
@@ -280,6 +293,8 @@ const DELETE_LABEL = "Seçilenleri Çöp Kutusu'na taşı";
 const UNSUB_LABEL = 'Seçilenlerin aboneliğinden çık';
 
 const state = {
+  accounts: [],
+  account: null,
   data: null,
   sortMode: 'count_desc',
   scope: 'inbox',
@@ -329,11 +344,18 @@ class ApiError extends Error {
 
 // Bütün sunucu çağrıları buradan geçer: JSON olmayan hata sayfası ya da kapalı sunucu
 // da okunur bir mesaja dönüşür.
+// Her istek seçili hesabı taşır; sunucu hangi hesabın dosyalarına ve Gmail'ine gideceğini buradan bilir.
+const ACCOUNT_FREE_URLS = ['/api/accounts', '/api/accounts/add'];
+
 async function api(url, payload) {
+  const withAccount = state.account && !ACCOUNT_FREE_URLS.includes(url);
+  if (withAccount && payload === undefined) {
+    url += (url.includes('?') ? '&' : '?') + 'account=' + encodeURIComponent(state.account);
+  }
   const options = payload === undefined ? {} : {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(withAccount ? { ...payload, account: state.account } : payload),
   };
   let res;
   try {
@@ -695,7 +717,9 @@ function updateSelection() {
   const totalMail = picked.reduce((sum, g) => sum + g.mail_sayisi, 0);
   // Filtre değişince önceki seçimler gizli kalabilir; işleme girdiklerini açıkça göster.
   const hidden = picked.filter(g => !passesFilters(g)).length;
+  // Birden fazla hesap varsa işlem çubuğu hangi hesapta olduğunu da söyler (başlık telefonda yukarıda kalır).
   $('selectedInfo').textContent =
+    (state.accounts.length > 1 && state.account ? `${state.account} · ` : '') +
     (picked.length ? `${picked.length} gönderen seçildi (${totalMail} mail)` : 'Seçim yok') +
     (hidden ? ` · ${hidden} tanesi filtre yüzünden görünmüyor` : '');
   $('deleteBtn').disabled = state.busy || picked.length === 0;
@@ -711,7 +735,11 @@ function updateSelection() {
 function setBusy(busy) {
   state.busy = busy;
   $('undoBtn').disabled = busy;
-  $('scanBtn').disabled = busy;
+  $('scanBtn').disabled = busy || !state.account;
+  // İşlem sürerken hesap değiştirilemez: sonuç yanlış hesabın ekranına yazılmasın.
+  $('accountSelect').disabled = busy;
+  $('addAccountBtn').disabled = busy;
+  $('removeAccountBtn').disabled = busy;
   updateSelection();
 }
 
@@ -763,7 +791,8 @@ async function unsubscribeWithConfirmation(senders) {
 
   const ok = await confirmDialog({
     title: 'Tek tıkla abonelikten çıkılsın mı?',
-    lines: [`${oneClick.length} gönderenden otomatik olarak çıkılacak. Bu işlem geri alınamaz.`],
+    lines: [`Hesap: ${state.account}`,
+            `${oneClick.length} gönderenden otomatik olarak çıkılacak. Bu işlem geri alınamaz.`],
     items: oneClick.map(r => r.email),
     confirmLabel: 'Abonelikten çık',
   });
@@ -834,6 +863,7 @@ async function deleteSelected() {
     const ok = await confirmDialog({
       title: `${count.total} mail Çöp Kutusu'na taşınsın mı?`,
       lines: [
+        `Hesap: ${state.account}`,
         `${picked.length} gönderenden ${scopeText} bulunan ${count.total} mail taşınacak. 30 gün içinde geri alabilirsin.`,
         skipped ? `${skipped} mail atlandı: gönderen adresi tam eşleşmiyor ya da gönderen korunuyor.` : null,
       ].filter(Boolean),
@@ -851,7 +881,7 @@ async function deleteSelected() {
     const remaining = state.data.gonderenler.filter(g => !removed.has(g.gonderen));
     setData({ toplam_mail_sayisi: remaining.reduce((sum, g) => sum + g.mail_sayisi, 0), gonderenler: remaining });
     await refreshUndo();
-    notify(`${result.total_deleted} mail Çöp Kutusu'na taşındı.`, {
+    notify(`${result.total_deleted} mail Çöp Kutusu'na taşındı (${result.account}).`, {
       details: result.details.map(d => `${d.email}: ${d.deleted} mail`),
       action: result.total_deleted ? { label: 'Geri al', onclick: undoLastDelete } : null,
     });
@@ -897,6 +927,96 @@ async function undoLastDelete() {
   }
 }
 
+// --- Hesaplar ----------------------------------------------------------------
+
+const ACCOUNT_STORAGE_KEY = 'mail-temizleyici-hesap';
+
+function rememberAccount(account) {
+  try { localStorage.setItem(ACCOUNT_STORAGE_KEY, account); } catch (err) { /* gizli pencere: hatırlamasak da olur */ }
+}
+
+function rememberedAccount() {
+  try { return localStorage.getItem(ACCOUNT_STORAGE_KEY); } catch (err) { return null; }
+}
+
+function renderAccounts() {
+  const select = $('accountSelect');
+  select.replaceChildren(...state.accounts.map(a => el('option', { value: a }, a)));
+  select.value = state.account || '';
+  select.hidden = state.accounts.length === 0;
+  $('removeAccountBtn').hidden = state.accounts.length === 0;
+  $('scanBtn').disabled = state.busy || !state.account;
+}
+
+async function loadAccounts(preferred = null) {
+  const info = await api('/api/accounts');
+  state.accounts = info.accounts;
+  if (info.migrated) notify(`Eski tek hesaplı kayıtlar ${info.migrated} hesabına taşındı.`);
+  const wanted = [preferred, state.account, rememberedAccount()].find(a => a && state.accounts.includes(a));
+  await switchAccount(wanted || state.accounts[0] || null);
+}
+
+// Hesap değişince her şey sıfırlanır: seçim, önizlemeler, açık paneller başka hesaba aittir.
+async function switchAccount(account) {
+  state.account = account;
+  state.data = null;
+  state.selected.clear();
+  state.previewCache.clear();
+  state.openPanels.clear();
+  clearNotice();  // önceki hesabın bildirimi (ör. "Tarama tamamlandı") yeni hesaba ait değil
+  renderAccounts();
+  if (!account) {
+    $('grandTotal').textContent = '';
+    $('undoBtn').hidden = true;
+    $('senders').replaceChildren(el('div', { class: 'empty-state' },
+      el('p', {}, 'Henüz bir Gmail hesabı eklenmedi.'),
+      el('button', { type: 'button', onclick: addAccount }, 'Hesap ekle'),
+    ));
+    updateSelection();
+    return;
+  }
+  rememberAccount(account);
+  await load();
+  await refreshUndo();
+  await resumeScanIfRunning();
+}
+
+async function addAccount() {
+  setBusy(true);
+  notify('Tarayıcıda Google giriş penceresi açıldı: eklemek istediğin hesabı seç ve izin ver. Bitince buraya dön.');
+  try {
+    const result = await api('/api/accounts/add', {});
+    notify(`${result.account} eklendi. "Gelen Kutusunu Tara" ile başla.`);
+    setBusy(false);
+    await loadAccounts(result.account);
+  } catch (err) {
+    notifyError('Hesap eklenemedi', err);
+    setBusy(false);
+  }
+}
+
+async function removeAccount() {
+  const account = state.account;
+  const ok = await confirmDialog({
+    title: `${account} çıkarılsın mı?`,
+    lines: [
+      'Bu bilgisayardaki giriş anahtarı (token) silinir; maillerine dokunulmaz.',
+      'Taranan liste ve son taşıma kaydı klasörde kalır; hesabı yeniden eklersen geri gelir.',
+      "Uygulamanın Google'daki iznini tamamen kaldırmak için: myaccount.google.com/permissions",
+    ],
+    confirmLabel: 'Hesabı çıkar',
+  });
+  if (!ok) return;
+  try {
+    await api('/api/accounts/remove', {});
+    notify(`${account} çıkarıldı.`);
+    state.account = null;
+    await loadAccounts();
+  } catch (err) {
+    notifyError('Hesap çıkarılamadı', err);
+  }
+}
+
 // --- Tarama ------------------------------------------------------------------
 
 function showScanProgress(scan) {
@@ -927,9 +1047,10 @@ function showScanProgress(scan) {
 
 // Tarama sunucuda arka planda sürer; bitene kadar durumu yokla.
 async function pollScan() {
+  const account = state.account;
   setBusy(true);
   try {
-    while (true) {
+    while (state.account === account) {
       const scan = await api('/api/scan/status');
       if (!scan.running) {
         if (scan.error) throw new Error(scan.error);
@@ -1012,8 +1133,11 @@ $('selectAll').addEventListener('change', e => {
   updateSelection();
 });
 
-load().then(resumeScanIfRunning);
-refreshUndo();
+$('accountSelect').addEventListener('change', e => switchAccount(e.target.value));
+$('addAccountBtn').addEventListener('click', addAccount);
+$('removeAccountBtn').addEventListener('click', removeAccount);
+
+loadAccounts().catch(err => notifyError('Hesaplar yüklenemedi', err));
 </script>
 </body>
 </html>
