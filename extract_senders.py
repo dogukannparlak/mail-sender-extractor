@@ -11,7 +11,7 @@ import gmail_auth
 # Gmail arama sözdizimine sızabilecek karakterler (boşluk, tırnak, parantez, ':') adreste olamaz.
 EMAIL_RE = re.compile(r'^[^@\s"()<>,;:\\\[\]]+@[\w-]+(\.[\w-]+)+$')
 
-CSV_HEADER = ['Adres', 'Ad', 'Mail Sayısı']
+CSV_HEADER = ['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']
 LEGACY_CSV_HEADER = ['İsim/Adres', 'Mail Sayısı']
 
 
@@ -27,30 +27,55 @@ def sender_key(header):
     return header.strip(), ''
 
 
+# Modelsiz kategori: Gmail'in kendi sekme etiketleri + List-Unsubscribe başlığı.
+# Sıra önemli: sosyal ağ bildirimleri de çoğu zaman List-Unsubscribe taşır.
+CATEGORIES = ('bulten', 'promosyon', 'bildirim', 'kisisel')
+
+
+def message_category(label_ids, has_unsubscribe):
+    labels = set(label_ids or [])
+    if 'CATEGORY_PROMOTIONS' in labels:
+        return 'promosyon'
+    if labels & {'CATEGORY_SOCIAL', 'CATEGORY_FORUMS'}:
+        return 'bildirim'
+    if has_unsubscribe:
+        return 'bulten'
+    if 'CATEGORY_UPDATES' in labels:
+        return 'bildirim'
+    return 'kisisel'
+
+
 class SenderTally:
-    """Gönderen başına mail sayısını ve en sık görülen adı toplar."""
+    """Gönderen başına mail sayısını, en sık görülen adı ve kategoriyi toplar."""
 
     def __init__(self):
         self._counts = Counter()
         self._names = {}
+        self._categories = {}
+        self._unsubscribe = {}
 
-    def add(self, header):
-        key, name = sender_key(header)
-        self.add_counted(key, name, 1)
-
-    def add_counted(self, key, name, count):
+    def add_counted(self, key, name, count, kategori=None, abonelik=None):
         self._counts[key] += count
         if name:
             self._names.setdefault(key, Counter())[name] += count
+        if kategori:
+            self._categories.setdefault(key, Counter())[kategori] += count
+        if abonelik is not None:
+            self._unsubscribe[key] = self._unsubscribe.get(key, False) or abonelik
 
     def result(self):
-        return {
-            key: {
+        senders = {}
+        for key, count in self._counts.most_common():
+            info = {
                 'ad': self._names[key].most_common(1)[0][0] if key in self._names else '',
                 'mail_sayisi': count,
             }
-            for key, count in self._counts.most_common()
-        }
+            if key in self._categories:
+                info['kategori'] = self._categories[key].most_common(1)[0][0]
+            if key in self._unsubscribe:
+                info['abonelik'] = self._unsubscribe[key]
+            senders[key] = info
+        return senders
 
 
 # Gmail, 50'den büyük batch'lerde hız sınırına takılabileceğini söylüyor.
@@ -123,10 +148,15 @@ def extract_senders(service, progress=None, sleep=time.sleep):
     progress(0, total)
 
     tally = SenderTally()
-    for processed, (_, msg_data) in enumerate(fetch_metadata(service, ids, ['From'], sleep), start=1):
-        for h in msg_data.get('payload', {}).get('headers', []):
-            if h['name'].lower() == 'from':
-                tally.add(h['value'])
+    fetched = fetch_metadata(service, ids, ['From', 'List-Unsubscribe'], sleep)
+    for processed, (_, msg_data) in enumerate(fetched, start=1):
+        headers = {h['name'].lower(): h['value'] for h in msg_data.get('payload', {}).get('headers', [])}
+        if 'from' in headers:
+            key, name = sender_key(headers['from'])
+            has_unsubscribe = bool(headers.get('list-unsubscribe'))
+            tally.add_counted(key, name, 1,
+                              kategori=message_category(msg_data.get('labelIds'), has_unsubscribe),
+                              abonelik=has_unsubscribe)
         progress(processed, total)
 
     if progress is print_progress:
@@ -149,7 +179,8 @@ def save_to_csv(senders, filename='gonderenler.csv'):
         writer = csv.writer(f)
         writer.writerow(CSV_HEADER)
         for address, info in sorted(senders.items(), key=lambda kv: -kv[1]['mail_sayisi']):
-            writer.writerow([address, info['ad'], info['mail_sayisi']])
+            abonelik = {True: '1', False: '0'}.get(info.get('abonelik'), '')
+            writer.writerow([address, info['ad'], info['mail_sayisi'], info.get('kategori', ''), abonelik])
     print(f"{len(senders)} benzersiz gönderen '{filename}' dosyasına yazıldı.")
 
 
@@ -166,7 +197,9 @@ def load_csv(filename):
                     key, name = sender_key(row[0])
                     tally.add_counted(key, name, int(row[1]))
             elif len(row) >= 3 and row[2].strip().isdigit():
-                tally.add_counted(row[0], row[1], int(row[2]))
+                kategori = row[3] if len(row) > 3 and row[3] in CATEGORIES else None
+                abonelik = {'1': True, '0': False}.get(row[4]) if len(row) > 4 else None
+                tally.add_counted(row[0], row[1], int(row[2]), kategori, abonelik)
     return tally.result()
 
 

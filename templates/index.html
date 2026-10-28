@@ -168,6 +168,14 @@
     color: var(--muted);
   }
   .toolbar-spacer { flex: 1; }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 1px 7px; margin-left: 6px;
+    border-radius: 10px; border: 1px solid var(--border); color: var(--muted); vertical-align: 1px;
+  }
+  .badge-bulten { color: #2f6fd6; border-color: rgba(47,111,214,0.4); }
+  .badge-promosyon { color: #c2410c; border-color: rgba(194,65,12,0.4); }
+  .badge-bildirim { color: #6d28d9; border-color: rgba(109,40,217,0.4); }
+  .badge-kisisel { color: #15803d; border-color: rgba(21,128,61,0.4); }
   .select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
   .action-bar select, .toolbar select {
     background: var(--card);
@@ -195,6 +203,16 @@
   <div class="toolbar">
     <label class="select-all"><input type="checkbox" id="selectAll"> Tümünü seç</label>
     <span class="toolbar-spacer"></span>
+    <span id="categoryFilterWrap" hidden>
+      <label for="categorySelect">Kategori:</label>
+      <select id="categorySelect">
+        <option value="">Tümü</option>
+        <option value="bulten">Bülten</option>
+        <option value="promosyon">Promosyon</option>
+        <option value="bildirim">Bildirim</option>
+        <option value="kisisel">Kişisel</option>
+      </select>
+    </span>
     <label for="viewSelect">Görünüm:</label>
     <select id="viewSelect">
       <option value="address">Adres</option>
@@ -228,6 +246,13 @@ let data = null;
 let sortMode = 'count_desc';
 let scope = 'inbox';
 let viewMode = 'address';
+let categoryFilter = '';
+const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: 'Bildirim', kisisel: 'Kişisel' };
+
+function passesFilters(g) {
+  if (categoryFilter && g.kategori !== categoryFilter) return false;
+  return true;
+}
 // Seçim DOM'da değil burada tutulur; liste yeniden çizilince (sıralama, görünüm) kaybolmasın.
 const selected = new Set();
 
@@ -238,8 +263,9 @@ function domainOf(address) {
 
 // Ekrandaki satırlar: adres görünümünde gönderen başına, alan adı görünümünde alan adı başına bir satır.
 function buildRows() {
+  const visible = data.gonderenler.filter(passesFilters);
   if (viewMode === 'address') {
-    return data.gonderenler.map(g => ({
+    return visible.map(g => ({
       key: g.gonderen,
       label: g.ad || g.gonderen,
       sub: g.ad ? g.gonderen : '',
@@ -248,7 +274,7 @@ function buildRows() {
     }));
   }
   const groups = new Map();
-  data.gonderenler.forEach(g => {
+  visible.forEach(g => {
     const domain = domainOf(g.gonderen);
     if (!groups.has(domain)) groups.set(domain, []);
     groups.get(domain).push(g);
@@ -326,10 +352,21 @@ function render() {
     return;
   }
 
+  // Kategori yalnız yeni taramada toplanır; eski kayıtta filtreyi gösterme.
+  document.getElementById('categoryFilterWrap').hidden = !data.gonderenler.some(g => g.kategori);
+
+  const rows = sortedRows();
+  if (!rows.length) {
+    container.innerHTML = '<p class="empty-state">Filtreye uyan gönderen yok.</p>';
+    syncSelectAll();
+    updateSelection();
+    return;
+  }
+
   const list = document.createElement('div');
   list.className = 'sender-list';
 
-  sortedRows().forEach(rowData => {
+  rows.forEach(rowData => {
     const item = document.createElement('div');
     item.className = 'sender-item';
     const single = rowData.members.length === 1 && viewMode === 'address';
@@ -341,7 +378,8 @@ function render() {
     row.innerHTML = `
       <input type="checkbox" class="sender-checkbox">
       <div class="sender-info" title="${escapeHtml(title)}">
-        <span class="sender-name">${escapeHtml(rowData.label)}</span>
+        <span class="sender-name">${escapeHtml(rowData.label)}${single && CATEGORY_LABELS[g.kategori]
+          ? ` <span class="badge badge-${g.kategori}">${CATEGORY_LABELS[g.kategori]}</span>` : ''}</span>
         ${rowData.sub ? `<span class="sender-email">${escapeHtml(rowData.sub)}</span>` : ''}
       </div>
       <span class="sender-count">${rowData.count}</span>
@@ -593,6 +631,11 @@ document.getElementById('sortSelect').addEventListener('change', (e) => {
 document.getElementById('scopeSelect').addEventListener('change', (e) => {
   scope = e.target.value;
   if (data) render();  // açık önizlemeler eski kapsamla yüklendi; kapatıp yeniden yükletelim
+});
+
+document.getElementById('categorySelect').addEventListener('change', (e) => {
+  categoryFilter = e.target.value;
+  if (data) render();
 });
 
 document.getElementById('viewSelect').addEventListener('change', (e) => {

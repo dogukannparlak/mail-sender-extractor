@@ -1,7 +1,9 @@
 import csv
 from collections import Counter
 
-from extract_senders import extract_senders, load_csv, save_to_csv, sender_key
+import pytest
+
+from extract_senders import extract_senders, load_csv, message_category, save_to_csv, sender_key
 
 
 def _metadata_response(sender_header_value):
@@ -32,8 +34,8 @@ def test_extract_senders_counts_by_from_header(fake_service_factory):
     result = extract_senders(service)
 
     assert result == {
-        'alice@example.com': {'ad': 'Alice', 'mail_sayisi': 2},
-        'bob@example.com': {'ad': 'Bob', 'mail_sayisi': 1},
+        'alice@example.com': {'ad': 'Alice', 'mail_sayisi': 2, 'kategori': 'kisisel', 'abonelik': False},
+        'bob@example.com': {'ad': 'Bob', 'mail_sayisi': 1, 'kategori': 'kisisel', 'abonelik': False},
     }
 
 
@@ -44,7 +46,7 @@ def test_extract_senders_matches_from_header_case_insensitively(fake_service_fac
         label_response={'messagesTotal': 1},
     )
 
-    assert extract_senders(service) == {'alice@example.com': {'ad': 'Alice', 'mail_sayisi': 1}}
+    assert extract_senders(service) == {'alice@example.com': {'ad': 'Alice', 'mail_sayisi': 1, 'kategori': 'kisisel', 'abonelik': False}}
 
 
 def test_extract_senders_paginates_using_next_page_token(fake_service_factory):
@@ -96,7 +98,7 @@ def test_same_address_with_different_names_is_one_sender(fake_service_factory):
     )
 
     assert extract_senders(service) == {
-        'no-reply@classroom.google.com': {'ad': 'Ali (Classroom)', 'mail_sayisi': 3},
+        'no-reply@classroom.google.com': {'ad': 'Ali (Classroom)', 'mail_sayisi': 3, 'kategori': 'kisisel', 'abonelik': False},
     }
 
 
@@ -117,11 +119,11 @@ def test_save_to_csv_writes_header_and_rows_sorted_by_count_desc(tmp_path):
     with open(out_file, encoding='utf-8') as f:
         rows = list(csv.reader(f))
 
-    assert rows[0] == ['Adres', 'Ad', 'Mail Sayısı']
+    assert rows[0] == ['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']
     assert rows[1:] == [
-        ['b@example.com', 'Bee', '5'],
-        ['c@example.com', '', '3'],
-        ['a@example.com', '', '1'],
+        ['b@example.com', 'Bee', '5', '', ''],
+        ['c@example.com', '', '3', '', ''],
+        ['a@example.com', '', '1', '', ''],
     ]
 
 
@@ -133,11 +135,14 @@ def test_save_to_csv_handles_empty_input(tmp_path):
     with open(out_file, encoding='utf-8') as f:
         rows = list(csv.reader(f))
 
-    assert rows == [['Adres', 'Ad', 'Mail Sayısı']]
+    assert rows == [['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']]
 
 
 def test_load_csv_round_trips_save_to_csv(tmp_path):
-    senders = {'b@example.com': {'ad': 'Bee, Inc.', 'mail_sayisi': 5}, 'a@example.com': {'ad': '', 'mail_sayisi': 1}}
+    senders = {
+        'b@example.com': {'ad': 'Bee, Inc.', 'mail_sayisi': 5, 'kategori': 'bulten', 'abonelik': True},
+        'a@example.com': {'ad': '', 'mail_sayisi': 1},
+    }
     out_file = tmp_path / 'out.csv'
 
     save_to_csv(senders, filename=str(out_file))
@@ -162,7 +167,7 @@ def test_scans_250_messages_in_batches_of_50(fake_service_factory):
     result = extract_senders(service, progress=lambda done, total: seen.append((done, total)))
 
     assert service.batch_sizes == [50] * 5
-    assert result == {'a@example.com': {'ad': '', 'mail_sayisi': 250}}
+    assert result == {'a@example.com': {'ad': '', 'mail_sayisi': 250, 'kategori': 'kisisel', 'abonelik': False}}
     assert seen[0] == (0, 250) and seen[-1] == (250, 250)
 
 
@@ -192,3 +197,40 @@ def test_gives_up_after_repeated_rate_limits(fake_service_factory):
 
     with pytest.raises(RuntimeError):
         extract_senders(service, progress=lambda *a: None, sleep=lambda s: None)
+
+
+@pytest.mark.parametrize('labels, has_unsubscribe, expected', [
+    (['INBOX', 'CATEGORY_PROMOTIONS'], True, 'promosyon'),
+    (['INBOX', 'CATEGORY_PROMOTIONS'], False, 'promosyon'),
+    (['INBOX', 'CATEGORY_SOCIAL'], True, 'bildirim'),
+    (['INBOX', 'CATEGORY_FORUMS'], False, 'bildirim'),
+    (['INBOX', 'CATEGORY_UPDATES'], True, 'bulten'),
+    (['INBOX'], True, 'bulten'),
+    (['INBOX', 'CATEGORY_UPDATES'], False, 'bildirim'),
+    (['INBOX', 'CATEGORY_PERSONAL'], False, 'kisisel'),
+    (None, False, 'kisisel'),
+])
+def test_message_category_rules(labels, has_unsubscribe, expected):
+    assert message_category(labels, has_unsubscribe) == expected
+
+
+def test_sender_category_is_the_most_common_and_unsubscribe_is_any(fake_service_factory):
+    def msg(labels, unsubscribe):
+        headers = [{'name': 'From', 'value': 'Shop <news@shop.com>'}]
+        if unsubscribe:
+            headers.append({'name': 'List-Unsubscribe', 'value': '<https://shop.com/u>'})
+        return {'labelIds': labels, 'payload': {'headers': headers}}
+
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}, {'id': 'm3'}]}],
+        get_responses={
+            'm1': msg(['INBOX', 'CATEGORY_PROMOTIONS'], True),
+            'm2': msg(['INBOX', 'CATEGORY_PROMOTIONS'], False),
+            'm3': msg(['INBOX', 'CATEGORY_UPDATES'], False),
+        },
+    )
+
+    info = extract_senders(service, progress=lambda *a: None)['news@shop.com']
+
+    assert (info['kategori'], info['abonelik']) == ('promosyon', True)
+    assert service.messages_resource.get_calls[0]['metadataHeaders'] == ['From', 'List-Unsubscribe']
