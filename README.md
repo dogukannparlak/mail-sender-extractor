@@ -10,8 +10,10 @@ your own machine (`localhost`); nothing is sent anywhere except Gmail's own API.
 
 ## Features
 
-- **Fast scan with progress:** message metadata is fetched with Gmail batch requests (50 per
-  batch, retried on rate limits) in the background, with a progress bar in the page.
+- **Background scan with progress:** message metadata is fetched with Gmail batch requests in
+  the background, with a progress bar and a time estimate. Gmail allows about 300 message reads
+  per minute per user, so the app paces itself to that quota instead of hitting rate limits
+  (10,000 inbox messages ≈ 35 minutes). Later deletes reuse what the scan saw.
 - **One row per sender:** messages are grouped by the actual address; the same address with
   different display names is one row. Switch to a **domain view** to see `shop.com` as a whole.
 - **Categories without a model:** each sender is tagged *newsletter / promotion / notification /

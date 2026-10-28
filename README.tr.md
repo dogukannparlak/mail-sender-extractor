@@ -11,8 +11,10 @@ Gmail'in kendi API'si dışında hiçbir yere veri gitmez.
 
 ## Özellikler
 
-- **Hızlı tarama ve ilerleme çubuğu:** mail bilgileri arka planda Gmail batch istekleriyle
-  alınır (paket başına 50, hız sınırında yeniden denenir); sayfada ilerleme görünür.
+- **Arka planda tarama ve ilerleme çubuğu:** mail bilgileri arka planda Gmail batch
+  istekleriyle alınır; sayfada ilerleme ve kalan süre görünür. Gmail kullanıcı başına dakikada
+  yaklaşık 300 mail okumaya izin veriyor; uygulama hız sınırına çarpmak yerine bu kotaya göre
+  ilerler (10.000 mail ≈ 35 dakika). Sonraki silmeler taramada görüleni yeniden kullanır.
 - **Gönderen başına tek satır:** sayım gerçek adrese göre yapılır; aynı adres farklı adlarla
   gelse de tek satırdır. **Alan adı görünümü** ile `magaza.com`'u bütün olarak görebilirsin.
 - **Modelsiz kategori:** her gönderen Gmail'in kendi sekmelerinden (`CATEGORY_*` etiketleri)
