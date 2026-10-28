@@ -8,6 +8,9 @@ from email.utils import parseaddr
 from functools import wraps
 from urllib.parse import urlparse
 
+from urllib3.util import parse_url
+from urllib3.exceptions import LocationParseError
+
 import requests
 from flask import Flask, jsonify, request, render_template
 from googleapiclient.errors import HttpError
@@ -29,6 +32,13 @@ def reject_foreign_host():
     hostname = re.sub(r':\d+$', '', request.host or '')
     if hostname not in ALLOWED_HOSTNAMES:
         return jsonify({'error': 'Bu uygulamaya yalnız localhost üzerinden erişilebilir.'}), 403
+    # Host doğru olsa da başka bir site no-cors POST atabilir (ör. /api/scan).
+    if request.method == 'POST':
+        if request.headers.get('Sec-Fetch-Site', 'same-origin') not in ('same-origin', 'none'):
+            return jsonify({'error': 'Başka sitelerden gelen istekler kabul edilmiyor.'}), 403
+        origin = request.headers.get('Origin')
+        if origin and urlparse(origin).hostname not in {h.strip('[]') for h in ALLOWED_HOSTNAMES}:
+            return jsonify({'error': 'Başka sitelerden gelen istekler kabul edilmiyor.'}), 403
 
 
 def _senders_payload(counts):
@@ -149,8 +159,20 @@ def _resolve_host(hostname):
 
 def is_safe_one_click_url(url):
     """One-click isteği sunucudan gider; yerel ağa/loopback'e istek atılmasını engeller."""
+    # urlparse ile requests (urllib3) URL'yi farklı ayrıştırabilir:
+    # "https://127.0.0.1\\@x.com/" urlparse'a göre x.com, requests'e göre 127.0.0.1.
+    # Kimlik bilgisi/ters eğik çizgi içeren URL'leri reddedip iki ayrıştırıcının
+    # aynı host'u görmesini şart koşuyoruz.
+    if '\\' in url:
+        return False
     parsed = urlparse(url)
-    if parsed.scheme != 'https' or not parsed.hostname:
+    try:
+        u3 = parse_url(url)
+    except LocationParseError:
+        return False
+    if parsed.scheme != 'https' or not parsed.hostname or parsed.username is not None or u3.auth:
+        return False
+    if (u3.host or '').strip('[]').lower() != parsed.hostname.lower():
         return False
     try:
         addresses = _resolve_host(parsed.hostname)

@@ -141,6 +141,17 @@ class TestIsSafeOneClickUrl:
     def test_rejects_non_https(self, public_dns, url):
         assert is_safe_one_click_url(url) is False
 
+    @pytest.mark.parametrize('url', [
+        'https://127.0.0.1\\@example.com/x',
+        'https://127.0.0.1:8443\\@example.com/x',
+        'https://nas.lan\\@example.com/',
+        'https://user:pass@example.com/x',
+        'https://127.0.0.1@example.com/x',
+    ])
+    def test_rejects_urls_parsed_differently_by_requests(self, public_dns, url):
+        # public_dns her host'u public gösterir; reddin sebebi yalnız URL biçimi olmalı.
+        assert is_safe_one_click_url(url) is False
+
     @pytest.mark.parametrize('addr', ['127.0.0.1', '10.0.0.1', '192.168.1.1', '169.254.169.254', '::1', 'fd00::1'])
     def test_rejects_private_and_loopback_targets(self, monkeypatch, addr):
         monkeypatch.setattr(app_module, '_resolve_host', lambda hostname: {addr})
@@ -543,6 +554,32 @@ class TestHostCheck:
         resp = client.get('/api/senders', headers={'Host': host})
 
         assert resp.status_code == 200
+
+    def test_allows_same_origin_post(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, 'get_service', lambda: 'fake')
+        monkeypatch.setattr(app_module, 'extract_senders', lambda service: Counter())
+        monkeypatch.setattr(app_module, 'save_to_csv', MagicMock())
+
+        resp = client.post('/api/scan', headers={
+            'Origin': 'http://localhost:5050', 'Sec-Fetch-Site': 'same-origin',
+        })
+
+        assert resp.status_code == 200
+
+    @pytest.mark.parametrize('headers', [
+        {'Sec-Fetch-Site': 'cross-site'},
+        {'Sec-Fetch-Site': 'same-site'},
+        {'Origin': 'https://evil.com'},
+        {'Origin': 'null'},
+    ])
+    def test_rejects_cross_site_post_even_with_local_host(self, client, monkeypatch, headers):
+        scan_mock = MagicMock()
+        monkeypatch.setattr(app_module, 'get_service', scan_mock)
+
+        resp = client.post('/api/scan', headers=headers)
+
+        assert resp.status_code == 403
+        scan_mock.assert_not_called()
 
     @pytest.mark.parametrize('host', ['evil.com', 'evil.com:5050', 'localhost.evil.com'])
     def test_rejects_foreign_hosts(self, client, monkeypatch, host):
