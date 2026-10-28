@@ -231,7 +231,11 @@ def is_safe_one_click_url(url):
     return bool(addresses)
 
 
-def find_unsubscribe_info(service, email):
+def find_unsubscribe_info(service, email, confirm_one_click=False):
+    """confirm_one_click=False iken hiçbir isteği göndermez; one-click mümkünse bunu bildirir.
+
+    Tek tıkla çıkış geri alınamaz, bu yüzden POST yalnız kullanıcı onayından sonra gider.
+    """
     resp = service.users().messages().list(
         userId='me', q=from_query(email), maxResults=UNSUBSCRIBE_SCAN_LIMIT
     ).execute()
@@ -257,6 +261,8 @@ def find_unsubscribe_info(service, email):
     mailto_url = next((u for u in urls if u.startswith('mailto:')), None)
 
     if http_url and 'one-click' in list_unsub_post.lower() and is_safe_one_click_url(http_url):
+        if not confirm_one_click:
+            return {'status': 'one_click_available', 'url': http_url}
         try:
             r = requests.post(http_url, data={'List-Unsubscribe': 'One-Click'},
                               timeout=10, allow_redirects=False)
@@ -500,14 +506,16 @@ def api_preview():
 @app.route('/api/unsubscribe', methods=['POST'])
 @handle_errors
 def api_unsubscribe():
-    senders = _validated_senders(request.get_json(silent=True))
+    body = request.get_json(silent=True)
+    senders = _validated_senders(body)
+    confirm_one_click = (body or {}).get('confirm_one_click') is True
     emails = [extract_email(sender) for sender in senders]
     reject_protected(emails)
     service = get_service()
 
     results = []
     for sender, email in zip(senders, emails):
-        info = find_unsubscribe_info(service, email)
+        info = find_unsubscribe_info(service, email, confirm_one_click)
         results.append({'sender': sender, 'email': email, **info})
 
     return jsonify({'results': results})

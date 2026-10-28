@@ -602,18 +602,43 @@ function showUnsubResult(resultEl, r) {
   resultEl.appendChild(a);
 }
 
+async function postUnsubscribe(senders, confirmOneClick) {
+  const res = await fetch('/api/unsubscribe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ senders, confirm_one_click: confirmOneClick })
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
+  return body.results;
+}
+
+// Önce onaysız sorulur: sunucu hiçbir yere POST atmadan hangi gönderenlerde tek tıkla
+// çıkış yapılabileceğini söyler. Kullanıcı onaylarsa yalnız onlar için tekrar istenir.
+// Onay verilmezse o gönderenler için çıkış sayfası linki gösterilir.
+async function unsubscribeWithConfirmation(senders) {
+  const first = await postUnsubscribe(senders, false);
+  const oneClick = first.filter(r => r.status === 'one_click_available');
+  if (!oneClick.length) return first;
+
+  const ok = confirm(
+    `Şu ${oneClick.length} gönderende tek tıkla abonelikten çıkılacak (geri alınamaz):\n\n` +
+    oneClick.map(r => `- ${r.email}`).join('\n') + '\n\nDevam edilsin mi?'
+  );
+  if (!ok) {
+    return first.map(r => r.status === 'one_click_available' ? { ...r, status: 'manual_link' } : r);
+  }
+  const confirmed = await postUnsubscribe(oneClick.map(r => r.sender), true);
+  const bySender = new Map(confirmed.map(r => [r.sender, r]));
+  return first.map(r => bySender.get(r.sender) || r);
+}
+
 async function runUnsubscribe(senders, resultEl, btnEl) {
   if (btnEl) { btnEl.disabled = true; btnEl.textContent = '...'; }
   try {
-    const res = await fetch('/api/unsubscribe', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ senders })
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `Sunucu hatası (${res.status})`);
-    if (resultEl) showUnsubResult(resultEl, data.results[0]);
-    return data.results;
+    const results = await unsubscribeWithConfirmation(senders);
+    if (resultEl) showUnsubResult(resultEl, results[0]);
+    return results;
   } catch (err) {
     if (resultEl) {
       resultEl.textContent = `Hata: ${err.message}`;

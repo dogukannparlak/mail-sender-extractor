@@ -236,7 +236,7 @@ class TestFindUnsubscribeInfo:
         post_mock = MagicMock(return_value=ok_response)
         monkeypatch.setattr(requests, 'post', post_mock)
 
-        result = find_unsubscribe_info(service, 'x@example.com')
+        result = find_unsubscribe_info(service, 'x@example.com', confirm_one_click=True)
 
         assert result == {'status': 'done', 'url': 'https://example.com/unsub'}
         post_mock.assert_called_once_with(
@@ -262,7 +262,7 @@ class TestFindUnsubscribeInfo:
         post_mock = MagicMock()
         monkeypatch.setattr(requests, 'post', post_mock)
 
-        result = find_unsubscribe_info(service, 'x@example.com')
+        result = find_unsubscribe_info(service, 'x@example.com', confirm_one_click=True)
 
         post_mock.assert_not_called()
         assert result == {'status': 'manual_link', 'url': 'https://router.local/unsub'}
@@ -283,7 +283,7 @@ class TestFindUnsubscribeInfo:
         )
         monkeypatch.setattr(requests, 'post', MagicMock(return_value=MagicMock(ok=True, is_redirect=True)))
 
-        result = find_unsubscribe_info(service, 'x@example.com')
+        result = find_unsubscribe_info(service, 'x@example.com', confirm_one_click=True)
 
         assert result == {'status': 'manual_link', 'url': 'https://example.com/unsub'}
 
@@ -303,7 +303,7 @@ class TestFindUnsubscribeInfo:
         )
         monkeypatch.setattr(requests, 'post', MagicMock(return_value=MagicMock(ok=False)))
 
-        result = find_unsubscribe_info(service, 'x@example.com')
+        result = find_unsubscribe_info(service, 'x@example.com', confirm_one_click=True)
 
         assert result == {'status': 'manual_link', 'url': 'https://example.com/unsub'}
 
@@ -323,7 +323,7 @@ class TestFindUnsubscribeInfo:
         )
         monkeypatch.setattr(requests, 'post', MagicMock(side_effect=requests.RequestException('boom')))
 
-        result = find_unsubscribe_info(service, 'x@example.com')
+        result = find_unsubscribe_info(service, 'x@example.com', confirm_one_click=True)
 
         assert result == {'status': 'manual_link', 'url': 'https://example.com/unsub'}
 
@@ -708,6 +708,50 @@ class TestUndo:
         client.post('/api/delete', json={'senders': ['a@example.com']})  # artık eşleşme yok
 
         assert client.get('/api/undo').get_json()['count'] == 1
+
+
+class TestOneClickConfirmation:
+    def _service(self, fake_service_factory):
+        return fake_service_factory(
+            list_pages=[{'messages': [{'id': 'm1'}]}],
+            get_responses={'m1': {'payload': {'headers': [
+                {'name': 'List-Unsubscribe', 'value': '<https://example.com/u>'},
+                {'name': 'List-Unsubscribe-Post', 'value': 'List-Unsubscribe=One-Click'},
+            ]}}},
+        )
+
+    def test_no_post_is_sent_without_confirmation(self, client, monkeypatch, fake_service_factory, public_dns):
+        post_mock = MagicMock()
+        monkeypatch.setattr(app_module.requests, 'post', post_mock)
+        service = self._service(fake_service_factory)
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        resp = client.post('/api/unsubscribe', json={'senders': ['x@example.com']})
+
+        post_mock.assert_not_called()
+        assert resp.get_json()['results'][0]['status'] == 'one_click_available'
+
+    @pytest.mark.parametrize('flag', ['true', 1, 'yes'])
+    def test_only_boolean_true_confirms(self, client, monkeypatch, fake_service_factory, public_dns, flag):
+        post_mock = MagicMock()
+        monkeypatch.setattr(app_module.requests, 'post', post_mock)
+        service = self._service(fake_service_factory)
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        client.post('/api/unsubscribe', json={'senders': ['x@example.com'], 'confirm_one_click': flag})
+
+        post_mock.assert_not_called()
+
+    def test_confirmed_request_posts_once(self, client, monkeypatch, fake_service_factory, public_dns):
+        post_mock = MagicMock(return_value=MagicMock(ok=True, is_redirect=False))
+        monkeypatch.setattr(app_module.requests, 'post', post_mock)
+        service = self._service(fake_service_factory)
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        resp = client.post('/api/unsubscribe', json={'senders': ['x@example.com'], 'confirm_one_click': True})
+
+        post_mock.assert_called_once()
+        assert resp.get_json()['results'][0]['status'] == 'done'
 
 
 class TestApiPreview:
