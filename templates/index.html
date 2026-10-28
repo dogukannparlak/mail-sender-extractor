@@ -144,6 +144,9 @@
   }
   button:hover { background: var(--accent-dark); }
   button:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .secondary-btn { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .secondary-btn:hover { background: rgba(128,128,128,0.1); }
+  button[hidden] { display: none; }
   #selectedInfo { font-size: 14px; color: var(--muted); }
   #status {
     max-width: 900px;
@@ -245,6 +248,7 @@
   </select>
   <button id="unsubBtn" disabled>Seçilenlerin Aboneliğinden Çık</button>
   <button id="deleteBtn" disabled>Seçilenleri Çöpe Taşı</button>
+  <button id="undoBtn" class="secondary-btn" type="button" hidden>Son silmeyi geri al</button>
 </div>
 
 <script>
@@ -658,6 +662,42 @@ async function scanInbox() {
   }
 }
 
+async function refreshUndo() {
+  const btn = document.getElementById('undoBtn');
+  try {
+    const res = await fetch('/api/undo');
+    const info = await res.json();
+    btn.hidden = !(res.ok && info.available);
+    if (!btn.hidden) {
+      btn.textContent = `Son silmeyi geri al (${info.count} mail)`;
+      btn.title = 'Gönderenler: ' + info.senders.join(', ');
+    }
+  } catch (err) {
+    btn.hidden = true;
+  }
+}
+
+async function undoLastDelete() {
+  const btn = document.getElementById('undoBtn');
+  btn.disabled = true;
+  document.getElementById('status').textContent = 'Son silme geri alınıyor...';
+  try {
+    const res = await fetch('/api/undo', { method: 'POST' });
+    const result = await res.json();
+    if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
+    await load();
+    document.getElementById('status').textContent =
+      `${result.restored} mail çöpten geri alındı (${result.senders.join(', ')}).`;
+  } catch (err) {
+    document.getElementById('status').textContent = 'Geri alınamadı: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    refreshUndo();
+  }
+}
+
+document.getElementById('undoBtn').addEventListener('click', undoLastDelete);
+
 async function resumeScanIfRunning() {
   try {
     const res = await fetch('/api/scan/status');
@@ -760,6 +800,7 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
       gonderenler: remaining,
     });
 
+    refreshUndo();
     const lines = result.details.map(d => `- ${d.sender}: ${d.deleted} mail çöpe taşındı`);
     document.getElementById('status').textContent =
       `Tamamlandı. Toplam ${result.total_deleted} mail çöpe taşındı.\n\n` + lines.join('\n');
@@ -772,6 +813,7 @@ document.getElementById('deleteBtn').addEventListener('click', async () => {
 });
 
 load().then(resumeScanIfRunning);
+refreshUndo();
 </script>
 </body>
 </html>

@@ -637,6 +637,79 @@ class TestProtectedSenders:
         assert client.post('/api/protected', json={'value': value}).status_code == 400
 
 
+class LabelledMailbox:
+    """Etiket durumunu tutan sahte posta kutusu: list sorguyu etiketlere göre süzer, batchModify etiketleri değiştirir."""
+
+    def __init__(self, fake_service_factory, labels_by_id):
+        self.labels = {i: set(l) for i, l in labels_by_id.items()}
+        self.service = fake_service_factory(list_handler=self._list)
+        self.service.messages_resource.batchModify = self._batch_modify
+
+    def _list(self, kwargs):
+        q = kwargs['q']
+        ids = [i for i, l in self.labels.items() if 'TRASH' not in l
+               and ('in:inbox' not in q or 'INBOX' in l)
+               and ('is:unread' not in q or 'UNREAD' in l)]
+        return {'messages': [{'id': i} for i in ids]}
+
+    def _batch_modify(self, userId, body):
+        for i in body['ids']:
+            self.labels[i] |= set(body['addLabelIds'])
+            self.labels[i] -= set(body['removeLabelIds'])
+        from conftest import _Executable
+        return _Executable({})
+
+
+class TestUndo:
+    LABELS = {
+        'inbox_unread': {'INBOX', 'UNREAD', 'CATEGORY_PROMOTIONS'},
+        'inbox_read': {'INBOX'},
+        'archived_unread': {'UNREAD'},
+        'archived_read': set(),
+    }
+
+    @pytest.mark.parametrize('scope', ['inbox', 'all'])
+    def test_delete_then_undo_restores_original_labels(self, client, monkeypatch, fake_service_factory, scope):
+        box = LabelledMailbox(fake_service_factory, self.LABELS)
+        monkeypatch.setattr(app_module, 'get_service', lambda: box.service)
+        before = {i: set(l) for i, l in box.labels.items()}
+
+        deleted = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': scope}).get_json()
+        trashed = {i for i, l in box.labels.items() if 'TRASH' in l}
+        undone = client.post('/api/undo')
+
+        assert deleted['total_deleted'] == (2 if scope == 'inbox' else 4)
+        assert trashed == ({'inbox_unread', 'inbox_read'} if scope == 'inbox' else set(self.LABELS))
+        assert undone.status_code == 200
+        assert box.labels == before
+
+    def test_undo_restores_csv_rows_and_is_single_use(self, client, monkeypatch, fake_service_factory, tmp_path):
+        from extract_senders import save_to_csv
+        save_to_csv({'a@example.com': {'ad': 'A', 'mail_sayisi': 2}, 'b@example.com': {'ad': '', 'mail_sayisi': 1}},
+                    filename=app_module.CSV_PATH)
+        box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})
+        monkeypatch.setattr(app_module, 'get_service', lambda: box.service)
+
+        client.post('/api/delete', json={'senders': ['a@example.com']})
+        info = client.get('/api/undo').get_json()
+        client.post('/api/undo')
+
+        assert info == {'available': True, 'zaman': info['zaman'], 'count': 1, 'senders': ['a@example.com']}
+        assert [g['gonderen'] for g in client.get('/api/senders').get_json()['gonderenler']] == [
+            'a@example.com', 'b@example.com']
+        assert client.get('/api/undo').get_json() == {'available': False}
+        assert client.post('/api/undo').status_code == 400
+
+    def test_delete_with_no_matches_keeps_previous_undo(self, client, monkeypatch, fake_service_factory):
+        box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})
+        monkeypatch.setattr(app_module, 'get_service', lambda: box.service)
+        client.post('/api/delete', json={'senders': ['a@example.com']})
+
+        client.post('/api/delete', json={'senders': ['a@example.com']})  # artık eşleşme yok
+
+        assert client.get('/api/undo').get_json()['count'] == 1
+
+
 class TestApiPreview:
     def test_rejects_missing_sender(self, client):
         resp = client.post('/api/preview', json={})

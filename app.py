@@ -22,6 +22,7 @@ from extract_senders import EMAIL_RE, extract_senders, load_csv, save_to_csv
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CSV_PATH = os.path.join(BASE_DIR, 'gonderenler.csv')
 PROTECTED_PATH = os.path.join(BASE_DIR, 'korunanlar.json')
+UNDO_PATH = os.path.join(BASE_DIR, 'son_islem.json')
 
 app = Flask(__name__)
 
@@ -378,6 +379,14 @@ def api_count():
     return jsonify({'scope': scope, 'total': sum(d['count'] for d in details), 'details': details})
 
 
+def _batch_modify(service, ids, add=(), remove=()):
+    for i in range(0, len(ids), 1000):
+        service.users().messages().batchModify(
+            userId='me',
+            body={'ids': ids[i:i + 1000], 'addLabelIds': list(add), 'removeLabelIds': list(remove)}
+        ).execute()
+
+
 @app.route('/api/delete', methods=['POST'])
 @handle_errors
 def api_delete():
@@ -389,27 +398,71 @@ def api_delete():
     reject_protected(emails)
     service = get_service()
 
+    saved = load_saved_senders()
+    # Geri alma için her mailin çöpe gitmeden önceki INBOX/UNREAD durumu saklanır;
+    # "tüm mailler"de arşivdeki mailler geri alınınca gelen kutusuna düşmemeli.
+    undo = {'zaman': time.time(), 'scope': scope, 'ids': [], 'inbox': [], 'unread': [], 'gonderenler': {}}
     results = []
     total = 0
     for sender, email in zip(senders, emails):
         message_ids = find_message_ids(service, email, scope)
+        if message_ids:
+            in_scope = set(message_ids)
+            inbox_ids = message_ids if scope == 'inbox' else [
+                i for i in find_message_ids(service, email, 'inbox') if i in in_scope]
+            unread_ids = [i for i in find_message_ids(service, email, scope, ' is:unread') if i in in_scope]
+            undo['ids'] += message_ids
+            undo['inbox'] += inbox_ids
+            undo['unread'] += unread_ids
+            _batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
 
-        for i in range(0, len(message_ids), 1000):
-            chunk = message_ids[i:i + 1000]
-            service.users().messages().batchModify(
-                userId='me',
-                body={
-                    'ids': chunk,
-                    'addLabelIds': ['TRASH'],
-                    'removeLabelIds': ['INBOX', 'UNREAD'],
-                }
-            ).execute()
-
+        undo['gonderenler'][email.lower()] = saved.get(email.lower())
         results.append({'sender': sender, 'email': email, 'deleted': len(message_ids)})
         total += len(message_ids)
 
+    if total:
+        _write_json(UNDO_PATH, undo)
     remove_senders_from_csv([email.lower() for email in emails])
     return jsonify({'scope': scope, 'total_deleted': total, 'details': results})
+
+
+def load_undo():
+    if not os.path.exists(UNDO_PATH):
+        return None
+    with open(UNDO_PATH, encoding='utf-8') as f:
+        return json.load(f)
+
+
+@app.route('/api/undo')
+@handle_errors
+def api_undo_info():
+    undo = load_undo()
+    if not undo:
+        return jsonify({'available': False})
+    return jsonify({'available': True, 'zaman': undo['zaman'], 'count': len(undo['ids']),
+                    'senders': sorted(undo['gonderenler'])})
+
+
+@app.route('/api/undo', methods=['POST'])
+@handle_errors
+def api_undo():
+    """Son silme işlemini geri alır: çöpten çıkarır, INBOX/UNREAD etiketlerini eski haline getirir."""
+    undo = load_undo()
+    if not undo:
+        raise ValueError('Geri alınacak bir silme işlemi yok.')
+    service = get_service()
+    _batch_modify(service, undo['ids'], remove=['TRASH'])
+    _batch_modify(service, undo['inbox'], add=['INBOX'])
+    _batch_modify(service, undo['unread'], add=['UNREAD'])
+
+    if os.path.exists(CSV_PATH):
+        senders = load_saved_senders()
+        for address, info in undo['gonderenler'].items():
+            if info and address not in senders:
+                senders[address] = info
+        save_to_csv(senders, filename=CSV_PATH)
+    os.remove(UNDO_PATH)
+    return jsonify({'restored': len(undo['ids']), 'senders': sorted(undo['gonderenler'])})
 
 
 @app.route('/api/preview', methods=['POST'])
