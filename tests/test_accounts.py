@@ -88,7 +88,9 @@ CLIENT = {'installed': {'client_id': 'id.apps.googleusercontent.com', 'client_se
 
 
 def _fake_add(calls):
-    def fake_add(accounts_dir, client_config, expected_email=None):
+    def fake_add(accounts_dir, client_config, expected_email=None, on_url=None):
+        if on_url:
+            on_url('https://accounts.google.com/o/oauth2/auth?fake=1')
         import os
         calls.append((client_config, expected_email))
         account = expected_email or OTHER
@@ -98,14 +100,45 @@ def _fake_add(calls):
     return fake_add
 
 
-def test_add_account_with_uploaded_client_file(client, monkeypatch):
+@pytest.fixture
+def idle_sign_in(monkeypatch):
+    monkeypatch.setattr(web, '_signin', {'state': 'idle', 'url': None, 'account': None, 'expected': None,
+                                         'error': None})
+
+
+def test_add_account_with_uploaded_client_file(client, monkeypatch, inline_scan, idle_sign_in):
     calls = []
     monkeypatch.setattr(gmail_auth, 'add_account', _fake_add(calls))
 
     resp = client.post('/api/accounts/add', json={'client': CLIENT})
+    status = client.get('/api/accounts/add/status').get_json()
 
-    assert resp.get_json() == {'account': OTHER, 'accounts': sorted([TEST_ACCOUNT, OTHER]), 'pending': []}
+    assert resp.status_code == 202
+    assert status['state'] == 'done' and status['account'] == OTHER
+    # Tarayıcı kendiliğinden açılmazsa arayüz bu adresi link olarak gösterir.
+    assert status['url'].startswith('https://accounts.google.com/')
     assert calls == [(CLIENT, None)]
+    assert client.get('/api/accounts').get_json()['accounts'] == sorted([TEST_ACCOUNT, OTHER])
+
+
+def test_sign_in_error_is_reported_in_status(client, monkeypatch, inline_scan, idle_sign_in):
+    def wrong(accounts_dir, client_config, expected_email=None, on_url=None):
+        raise gmail_auth.WrongAccount('başka hesapla giriş yapıldı')
+    monkeypatch.setattr(gmail_auth, 'add_account', wrong)
+
+    client.post('/api/accounts/add', json={'client': CLIENT})
+
+    assert client.get('/api/accounts/add/status').get_json()['error'] == 'başka hesapla giriş yapıldı'
+
+
+def test_second_sign_in_while_waiting_is_rejected(client, monkeypatch):
+    monkeypatch.setattr(web, '_signin', {'state': 'waiting', 'url': None, 'account': None, 'expected': None,
+                                         'error': None})
+    add = MagicMock()
+    monkeypatch.setattr(gmail_auth, 'add_account', add)
+
+    assert client.post('/api/accounts/add', json={'client': CLIENT}).status_code == 409
+    add.assert_not_called()
 
 
 def test_add_account_without_client_file_explains_what_to_do(client, monkeypatch, tmp_path):
@@ -119,7 +152,7 @@ def test_add_account_without_client_file_explains_what_to_do(client, monkeypatch
     add.assert_not_called()
 
 
-def test_pending_folder_signs_in_with_its_own_client(client, monkeypatch):
+def test_pending_folder_signs_in_with_its_own_client(client, monkeypatch, inline_scan, idle_sign_in):
     import json, os
     pending = 'bekleyen@example.com'
     folder = os.path.join(accounts.ACCOUNTS_DIR, pending)
@@ -130,9 +163,9 @@ def test_pending_folder_signs_in_with_its_own_client(client, monkeypatch):
     monkeypatch.setattr(gmail_auth, 'add_account', _fake_add(calls))
 
     assert client.get('/api/accounts').get_json()['pending'] == [pending]
-    resp = client.post('/api/accounts/add', json={'pending': pending})
+    client.post('/api/accounts/add', json={'pending': pending})
 
-    assert resp.get_json()['account'] == pending
+    assert client.get('/api/accounts/add/status').get_json()['account'] == pending
     assert calls == [(CLIENT, pending)]
     assert client.get('/api/accounts').get_json()['pending'] == []
 

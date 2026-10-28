@@ -140,6 +140,33 @@ def api_accounts():
                     'shared_client': accounts.has_shared_client(), 'migrated': migrated, 'demo': DEMO_MODE})
 
 
+# Google girişi tarayıcıda yapılır ve dakikalar sürebilir; arka planda bekler, arayüz durumu sorar.
+_signin_lock = threading.Lock()
+_signin = {'state': 'idle', 'url': None, 'account': None, 'expected': None, 'error': None}
+
+
+def _signin_snapshot():
+    with _signin_lock:
+        return dict(_signin)
+
+
+def _run_sign_in(client_config, expected):
+    def on_url(url):
+        with _signin_lock:
+            _signin['url'] = url
+    try:
+        account = accounts.add_account(client_config, expected, on_url)
+        with _signin_lock:
+            _signin.update(state='done', account=account)
+    except ValueError as e:
+        with _signin_lock:
+            _signin.update(state='error', error=str(e))
+    except Exception:
+        app.logger.exception('Google girişi hatası')
+        with _signin_lock:
+            _signin.update(state='error', error='Google girişi tamamlanamadı; ayrıntı sunucu konsolunda.')
+
+
 @app.route('/api/accounts/add', methods=['POST'])
 @handle_errors
 def api_accounts_add():
@@ -149,9 +176,19 @@ def api_accounts_add():
     client = body.get('client')
     if client is not None and not isinstance(client, dict):
         raise ValueError("'client' istemci dosyasının (client_secret_….json) içeriği olmalı.")
-    # Tarayıcıda Google giriş penceresi açılır; kullanıcı girişi bitirene kadar istek bekler.
-    account = accounts.add_account(client_config=client, pending=body.get('pending'))
-    return jsonify({'account': account, 'accounts': accounts.list_accounts(), 'pending': accounts.list_pending()})
+    client_config, expected = accounts.sign_in_plan(client_config=client, pending=body.get('pending'))
+    with _signin_lock:
+        if _signin['state'] == 'waiting':
+            raise state.Busy('Başka bir Google girişi bekleniyor; önce onu bitir ya da 5 dakika bekle.')
+        _signin.update(state='waiting', url=None, account=None, expected=expected, error=None)
+    threading.Thread(target=_run_sign_in, args=(client_config, expected), daemon=True).start()
+    return jsonify(_signin_snapshot()), 202
+
+
+@app.route('/api/accounts/add/status')
+@handle_errors
+def api_accounts_add_status():
+    return jsonify(_signin_snapshot())
 
 
 @app.route('/api/accounts/remove', methods=['POST'])

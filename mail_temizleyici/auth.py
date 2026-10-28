@@ -36,6 +36,21 @@ class WrongAccount(ValueError):
     pass
 
 
+# Giriş sayfası tarayıcıda kendiliğinden açılmayabilir (varsayılan tarayıcı yok, sunucu arka planda);
+# adres arayüzde tıklanabilir link olarak da gösterilsin diye yakalanır.
+SIGN_IN_TIMEOUT_SECONDS = 300
+
+
+class _ReportingFlow(InstalledAppFlow):
+    on_url = None
+
+    def authorization_url(self, **kwargs):
+        url, state = super().authorization_url(**kwargs)
+        if self.on_url:
+            self.on_url(url)
+        return url, state
+
+
 def validate_client_config(config):
     """Google Cloud'dan indirilen istemci dosyası (client_secret_….json) Masaüstü uygulaması türünde olmalı."""
     if not isinstance(config, dict):
@@ -48,7 +63,7 @@ def validate_client_config(config):
     return {'installed': installed}
 
 
-def add_account(accounts_dir, client_config, expected_email=None):
+def add_account(accounts_dir, client_config, expected_email=None, on_url=None):
     """Verilen istemciyle Google'a giriş yapar; istemciyi ve token'ı <accounts_dir>/<adres>/ altına yazar, adresi döner.
 
     Her hesap kendi Google Cloud istemcisiyle bağlanır; ortak bir "ana" hesap yoktur.
@@ -57,8 +72,13 @@ def add_account(accounts_dir, client_config, expected_email=None):
     """
     client_config = validate_client_config(client_config)
     with _auth_lock:
-        flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-        creds = flow.run_local_server(port=0, prompt='select_account')
+        flow = _ReportingFlow.from_client_config(client_config, SCOPES)
+        flow.on_url = on_url
+        try:
+            creds = flow.run_local_server(port=0, prompt='select_account', timeout_seconds=SIGN_IN_TIMEOUT_SECONDS)
+        except AttributeError:
+            # Süre içinde Google'dan dönüş olmadı (sayfa açılmadı ya da kapatıldı).
+            raise ValueError('Google girişi 5 dakika içinde tamamlanmadı; tekrar dene.') from None
         email = account_email(build('gmail', 'v1', credentials=creds))
         if expected_email and email != expected_email.lower():
             raise WrongAccount(f'Google\'da {email} ile giriş yapıldı ama bu klasör {expected_email} için. '

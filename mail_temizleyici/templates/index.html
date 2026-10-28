@@ -1038,14 +1038,35 @@ async function readClientFile(file) {
   }
 }
 
+// Giriş sunucuda arka planda bekler. Google sayfası tarayıcıda kendiliğinden açılmazsa
+// aynı adres burada tıklanabilir link olarak durur.
+function showSignInLink(url, expected) {
+  notify(`Google giriş sayfası açılmadıysa linke tıkla, ${expected || 'eklemek istediğin hesabı'} seç ve izin ver. Bitince buraya dön.`, {
+    action: { label: 'Google giriş sayfasını aç', onclick: () => window.open(url, '_blank', 'noopener') },
+  });
+}
+
 async function signIn(payload, expected = null) {
   setBusy(true);
-  notify(`Tarayıcıda Google giriş penceresi açıldı: ${expected || 'eklemek istediğin hesabı'} seç ve izin ver. Bitince buraya dön.`);
+  notify('Google giriş sayfası hazırlanıyor…');
   try {
-    const result = await api('/api/accounts/add', payload);
-    notify(`${result.account} eklendi. "Gelen Kutusunu Tara" ile başla.`);
-    setBusy(false);
-    await loadAccounts(result.account);
+    await api('/api/accounts/add', payload);
+    let shownUrl = null;
+    while (true) {
+      const status = await api('/api/accounts/add/status');
+      if (status.url && status.url !== shownUrl) {
+        shownUrl = status.url;
+        showSignInLink(status.url, expected || status.expected);
+      }
+      if (status.state === 'done') {
+        notify(`${status.account} eklendi. "Gelen Kutusunu Tara" ile başla.`);
+        setBusy(false);
+        await loadAccounts(status.account);
+        return;
+      }
+      if (status.state === 'error') throw new Error(status.error);
+      await new Promise(r => setTimeout(r, 1000));
+    }
   } catch (err) {
     notifyError('Hesap eklenemedi', err);
     setBusy(false);

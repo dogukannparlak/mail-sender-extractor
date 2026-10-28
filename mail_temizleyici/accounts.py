@@ -76,19 +76,24 @@ def get_service(account):
     return auth.get_service(paths.token)
 
 
-def add_account(client_config=None, pending=None):
-    """Hesap bağlar. Öncelik: girişi bekleyen klasör > yüklenen istemci dosyası > (varsa) ortak credentials.json."""
+def sign_in_plan(client_config=None, pending=None):
+    """Hangi istemciyle, hangi hesap için giriş yapılacağı. Öncelik: girişi bekleyen klasör >
+    yüklenen istemci dosyası > (varsa) ortak credentials.json. (istemci, beklenen adres) döner."""
     if pending:
         pending = str(pending).strip().lower()
         if pending not in list_pending():
             raise ValueError(f'Girişi bekleyen böyle bir hesap yok: {pending!r}')
-        return auth.add_account(ACCOUNTS_DIR, auth.load_client_config(AccountPaths(pending).client), pending)
+        return auth.validate_client_config(auth.load_client_config(AccountPaths(pending).client)), pending
     if client_config is not None:
-        return auth.add_account(ACCOUNTS_DIR, client_config)
+        return auth.validate_client_config(client_config), None
     if has_shared_client():
-        return auth.add_account(ACCOUNTS_DIR, auth.load_client_config(auth.CREDENTIALS_PATH))
+        return auth.validate_client_config(auth.load_client_config(auth.CREDENTIALS_PATH)), None
     raise ValueError('Bu hesabın Google Cloud istemci dosyasını (client_secret_….json) seç. '
                      'Nasıl oluşturulacağı README\'de adım adım yazıyor.')
+
+
+def add_account(client_config, expected_email=None, on_url=None):
+    return auth.add_account(ACCOUNTS_DIR, client_config, expected_email, on_url)
 
 
 def remove_token(paths):
