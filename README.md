@@ -62,16 +62,39 @@ source venv/bin/activate
 python app.py
 ```
 
-Open `http://localhost:5050`, click **+ Add account** and pick the Google account in the browser
-window that opens, then click **Scan Inbox**. Add more accounts the same way and switch between
-them in the header. Each account's sign-in token is stored in `hesaplar/<address>/token.json`.
-If the OAuth app is in "Testing" mode in Google Cloud, add every account under **Test users**.
-
-Upgrading from the single-account version: an existing `token.json` and its data files are moved
-into the right `hesaplar/<address>/` folder automatically on first start.
+Open `http://localhost:5050`, click **+ Add account**, pick your Google account in the window that
+opens and allow access. Then click **Scan Inbox**.
 
 Deleted messages go to Gmail's **Trash**, not straight to permanent deletion. Gmail empties the
 Trash after 30 days.
+
+### 3. Multiple accounts
+
+You can manage several Gmail accounts (personal, school, work) from the same page.
+
+1. **Add:** click **+ Add account**. Google shows its account picker, so the account that happens
+   to be signed in to your browser is not chosen silently. Pick the account and allow access.
+2. **Switch:** choose the account in the picker at the top. The list, selection, previews and
+   "Undo" belong to that account; switching never carries a selection over.
+3. **Work:** scan, trash, undo and unsubscribe always act on the selected account only. The confirm
+   dialog and the bottom bar show the account name, so you can't trash mail in the wrong one.
+4. **Remove:** **Remove account** deletes only that account's sign-in token on this computer. Your
+   mail is not touched, and the saved sender list stays, so re-adding the account brings it back.
+   To revoke the app's access at Google as well, use
+   [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+| What | Per account or shared? |
+|---|---|
+| Sign-in token, sender list, scan index, last-trash record | Per account: `hesaplar/<address>/` |
+| Protected senders (`korunanlar.json`) | Shared: a bank you lock is protected in every account |
+| Gmail quota (~300 message reads per minute) | Gmail counts it per account; the app paces all accounts together, so two scans at once each run at about half speed |
+
+**Testing mode:** if your OAuth app in Google Cloud is in "Testing", add every account under
+**OAuth consent screen › Test users**. Otherwise sign-in for that account fails with "access blocked".
+
+**Upgrading from the single-account version:** on first start an existing `token.json` and its
+data files (`gonderenler.csv`, `taranan_idler.json`, `son_islem.json`) are moved into the folder of
+the account they belong to. The page tells you which account they were moved to.
 
 ### CSV only (CLI)
 

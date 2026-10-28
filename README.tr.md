@@ -64,16 +64,40 @@ source venv/bin/activate
 python app.py
 ```
 
-`http://localhost:5050` adresini aç, **+ Hesap ekle**'ye bas ve açılan tarayıcı penceresinde Google
-hesabını seç; sonra **Gelen Kutusunu Tara**'ya bas. Başka hesapları da aynı yolla ekleyip başlıktan
-geçiş yapabilirsin. Her hesabın giriş anahtarı `hesaplar/<adres>/token.json` dosyasında durur.
-OAuth uygulaman Google Cloud'da "Testing" durumundaysa her hesabı **Test users** listesine ekle.
+`http://localhost:5050` adresini aç, **+ Hesap ekle**'ye bas, açılan pencerede Google hesabını seç ve
+izin ver. Sonra **Gelen Kutusunu Tara**'ya bas.
 
-Tek hesaplı sürümden geçiyorsan: mevcut `token.json` ve veri dosyaları ilk açılışta otomatik olarak
-doğru `hesaplar/<adres>/` klasörüne taşınır.
+Silinen mailler doğrudan kalıcı olarak silinmez, Gmail'in **Çöp Kutusu**'na taşınır. Gmail Çöp
+Kutusu'nu 30 gün sonra boşaltır.
 
-Silinen mailler doğrudan kalıcı olarak silinmez, Gmail'in **Çöp Kutusu**'na taşınır. Gmail çöp
-kutusunu 30 gün sonra boşaltır.
+### 3. Birden fazla hesap
+
+Birden çok Gmail hesabını (kişisel, okul, iş) aynı sayfadan yönetebilirsin.
+
+1. **Ekle:** **+ Hesap ekle**'ye bas. Google hesap seçme ekranını gösterir; tarayıcıda o an açık
+   olan hesap sessizce seçilmez. Hesabı seç ve izin ver.
+2. **Geçiş yap:** üstteki hesap seçiciden hesabı seç. Liste, seçim, önizlemeler ve "Geri al" o
+   hesaba aittir; geçişte seçim diğer hesaba taşınmaz.
+3. **Çalış:** tarama, taşıma, geri alma ve abonelikten çıkma her zaman yalnız seçili hesapta yapılır.
+   Onay penceresi ve alttaki çubuk hesabın adını yazar; yanlış hesapta mail taşımazsın.
+4. **Çıkar:** **Hesabı çıkar** yalnız o hesabın bu bilgisayardaki giriş anahtarını (token) siler.
+   Maillerine dokunulmaz; kayıtlı gönderen listesi de kalır, hesabı yeniden eklersen geri gelir.
+   Uygulamanın Google'daki iznini de kaldırmak için:
+   [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+| Ne | Hesap başına mı, ortak mı? |
+|---|---|
+| Giriş anahtarı, gönderen listesi, tarama dizini, son taşıma kaydı | Hesap başına: `hesaplar/<adres>/` |
+| Korunan gönderenler (`korunanlar.json`) | Ortak: kilitlediğin banka her hesapta korunur |
+| Gmail kotası (dakikada ~300 mail okuma) | Gmail hesap başına sayar; uygulama bütün hesapları birlikte yavaşlatır, iki tarama aynı anda yaklaşık yarı hızda ilerler |
+
+**Testing modu:** Google Cloud'daki OAuth uygulaman "Testing" durumundaysa her hesabı
+**OAuth consent screen › Test users** listesine ekle. Yoksa o hesapla giriş "erişim engellendi"
+hatası verir.
+
+**Tek hesaplı sürümden geçiş:** ilk açılışta mevcut `token.json` ve veri dosyaları (`gonderenler.csv`,
+`taranan_idler.json`, `son_islem.json`) ait oldukları hesabın klasörüne taşınır. Sayfa hangi hesaba
+taşındığını yazar.
 
 ### Yalnız CSV (CLI)
 
