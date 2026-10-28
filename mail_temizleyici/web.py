@@ -16,9 +16,10 @@ from .mailbox import extract_email
 from .scanner import extract_senders
 from .storage import write_json
 from .unsubscribe import find_unsubscribe_info
-from . import auth
+from . import auth, storage
 
 auth.CREDENTIALS_PATH = settings.credentials_path
+storage.COMPACT = settings.compact_files
 quota.units_per_minute = settings.quota_per_minute
 DEFAULT_SCOPE = settings.default_scope
 DEMO_MODE = False
@@ -173,7 +174,7 @@ def _run_scan(service, paths):
             service, progress=lambda done, total: state.update_scan(account, processed=done, total=total),
             id_index=scan_ids)
         accounts.save_senders(paths, senders)
-        write_json(paths.scan_ids, scan_ids, compact=True)
+        write_json(paths.scan_ids, scan_ids)
         mailbox.clear_verify_cache(account)
         state.update_scan(account, error=None)
     except HttpError as e:

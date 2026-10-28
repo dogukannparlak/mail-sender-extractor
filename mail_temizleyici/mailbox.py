@@ -130,7 +130,7 @@ def _trash_sender(service, paths, email, scope, undo, scan_ids):
     undo['inbox'] += inbox_ids
     undo['unread'] += unread_ids
     # Çöpe taşımadan önce yaz: işlem yarıda kesilirse taşınanlar yine geri alınabilsin.
-    write_json(paths.undo, undo, compact=True)
+    write_json(paths.undo, undo)
     batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
     return len(message_ids), skipped
 

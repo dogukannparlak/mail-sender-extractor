@@ -68,7 +68,7 @@ def test_get_service_refreshes_expired_token_with_refresh_token(patched_paths, m
 
     assert service == 'fake-service'
     assert expired_creds.refresh_called is True
-    assert token_path.read_text() == '{"fake": "creds"}'
+    assert token_path.read_text() == '{\n  "fake": "creds"\n}\n'
 
 
 def test_get_service_runs_oauth_flow_when_no_token_but_credentials_exist(patched_paths, monkeypatch):
@@ -87,7 +87,7 @@ def test_get_service_runs_oauth_flow_when_no_token_but_credentials_exist(patched
 
     assert service == 'fake-service'
     flow_instance.run_local_server.assert_called_once_with(port=0)
-    assert token_path.read_text() == '{"fake": "creds"}'
+    assert token_path.read_text() == '{\n  "fake": "creds"\n}\n'
 
 
 def test_written_token_is_readable_only_by_owner(patched_paths, monkeypatch):

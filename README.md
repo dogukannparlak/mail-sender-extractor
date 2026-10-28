@@ -109,6 +109,7 @@ cp .env.example .env
 | `PORT` | `5050` | Port of `http://localhost:<PORT>` |
 | `DEMO` | `0` | `1` = demo mode with fake accounts, no Gmail |
 | `FLASK_DEBUG` | `0` | Flask debug mode (development only) |
+| `COMPACT_FILES` | `0` | `0` = the JSON files the app writes are indented and easy to read, `1` = one compact line |
 | `CREDENTIALS_PATH` | `credentials.json` | Your Google OAuth client file |
 | `ACCOUNTS_DIR` | `hesaplar` | Folder with one sub-folder per account |
 | `ACCOUNT_1`, `ACCOUNT_2`, … | empty | One line per account whose token file you already have: `address=token_path` (e.g. `tokenlar/second.json`) |

@@ -89,6 +89,7 @@ class Settings:
         self.port = _int('PORT', get('PORT', '5050'), 1)
         self.demo = _bool('DEMO', get('DEMO', '0'))
         self.flask_debug = _bool('FLASK_DEBUG', get('FLASK_DEBUG', '0'))
+        self.compact_files = _bool('COMPACT_FILES', get('COMPACT_FILES', '0'))
         self.credentials_path = _path(get('CREDENTIALS_PATH', 'credentials.json'))
         self.accounts_dir = _path(get('ACCOUNTS_DIR', 'hesaplar'))
         self.quota_per_minute = _int('GMAIL_QUOTA_PER_MINUTE', get('GMAIL_QUOTA_PER_MINUTE', '5400'), 0)

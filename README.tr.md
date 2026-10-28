@@ -112,6 +112,7 @@ cp .env.example .env
 | `PORT` | `5050` | `http://localhost:<PORT>` portu |
 | `DEMO` | `0` | `1` = sahte hesaplarla demo modu, Gmail'e bağlanmaz |
 | `FLASK_DEBUG` | `0` | Flask hata ayıklama modu (yalnız geliştirirken) |
+| `COMPACT_FILES` | `0` | `0` = uygulamanın yazdığı JSON dosyaları girintili ve okunaklı, `1` = sıkışık tek satır |
 | `CREDENTIALS_PATH` | `credentials.json` | Google OAuth istemci dosyan |
 | `ACCOUNTS_DIR` | `hesaplar` | Her hesap için bir alt klasör içeren klasör |
 | `ACCOUNT_1`, `ACCOUNT_2`, … | boş | Token dosyası elinde olan her hesap için bir satır: `adres=token_yolu` (ör. `tokenlar/ikinci.json`) |

@@ -1,4 +1,5 @@
 """Google OAuth girişi ve hesap başına token dosyaları."""
+import json
 import os
 import threading
 
@@ -59,7 +60,7 @@ def _save_token(creds, token_path):
     # Token Gmail'e yazma yetkisi taşır; yalnız dosya sahibi okuyabilsin.
     fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, 'w') as token:
-        token.write(creds.to_json())
+        token.write(json.dumps(json.loads(creds.to_json()), indent=2) + '\n')  # okunaklı; içerik aynı
     os.chmod(token_path, 0o600)
 
 
