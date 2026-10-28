@@ -15,3 +15,4 @@ son_islem.json
 taranan_idler.json
 .coverage
 hesaplar/
+.env

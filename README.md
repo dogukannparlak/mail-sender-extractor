@@ -96,6 +96,30 @@ You can manage several Gmail accounts (personal, school, work) from the same pag
 data files (`gonderenler.csv`, `taranan_idler.json`, `son_islem.json`) are moved into the folder of
 the account they belong to. The page tells you which account they were moved to.
 
+### 4. Settings (`.env`)
+
+Settings live in a `.env` file in the project folder (not committed). Start from the example:
+
+```bash
+cp .env.example .env
+```
+
+| Setting | Default | What it does |
+|---|---|---|
+| `PORT` | `5050` | Port of `http://localhost:<PORT>` |
+| `DEMO` | `0` | `1` = demo mode with fake accounts, no Gmail |
+| `FLASK_DEBUG` | `0` | Flask debug mode (development only) |
+| `CREDENTIALS_PATH` | `credentials.json` | Your Google OAuth client file |
+| `ACCOUNTS_DIR` | `hesaplar` | Folder with one sub-folder per account |
+| `EXTRA_ACCOUNTS` | empty | Accounts whose token file lives elsewhere: `address=token_path, address=token_path` |
+| `GMAIL_QUOTA_PER_MINUTE` | `5400` | Quota units per minute the app allows itself (Gmail's limit is 6,000) |
+| `DEFAULT_SCOPE` | `inbox` | Default delete/preview scope: `inbox` or `all` |
+
+A value given on the command line wins over `.env` (`DEMO=1 python app.py`). Relative paths are
+relative to the project folder; `~` is expanded. A wrong value stops the app at start with a
+message naming the setting. Accounts listed in `EXTRA_ACCOUNTS` can't be removed from the page
+(the token file is yours); delete the line instead.
+
 ### CSV only (CLI)
 
 ```bash

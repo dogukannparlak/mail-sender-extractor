@@ -266,8 +266,8 @@
 <div class="action-bar">
   <span id="selectedInfo" aria-live="polite">Seçim yok</span>
   <select id="scopeSelect" aria-label="İşlem kapsamı">
-    <option value="inbox">Yalnız gelen kutusu</option>
-    <option value="all">Tüm mailler (arşiv dahil)</option>
+    <option value="inbox"{% if default_scope == 'inbox' %} selected{% endif %}>Yalnız gelen kutusu</option>
+    <option value="all"{% if default_scope == 'all' %} selected{% endif %}>Tüm mailler (arşiv dahil)</option>
   </select>
   <button id="unsubBtn" type="button" disabled aria-describedby="selectedInfo">Seçilenlerin aboneliğinden çık</button>
   <button id="deleteBtn" type="button" disabled aria-describedby="selectedInfo">Seçilenleri Çöp Kutusu'na taşı</button>
@@ -298,7 +298,7 @@ const state = {
   account: null,
   data: null,
   sortMode: 'count_desc',
-  scope: 'inbox',
+  scope: document.getElementById('scopeSelect')?.value || 'inbox',  // varsayılan .env'deki DEFAULT_SCOPE
   viewMode: 'address',
   categoryFilter: '',
   searchText: '',

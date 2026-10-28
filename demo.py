@@ -187,6 +187,7 @@ def enable(app_module):
     mailboxes = {account: DemoMailbox(senders, seed) for account, (senders, seed) in DEMO_ACCOUNTS.items()}
     data_dir = tempfile.mkdtemp(prefix='mail-temizleyici-demo-')
     app_module.ACCOUNTS_DIR = os.path.join(data_dir, 'hesaplar')
+    app_module.EXTRA_ACCOUNT_TOKENS = {}  # .env'deki gerçek hesaplar demo'ya karışmasın
     for account in mailboxes:
         os.makedirs(os.path.join(app_module.ACCOUNTS_DIR, account))
         # Hesap listesi token dosyasına bakar; demo'da token hiç okunmaz (get_service sahte kutuyu döner).

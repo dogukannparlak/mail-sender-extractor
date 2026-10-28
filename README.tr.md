@@ -99,6 +99,29 @@ hatası verir.
 `taranan_idler.json`, `son_islem.json`) ait oldukları hesabın klasörüne taşınır. Sayfa hangi hesaba
 taşındığını yazar.
 
+### 4. Ayarlar (`.env`)
+
+Ayarlar proje klasöründeki `.env` dosyasında durur (git'e girmez). Örnekten başla:
+
+```bash
+cp .env.example .env
+```
+
+| Ayar | Varsayılan | Ne yapar |
+|---|---|---|
+| `PORT` | `5050` | `http://localhost:<PORT>` portu |
+| `DEMO` | `0` | `1` = sahte hesaplarla demo modu, Gmail'e bağlanmaz |
+| `FLASK_DEBUG` | `0` | Flask hata ayıklama modu (yalnız geliştirirken) |
+| `CREDENTIALS_PATH` | `credentials.json` | Google OAuth istemci dosyan |
+| `ACCOUNTS_DIR` | `hesaplar` | Her hesap için bir alt klasör içeren klasör |
+| `EXTRA_ACCOUNTS` | boş | Token dosyası başka yerde duran hesaplar: `adres=token_yolu, adres=token_yolu` |
+| `GMAIL_QUOTA_PER_MINUTE` | `5400` | Uygulamanın kendine izin verdiği dakikalık kota birimi (Gmail sınırı 6.000) |
+| `DEFAULT_SCOPE` | `inbox` | Taşıma/önizlemenin varsayılan kapsamı: `inbox` ya da `all` |
+
+Komut satırında verilen değer `.env`'nin önüne geçer (`DEMO=1 python app.py`). Göreli yollar proje
+klasörüne göredir; `~` açılır. Hatalı bir değer uygulamayı açılışta, hangi ayar olduğunu yazarak
+durdurur. `EXTRA_ACCOUNTS`'taki hesaplar sayfadan çıkarılamaz (token dosyası senin); satırı sil.
+
 ### Yalnız CSV (CLI)
 
 ```bash

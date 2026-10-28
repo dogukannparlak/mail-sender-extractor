@@ -1,5 +1,12 @@
+import os
 import sys
 from pathlib import Path
+
+# Testler kullanıcının .env dosyasından etkilenmesin (ör. EXTRA_ACCOUNTS, ACCOUNTS_DIR).
+os.environ['MAIL_TEMIZLEYICI_ENV_FILE'] = ''
+for _name in ('PORT', 'DEMO', 'FLASK_DEBUG', 'CREDENTIALS_PATH', 'ACCOUNTS_DIR', 'GMAIL_QUOTA_PER_MINUTE',
+              'DEFAULT_SCOPE', 'EXTRA_ACCOUNTS'):
+    os.environ.pop(_name, None)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -153,6 +160,7 @@ def isolate_data_files(tmp_path, monkeypatch):
     (accounts_dir / TEST_ACCOUNT).mkdir(parents=True)
     (accounts_dir / TEST_ACCOUNT / 'token.json').write_text('{}')
     monkeypatch.setattr(app_module, 'ACCOUNTS_DIR', str(accounts_dir))
+    monkeypatch.setattr(app_module, 'EXTRA_ACCOUNT_TOKENS', {})
     monkeypatch.setattr(app_module, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))
     monkeypatch.setattr(app_module, 'LEGACY_TOKEN_PATH', str(tmp_path / 'token.json'))
     monkeypatch.setattr(app_module, '_scans', {})
@@ -184,7 +192,8 @@ def demo_mode(monkeypatch):
     """demo.enable modül özniteliklerini doğrudan değiştirir; monkeypatch test sonunda geri alsın."""
     import app as app_module
     import demo
-    for name in ('get_service', 'ACCOUNTS_DIR', 'PROTECTED_PATH', 'LEGACY_TOKEN_PATH', '_resolve_host', 'DEMO_MODE'):
+    for name in ('get_service', 'ACCOUNTS_DIR', 'EXTRA_ACCOUNT_TOKENS', 'PROTECTED_PATH', 'LEGACY_TOKEN_PATH',
+                 '_resolve_host', 'DEMO_MODE'):
         monkeypatch.setattr(app_module, name, getattr(app_module, name))
     monkeypatch.setattr(app_module.requests, 'post', app_module.requests.post)
     return demo.enable(app_module)

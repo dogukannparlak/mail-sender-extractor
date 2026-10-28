@@ -18,15 +18,26 @@ import requests
 from flask import Flask, jsonify, request, render_template
 from googleapiclient.errors import HttpError
 
+import config
+import extract_senders as scanner
 import gmail_auth
 from google.auth.exceptions import RefreshError
 
 from extract_senders import (EMAIL_RE, extract_senders, fetch_metadata, from_address, gmail_execute, load_csv,
                              message_headers, run_batched, save_to_csv)
 
+# Ayarlar .env'den (bkz. .env.example); dosya yoksa varsayılanlar kullanılır.
+settings = config.load_settings()
+gmail_auth.CREDENTIALS_PATH = settings.credentials_path
+scanner.quota.units_per_minute = settings.quota_per_minute
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Her Gmail hesabının token'ı ve verileri ayrı klasörde: hesaplar/<adres>/.
-ACCOUNTS_DIR = os.path.join(BASE_DIR, 'hesaplar')
+ACCOUNTS_DIR = settings.accounts_dir
+# .env'deki EXTRA_ACCOUNTS: token dosyası başka bir yerde duran hesaplar (adres → token yolu).
+# Verileri (liste, geri alma) yine ACCOUNTS_DIR/<adres>/ altında tutulur.
+EXTRA_ACCOUNT_TOKENS = settings.extra_accounts
+DEFAULT_SCOPE = settings.default_scope
 # Korunanlar bütün hesaplar için ortak: banka iki hesapta da korunsun.
 PROTECTED_PATH = os.path.join(BASE_DIR, 'korunanlar.json')
 # Çoklu hesaptan önceki tek hesaplı düzen; ilk açılışta hesabın klasörüne taşınır.
@@ -66,7 +77,8 @@ class AccountPaths:
     def __init__(self, account):
         self.account = account
         self.root = os.path.join(ACCOUNTS_DIR, account)
-        self.token = os.path.join(self.root, 'token.json')
+        self.external_token = account in EXTRA_ACCOUNT_TOKENS
+        self.token = EXTRA_ACCOUNT_TOKENS.get(account) or os.path.join(self.root, 'token.json')
         self.csv = os.path.join(self.root, 'gonderenler.csv')
         self.undo = os.path.join(self.root, 'son_islem.json')
         # Taramada görülen mail id'leri (gönderen başına); silmede bu maillerin From'unu yeniden okumayız.
@@ -74,14 +86,16 @@ class AccountPaths:
 
 
 def list_accounts():
-    if not os.path.isdir(ACCOUNTS_DIR):
-        return []
-    return sorted(name for name in os.listdir(ACCOUNTS_DIR)
-                  if EMAIL_RE.match(name) and os.path.exists(AccountPaths(name).token))
+    names = set(EXTRA_ACCOUNT_TOKENS)
+    if os.path.isdir(ACCOUNTS_DIR):
+        names.update(name for name in os.listdir(ACCOUNTS_DIR) if EMAIL_RE.match(name))
+    return sorted(name for name in names if os.path.exists(AccountPaths(name).token))
 
 
 def get_service(account):
-    return gmail_auth.get_service(AccountPaths(account).token)
+    paths = AccountPaths(account)
+    os.makedirs(paths.root, mode=0o700, exist_ok=True)  # .env'deki hesabın veri klasörü henüz olmayabilir
+    return gmail_auth.get_service(paths.token)
 
 
 def migrate_legacy_account():
@@ -446,7 +460,7 @@ def find_unsubscribe_info(service, email, confirm_one_click=False):
 
 @app.route('/')
 def index():
-    return render_template('index.html', demo=DEMO_MODE)
+    return render_template('index.html', demo=DEMO_MODE, default_scope=DEFAULT_SCOPE)
 
 
 @app.route('/api/accounts')
@@ -471,6 +485,8 @@ def api_accounts_add():
 def api_accounts_remove():
     """Hesabın token'ını siler; taranan liste ve geri alma kaydı klasörde kalır (yeniden eklenince döner)."""
     paths = _current_paths()
+    if paths.external_token:
+        raise ValueError(f'{paths.account} .env dosyasındaki EXTRA_ACCOUNTS ile tanımlı; çıkarmak için oradan sil.')
     with _mutation(paths.account):
         os.remove(paths.token)
     _clear_verify_cache(paths.account)
@@ -810,8 +826,8 @@ def api_unsubscribe():
 
 
 if __name__ == '__main__':
-    if os.environ.get('DEMO') == '1':
+    if settings.demo:
         import sys
         import demo
         demo.enable(sys.modules[__name__])
-    app.run(debug=os.environ.get('FLASK_DEBUG') == '1', port=5050, threaded=True)
+    app.run(debug=settings.flask_debug, port=settings.port, threaded=True)
