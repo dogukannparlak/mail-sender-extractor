@@ -25,12 +25,15 @@ class FakeMessagesResource:
       (lets tests simulate pagination via successive nextPageToken values).
     - `get_responses`: dict of message id -> response dict, used by `.get()`.
     - `batch_modify_result`: value returned by `.batchModify()`.
+    - `list_handler`: optional function(kwargs) -> response; overrides `list_pages`
+      when the answer must depend on the query (e.g. `in:inbox` vs all mail).
     All calls are recorded on `list_calls` / `get_calls` / `batch_modify_calls`
     so tests can assert on query params (e.g. `q=from:...`, chunk sizes).
     """
 
-    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None):
+    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None, list_handler=None):
         self._list_pages = list(list_pages or [])
+        self._list_handler = list_handler
         self._get_responses = get_responses or {}
         self._batch_modify_result = batch_modify_result if batch_modify_result is not None else {}
         self.list_calls = []
@@ -39,6 +42,8 @@ class FakeMessagesResource:
 
     def list(self, **kwargs):
         self.list_calls.append(kwargs)
+        if self._list_handler:
+            return _Executable(self._list_handler(kwargs))
         if not self._list_pages:
             return _Executable({'messages': []})
         return _Executable(self._list_pages.pop(0))
@@ -77,8 +82,9 @@ class FakeUsersResource:
 class FakeGmailService:
     """Fakes the top-level object returned by `googleapiclient.discovery.build('gmail', 'v1', ...)`."""
 
-    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None, label_response=None):
-        self.messages_resource = FakeMessagesResource(list_pages, get_responses, batch_modify_result)
+    def __init__(self, list_pages=None, get_responses=None, batch_modify_result=None, label_response=None,
+                 list_handler=None):
+        self.messages_resource = FakeMessagesResource(list_pages, get_responses, batch_modify_result, list_handler)
         self.labels_resource = FakeLabelsResource(label_response)
         self._users = FakeUsersResource(self.messages_resource, self.labels_resource)
 

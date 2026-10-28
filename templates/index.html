@@ -168,7 +168,7 @@
   }
   .toolbar-spacer { flex: 1; }
   .select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-  .toolbar select {
+  .action-bar select, .toolbar select {
     background: var(--card);
     color: var(--text);
     border: 1px solid var(--border);
@@ -209,6 +209,10 @@
 
 <div class="action-bar">
   <span id="selectedInfo">0 mail seçildi</span>
+  <select id="scopeSelect" title="Silme ve önizleme hangi mailleri kapsasın?">
+    <option value="inbox">Yalnız gelen kutusu</option>
+    <option value="all">Tüm mailler (arşiv dahil)</option>
+  </select>
   <button id="unsubBtn" disabled>Seçilenlerin Aboneliğinden Çık</button>
   <button id="deleteBtn" disabled>Seçilenleri Çöpe Taşı</button>
 </div>
@@ -216,6 +220,7 @@
 <script>
 let data = null;
 let sortMode = 'count_desc';
+let scope = 'inbox';
 
 function senderLabel(sender) {
   const { name, email } = parseSender(sender);
@@ -363,7 +368,7 @@ async function togglePreview(sender, panel, btnEl) {
     const res = await fetch('/api/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender })
+      body: JSON.stringify({ sender, scope })
     });
     const body = await res.json();
     if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
@@ -494,6 +499,11 @@ document.getElementById('sortSelect').addEventListener('change', (e) => {
   if (data) render();
 });
 
+document.getElementById('scopeSelect').addEventListener('change', (e) => {
+  scope = e.target.value;
+  if (data) render();  // açık önizlemeler eski kapsamla yüklendi; kapatıp yeniden yükletelim
+});
+
 document.getElementById('selectAll').addEventListener('change', (e) => {
   const checked = e.target.checked;
   document.querySelectorAll('.sender-checkbox').forEach(cb => cb.checked = checked);
@@ -523,22 +533,34 @@ document.getElementById('unsubBtn').addEventListener('click', async () => {
 
 document.getElementById('deleteBtn').addEventListener('click', async () => {
   const selected = getSelected();
-  const totalMail = selected.reduce((sum, g) => sum + g.mail_sayisi, 0);
-  const ok = confirm(
-    `${selected.length} gönderenden gelen toplam ${totalMail} mail Çöp Kutusu'na taşınacak.\n\nDevam edilsin mi?`
-  );
-  if (!ok) return;
-
+  const senders = selected.map(g => g.gonderen);
   const btn = document.getElementById('deleteBtn');
   btn.disabled = true;
-  btn.textContent = 'Taşınıyor...';
-  document.getElementById('status').textContent = 'İşlem sürüyor, tarayıcı sekmesini kapatma...';
 
   try {
+    // Taramadaki sayı yalnız gelen kutusunu sayar; onayda seçilen kapsamın gerçek sayısı görünsün.
+    btn.textContent = 'Sayılıyor...';
+    const countRes = await fetch('/api/count', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ senders, scope })
+    });
+    const count = await countRes.json();
+    if (!countRes.ok) throw new Error(count.error || `Sunucu hatası (${countRes.status})`);
+
+    const scopeText = scope === 'all' ? 'tüm maillerde (arşiv dahil)' : 'gelen kutusunda';
+    const ok = confirm(
+      `${selected.length} gönderenden ${scopeText} bulunan ${count.total} mail Çöp Kutusu'na taşınacak.\n\nDevam edilsin mi?`
+    );
+    if (!ok) return;
+
+    btn.textContent = 'Taşınıyor...';
+    document.getElementById('status').textContent = 'İşlem sürüyor, tarayıcı sekmesini kapatma...';
+
     const res = await fetch('/api/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ senders: selected.map(g => g.gonderen) })
+      body: JSON.stringify({ senders, scope })
     });
     const result = await res.json();
     if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);

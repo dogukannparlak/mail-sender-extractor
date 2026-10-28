@@ -118,16 +118,28 @@ def extract_email(sender):
     return email
 
 
-def from_query(email):
-    return f'from:"{email}"'
+# Tarama yalnız gelen kutusunu sayar; "all" arşivdeki mailleri de kapsar.
+# Gmail'in from: araması çöp ve spam kutusunu zaten dışarıda bırakır.
+SCOPE_QUERIES = {'inbox': ' in:inbox', 'all': ''}
 
 
-def find_message_ids(service, email):
+def _validated_scope(body):
+    scope = (body or {}).get('scope', 'inbox')
+    if scope not in SCOPE_QUERIES:
+        raise ValueError("'scope' yalnız 'inbox' ya da 'all' olabilir.")
+    return scope
+
+
+def from_query(email, scope='all', extra=''):
+    return f'from:"{email}"' + SCOPE_QUERIES[scope] + extra
+
+
+def find_message_ids(service, email, scope='all', extra=''):
     ids = []
     next_page_token = None
     while True:
         resp = service.users().messages().list(
-            userId='me', q=from_query(email), maxResults=500,
+            userId='me', q=from_query(email, scope, extra), maxResults=500,
             pageToken=next_page_token
         ).execute()
         ids.extend(m['id'] for m in resp.get('messages', []))
@@ -247,10 +259,29 @@ def api_scan():
     return jsonify(_senders_payload(counts))
 
 
+@app.route('/api/count', methods=['POST'])
+@handle_errors
+def api_count():
+    """Silme onayında gösterilecek gerçek eşleşme sayısı (taramadaki sayı yalnız gelen kutusu)."""
+    body = request.get_json(silent=True)
+    senders = _validated_senders(body)
+    scope = _validated_scope(body)
+    emails = [extract_email(sender) for sender in senders]
+    service = get_service()
+
+    details = [
+        {'sender': sender, 'email': email, 'count': len(find_message_ids(service, email, scope))}
+        for sender, email in zip(senders, emails)
+    ]
+    return jsonify({'scope': scope, 'total': sum(d['count'] for d in details), 'details': details})
+
+
 @app.route('/api/delete', methods=['POST'])
 @handle_errors
 def api_delete():
-    senders = _validated_senders(request.get_json(silent=True))
+    body = request.get_json(silent=True)
+    senders = _validated_senders(body)
+    scope = _validated_scope(body)
     # Hepsini önce doğrula: geçersiz bir adres yüzünden işlem yarıda kalmasın.
     emails = [extract_email(sender) for sender in senders]
     service = get_service()
@@ -258,7 +289,7 @@ def api_delete():
     results = []
     total = 0
     for sender, email in zip(senders, emails):
-        message_ids = find_message_ids(service, email)
+        message_ids = find_message_ids(service, email, scope)
 
         for i in range(0, len(message_ids), 1000):
             chunk = message_ids[i:i + 1000]
@@ -275,7 +306,7 @@ def api_delete():
         total += len(message_ids)
 
     remove_senders_from_csv(senders)
-    return jsonify({'total_deleted': total, 'details': results})
+    return jsonify({'scope': scope, 'total_deleted': total, 'details': results})
 
 
 @app.route('/api/preview', methods=['POST'])
@@ -286,10 +317,11 @@ def api_preview():
     if not isinstance(sender, str) or not sender.strip():
         raise ValueError("İstek gövdesinde 'sender' adında bir metin bekleniyor.")
 
+    scope = _validated_scope(body)
     email = extract_email(sender)
     service = get_service()
     resp = service.users().messages().list(
-        userId='me', q=from_query(email), maxResults=5
+        userId='me', q=from_query(email, scope), maxResults=5
     ).execute()
 
     previews = []

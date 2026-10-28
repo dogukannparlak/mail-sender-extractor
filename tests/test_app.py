@@ -474,6 +474,71 @@ class TestApiDelete:
         assert service.messages_resource.batch_modify_calls == []
 
 
+def _scope_aware_service(fake_service_factory, inbox_ids, archived_ids):
+    """`in:inbox` sorgusunda yalnız gelen kutusu, diğerinde arşiv dahil tümü döner."""
+    def handler(kwargs):
+        ids = inbox_ids if 'in:inbox' in kwargs['q'] else inbox_ids + archived_ids
+        return {'messages': [{'id': i} for i in ids]}
+    return fake_service_factory(list_handler=handler)
+
+
+class TestDeleteScope:
+    def test_default_scope_is_inbox_like_the_scan(self, client, monkeypatch, fake_service_factory):
+        service = _scope_aware_service(fake_service_factory, ['i1', 'i2'], ['a1'])
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        resp = client.post('/api/delete', json={'senders': ['a@example.com']})
+
+        assert resp.get_json()['total_deleted'] == 2
+        assert service.messages_resource.list_calls[0]['q'] == 'from:"a@example.com" in:inbox'
+
+    def test_all_scope_includes_archived_mail(self, client, monkeypatch, fake_service_factory):
+        service = _scope_aware_service(fake_service_factory, ['i1', 'i2'], ['a1'])
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        resp = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': 'all'})
+
+        assert resp.get_json()['total_deleted'] == 3
+        assert service.messages_resource.batch_modify_calls[0]['body']['ids'] == ['i1', 'i2', 'a1']
+
+    def test_unknown_scope_is_rejected_before_gmail(self, client, monkeypatch):
+        get_service_mock = MagicMock()
+        monkeypatch.setattr(app_module, 'get_service', get_service_mock)
+
+        resp = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': 'in:anywhere'})
+
+        assert resp.status_code == 400
+        get_service_mock.assert_not_called()
+
+    @pytest.mark.parametrize('scope, expected', [('inbox', 2), ('all', 3)])
+    def test_count_matches_what_delete_trashes(self, client, monkeypatch, fake_service_factory, scope, expected):
+        service = _scope_aware_service(fake_service_factory, ['i1', 'i2'], ['a1'])
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        count = client.post('/api/count', json={'senders': ['a@example.com'], 'scope': scope}).get_json()
+        deleted = client.post('/api/delete', json={'senders': ['a@example.com'], 'scope': scope}).get_json()
+
+        assert count['total'] == expected
+        assert count['details'] == [{'sender': 'a@example.com', 'email': 'a@example.com', 'count': expected}]
+        assert deleted['total_deleted'] == count['total']
+
+    def test_count_does_not_modify_anything(self, client, monkeypatch, fake_service_factory):
+        service = _scope_aware_service(fake_service_factory, ['i1'], [])
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        client.post('/api/count', json={'senders': ['a@example.com']})
+
+        assert service.messages_resource.batch_modify_calls == []
+
+    def test_preview_uses_the_same_scope(self, client, monkeypatch, fake_service_factory):
+        service = _scope_aware_service(fake_service_factory, [], [])
+        monkeypatch.setattr(app_module, 'get_service', lambda: service)
+
+        client.post('/api/preview', json={'sender': 'a@example.com', 'scope': 'inbox'})
+
+        assert service.messages_resource.list_calls[0]['q'] == 'from:"a@example.com" in:inbox'
+
+
 class TestApiPreview:
     def test_rejects_missing_sender(self, client):
         resp = client.post('/api/preview', json={})
