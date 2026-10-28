@@ -4,7 +4,7 @@ import csv
 import os
 import time
 
-from .gmail import EMAIL_RE, fetch_metadata, gmail_execute, message_headers, sender_key
+from .gmail import fetch_metadata, gmail_execute, message_headers, sender_key
 
 CSV_HEADER = ['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']
 LEGACY_CSV_HEADER = ['İsim/Adres', 'Mail Sayısı']
