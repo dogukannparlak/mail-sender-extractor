@@ -7,7 +7,7 @@ maillerini toplu olarak çöpe taşımanı ya da abonelikten çıkmanı sağlaya
 uygulaması. Son silme geri alınabilir. Yalnız kendi bilgisayarında (`localhost`) çalışır;
 Gmail'in kendi API'si dışında hiçbir yere veri gitmez.
 
-![Demo modunda gönderen listesi](docs/screenshot.jpg)
+![Demo modunda gönderen listesi](docs/screenshot.png)
 
 ## Özellikler
 

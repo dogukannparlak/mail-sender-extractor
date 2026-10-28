@@ -6,7 +6,7 @@ A local web app that scans your Gmail inbox, groups messages by sender, and lets
 or unsubscribe from the senders you pick, with an undo for the last delete. It runs only on
 your own machine (`localhost`); nothing is sent anywhere except Gmail's own API.
 
-![Sender list in demo mode](docs/screenshot.jpg)
+![Sender list in demo mode](docs/screenshot.png)
 
 ## Features
 

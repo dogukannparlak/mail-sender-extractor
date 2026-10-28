@@ -2,228 +2,223 @@
 <html lang="tr">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mail Temizleyici</title>
 <style>
   :root {
     --bg: #f5f5f7;
     --card: #ffffff;
-    --border: #e2e2e6;
+    --border: #d9d9de;
     --text: #1d1d1f;
-    --muted: #6e6e73;
-    --accent: #d64545;
-    --accent-dark: #b83838;
+    --muted: #616166;
+    --accent: #c23a3a;
+    --accent-dark: #a42f2f;
+    --accent-text: #b33434;
+    --accent-soft: rgba(194, 58, 58, 0.08);
+    --ok: #15803d;
+    --link: #1d4ed8;
+    --badge-bulten: #1d4ed8;
+    --badge-promosyon: #b45309;
+    --badge-bildirim: #6d28d9;
+    --badge-kisisel: #15803d;
+    --focus: #2563eb;
+    --bar-height: 72px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #1c1c1e;
       --card: #2c2c2e;
-      --border: #3a3a3c;
+      --border: #48484a;
       --text: #f2f2f7;
-      --muted: #a1a1a6;
+      --muted: #b0b0b5;
+      --accent-text: #ff8a80;
+      --accent-soft: rgba(255, 138, 128, 0.1);
+      --ok: #6fd48f;
+      --link: #8ab4ff;
+      --badge-bulten: #8ab4ff;
+      --badge-promosyon: #ffb070;
+      --badge-bildirim: #c4a8ff;
+      --badge-kisisel: #6fd48f;
+      --focus: #8ab4ff;
     }
   }
   * { box-sizing: border-box; }
+  html { scroll-padding-top: 140px; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     background: var(--bg);
     color: var(--text);
   }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   header {
-    padding: 24px 32px;
+    padding: 18px 32px;
     border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
+    position: sticky; top: 0; z-index: 10;
     background: var(--bg);
-    z-index: 10;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 12px;
+    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
   }
-  h1 { font-size: 20px; margin: 0; }
+  h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .demo-badge {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+    padding: 2px 8px; border-radius: 10px; border: 1px solid currentColor; color: var(--link);
+  }
   .summary { color: var(--muted); font-size: 14px; }
-  main { max-width: 900px; margin: 0 auto; padding: 24px 32px 80px; }
-  .sender-list {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
+  main { max-width: 920px; margin: 0 auto; padding: 20px 32px calc(var(--bar-height) + 40px); }
+
+  /* Bildirim alanı: işlem sonucu, ilerleme ve hatalar burada; sabit çubuğun arkasında kalmaz. */
+  #notice {
+    position: sticky; top: 76px; z-index: 5;
+    margin-bottom: 16px; padding: 12px 16px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    font-size: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
   }
+  #notice:empty { display: none; }
+  #notice.error { border-color: var(--accent); background: var(--accent-soft); }
+  .notice-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .notice-text { flex: 1; min-width: 200px; }
+  #notice details { margin-top: 8px; color: var(--muted); font-size: 13px; }
+  #notice details ul { margin: 6px 0 0; padding-left: 18px; max-height: 200px; overflow: auto; }
+  #notice progress { width: 100%; height: 10px; accent-color: var(--accent); margin-top: 8px; }
+
+  .note {
+    background: var(--accent-soft); border: 1px solid var(--border);
+    padding: 12px 16px; border-radius: 8px; font-size: 13px; margin: 0 0 16px;
+  }
+  .toolbar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+    margin-bottom: 12px; font-size: 13px; color: var(--muted);
+  }
+  .tool { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .tool[hidden] { display: none; }
+  .toolbar select, .action-bar select, #searchInput {
+    background: var(--card); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 13px;
+  }
+  #searchInput { flex: 1; min-width: 180px; padding: 6px 10px; }
+  input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+  input[type="checkbox"]:disabled { cursor: not-allowed; }
+
+  .sender-list { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
   .sender-item { border-top: 1px solid var(--border); }
   .sender-item:first-child { border-top: none; }
-  .sender-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 18px;
-    font-size: 14px;
+  .sender-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-size: 14px; }
+  .sender-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .sender-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sender-email { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sender-count { color: var(--muted); font-size: 13px; min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; }
+  .row-actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .unsub-result { font-size: 12px; color: var(--muted); flex-basis: 100%; text-align: right; }
+  .unsub-result:empty { display: none; }
+  .unsub-result a { color: var(--link); }
+  .badge {
+    display: inline-block; font-size: 11px; padding: 1px 7px; margin-left: 6px;
+    border-radius: 10px; border: 1px solid currentColor; vertical-align: 1px;
   }
-  .sender-preview { display: none; padding: 2px 18px 12px 47px; }
+  .badge-bulten { color: var(--badge-bulten); }
+  .badge-promosyon { color: var(--badge-promosyon); }
+  .badge-bildirim { color: var(--badge-bildirim); }
+  .badge-kisisel { color: var(--badge-kisisel); }
+  .badge-protected { color: var(--ok); }
+  .sender-row.protected .sender-name { color: var(--muted); }
+
+  .sender-preview { display: none; padding: 2px 16px 12px 46px; }
   .sender-preview.open { display: block; }
   .preview-item { padding: 6px 0; border-top: 1px dashed var(--border); }
   .preview-item:first-child { border-top: none; }
-  .preview-subject {
-    font-size: 13px;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
+  .preview-subject { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .preview-snippet {
     color: var(--muted); font-size: 12px; margin-top: 2px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
-  .preview-date { color: var(--muted); }
-  .preview-loading, .preview-empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
-  .sender-row:first-child { border-top: none; }
-  .sender-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .sender-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sender-email { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sender-count { color: var(--muted); font-size: 13px; min-width: 40px; text-align: right; }
-  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; }
-  .unsub-btn {
-    background: transparent;
-    color: var(--accent);
-    border: 1px solid var(--accent);
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: 500;
-    border-radius: 6px;
-    white-space: nowrap;
-  }
-  .unsub-btn:hover { background: rgba(214,69,69,0.1); }
-  .unsub-btn:disabled { border-color: var(--border); color: var(--muted); background: none; }
-  .unsub-result { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .copy-btn {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--border);
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: 500;
-    border-radius: 6px;
-    white-space: nowrap;
-  }
-  .copy-btn:hover { background: rgba(128,128,128,0.1); }
-  .preview-btn {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--border);
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: 500;
-    border-radius: 6px;
-    white-space: nowrap;
-  }
-  .preview-btn:hover { background: rgba(128,128,128,0.1); }
-  .lock-btn {
-    background: transparent; border: 1px solid var(--border); padding: 3px 8px;
-    font-size: 13px; border-radius: 6px;
-  }
-  .lock-btn:hover { background: rgba(128,128,128,0.1); }
-  .sender-row.protected .sender-name { opacity: 0.7; }
-  .action-bar {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    background: var(--card);
-    border-top: 1px solid var(--border);
-    padding: 14px 32px;
-    display: flex;
-    justify-content: center;
-    gap: 16px;
-    align-items: center;
-  }
+  .muted { color: var(--muted); font-size: 13px; padding: 6px 0; }
+
   button {
-    background: var(--accent);
-    color: white;
-    border: none;
-    padding: 12px 22px;
-    border-radius: 8px;
-    font-size: 15px;
-    font-weight: 600;
-    cursor: pointer;
+    font: inherit; cursor: pointer; border-radius: 8px;
+    background: var(--accent); color: #fff; border: 1px solid var(--accent);
+    padding: 11px 20px; font-size: 15px; font-weight: 600;
   }
   button:hover { background: var(--accent-dark); }
-  button:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
-  .secondary-btn { background: transparent; color: var(--text); border: 1px solid var(--border); }
-  .secondary-btn:hover { background: rgba(128,128,128,0.1); }
+  button:disabled { background: var(--border); border-color: var(--border); color: var(--muted); cursor: not-allowed; }
   button[hidden] { display: none; }
-  #selectedInfo { font-size: 14px; color: var(--muted); }
-  #status {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 0 32px 100px;
-    font-size: 14px;
-    white-space: pre-wrap;
+  .secondary-btn { background: transparent; color: var(--text); border-color: var(--border); }
+  .secondary-btn:hover { background: rgba(128, 128, 128, 0.12); }
+  .small-btn {
+    background: transparent; color: var(--text); border-color: var(--border);
+    padding: 4px 10px; font-size: 12px; font-weight: 500; border-radius: 6px; min-height: 30px; white-space: nowrap;
   }
-  .note {
-    background: rgba(214,69,69,0.08);
-    border: 1px solid rgba(214,69,69,0.3);
-    color: var(--text);
-    padding: 12px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    margin-bottom: 20px;
-  }
+  .small-btn:hover { background: rgba(128, 128, 128, 0.12); }
+  .small-btn:disabled { background: none; }
+  .small-btn.danger { color: var(--accent-text); border-color: currentColor; }
+  .copy-btn { min-width: 76px; }
+  .lock-btn[aria-pressed="true"] { color: var(--ok); border-color: currentColor; }
   #scanBtn { padding: 8px 16px; font-size: 13px; }
-  #status progress { width: 100%; height: 10px; accent-color: var(--accent); }
-  .empty-state { color: var(--muted); }
-  .error-state { color: var(--accent); }
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    font-size: 13px;
-    color: var(--muted);
+
+  .action-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
+    background: var(--card); border-top: 1px solid var(--border);
+    padding: 12px 32px calc(12px + env(safe-area-inset-bottom));
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 14px;
   }
-  .toolbar-spacer { flex: 0; }
-  .badge {
-    display: inline-block; font-size: 11px; padding: 1px 7px; margin-left: 6px;
-    border-radius: 10px; border: 1px solid var(--border); color: var(--muted); vertical-align: 1px;
+  #selectedInfo { font-size: 14px; color: var(--muted); }
+  .empty-state { color: var(--muted); padding: 24px; text-align: center; }
+
+  dialog {
+    border: 1px solid var(--border); border-radius: 12px; padding: 0;
+    background: var(--card); color: var(--text); width: min(520px, calc(100vw - 32px));
   }
-  .badge-bulten { color: #2f6fd6; border-color: rgba(47,111,214,0.4); }
-  .badge-promosyon { color: #c2410c; border-color: rgba(194,65,12,0.4); }
-  .badge-bildirim { color: #6d28d9; border-color: rgba(109,40,217,0.4); }
-  .badge-kisisel { color: #15803d; border-color: rgba(21,128,61,0.4); }
-  .select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
-  .toolbar { flex-wrap: wrap; }
-  .select-all[hidden] { display: none; }
-  .tool, #categoryFilterWrap { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
-  #categoryFilterWrap[hidden] { display: none; }
-  .unsub-result { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-  #searchInput {
-    flex: 1; min-width: 160px; background: var(--card); color: var(--text);
-    border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px;
-  }
-  .action-bar select, .toolbar select {
-    background: var(--card);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 8px;
-    font-size: 13px;
+  dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+  .dialog-body { padding: 20px 22px 8px; }
+  .dialog-body h2 { font-size: 17px; margin: 0 0 10px; }
+  .dialog-body p { margin: 8px 0; font-size: 14px; line-height: 1.45; }
+  .dialog-body ul { margin: 8px 0; padding-left: 20px; font-size: 13px; max-height: 220px; overflow: auto; }
+  .dialog-warning { color: var(--accent-text); }
+  .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 22px 18px; flex-wrap: wrap; }
+  .dialog-actions button { padding: 9px 18px; font-size: 14px; }
+
+  @media (max-width: 640px) {
+    /* Telefonda başlık ekranın üçte birini kaplamasın: yapışkan değil, bildirim en üste yapışır. */
+    header { position: static; padding: 14px 16px; }
+    main { padding: 16px 16px calc(var(--bar-height) + 120px); }
+    #notice { top: 8px; }
+    html { scroll-padding-top: 90px; }
+    /* Alt çubuk ekranın küçük bir kısmını kaplasın: bilgi + kapsam bir satır, iki ana buton bir satır. */
+    .action-bar { padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); gap: 6px 8px; }
+    #selectedInfo { flex: 1 1 auto; font-size: 13px; }
+    .action-bar select { flex: 0 1 auto; max-width: 52%; }
+    .action-bar button { flex: 1 1 40%; padding: 8px 10px; font-size: 13px; }
+    #undoBtn { flex-basis: 100%; padding: 6px 10px; }
+    .sender-row { flex-wrap: wrap; gap: 6px 10px; }
+    .sender-info { flex: 1 1 calc(100% - 90px); }
+    .row-actions { flex-basis: 100%; justify-content: flex-start; gap: 4px; }
+    .small-btn { min-height: 36px; padding: 4px 8px; }
+    .copy-btn { min-width: 0; }
+    .unsub-result { text-align: left; }
+    .sender-preview { padding-left: 16px; }
   }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Mail Temizleyici</h1>
+  <h1>Mail Temizleyici{% if demo %} <span class="demo-badge" title="Sahte verilerle çalışıyor; Gmail'e bağlı değil">DEMO</span>{% endif %}</h1>
   <span class="summary" id="grandTotal"></span>
   <button id="scanBtn" type="button">Gelen Kutusunu Tara</button>
 </header>
 
 <main>
-  <div class="note">
-    Seçtiğin gönderenlerden gelen mailler <strong>kalıcı olarak silinmez</strong>, Gmail'in
-    Çöp Kutusu'na taşınır. Gmail 30 gün sonra çöp kutusunu otomatik boşaltır, o zamana kadar geri alabilirsin.
-  </div>
+  <div id="notice" role="status" aria-live="polite"></div>
+
+  <p class="note">
+    Seçtiğin gönderenlerin mailleri <strong>kalıcı olarak silinmez</strong>, Gmail'in Çöp Kutusu'na taşınır.
+    Gmail Çöp Kutusu'nu 30 gün sonra boşaltır; o zamana kadar geri alabilirsin.
+  </p>
+
   <div class="toolbar">
-    <label class="select-all" title="Yalnız ekranda görünenleri seçer"><input type="checkbox" id="selectAll"> Tümünü seç</label>
-    <input type="search" id="searchInput" placeholder="Ad ya da adres ara..." autocomplete="off">
-    <label class="select-all" id="unsubFilterWrap" hidden><input type="checkbox" id="unsubFilter"> Abonelik linki olanlar</label>
-    <span class="toolbar-spacer"></span>
-    <span id="categoryFilterWrap" hidden>
+    <label class="tool"><input type="checkbox" id="selectAll"> <span id="selectAllLabel">Tümünü seç</span></label>
+    <input type="search" id="searchInput" placeholder="Ad ya da adres ara…" aria-label="Gönderen ara" autocomplete="off">
+    <label class="tool" id="unsubFilterWrap" hidden><input type="checkbox" id="unsubFilter"> Abonelik linki olanlar</label>
+    <span class="tool" id="categoryFilterWrap" hidden>
       <label for="categorySelect">Kategori:</label>
       <select id="categorySelect">
         <option value="">Tümü</option>
@@ -234,85 +229,219 @@
       </select>
     </span>
     <span class="tool">
-    <label for="viewSelect">Görünüm:</label>
-    <select id="viewSelect">
-      <option value="address">Adres</option>
-      <option value="domain">Alan adı</option>
-    </select>
+      <label for="viewSelect">Görünüm:</label>
+      <select id="viewSelect">
+        <option value="address">Adres</option>
+        <option value="domain">Alan adı</option>
+      </select>
     </span>
     <span class="tool">
-    <label for="sortSelect">Sırala:</label>
-    <select id="sortSelect">
-      <option value="count_desc">Mail sayısı (çoktan aza)</option>
-      <option value="count_asc">Mail sayısı (azdan çoğa)</option>
-      <option value="name_asc">İsme göre (A-Z)</option>
-      <option value="name_desc">İsme göre (Z-A)</option>
-    </select>
+      <label for="sortSelect">Sırala:</label>
+      <select id="sortSelect">
+        <option value="count_desc">Mail sayısı (çoktan aza)</option>
+        <option value="count_asc">Mail sayısı (azdan çoğa)</option>
+        <option value="name_asc">İsme göre (A–Z)</option>
+        <option value="name_desc">İsme göre (Z–A)</option>
+      </select>
     </span>
   </div>
-  <div id="senders">Yükleniyor...</div>
+
+  <div id="senders"><p class="empty-state">Yükleniyor…</p></div>
 </main>
 
-<div id="status"></div>
-
 <div class="action-bar">
-  <span id="selectedInfo">0 mail seçildi</span>
-  <select id="scopeSelect" title="Silme ve önizleme hangi mailleri kapsasın?">
+  <span id="selectedInfo" aria-live="polite">Seçim yok</span>
+  <select id="scopeSelect" aria-label="İşlem kapsamı">
     <option value="inbox">Yalnız gelen kutusu</option>
     <option value="all">Tüm mailler (arşiv dahil)</option>
   </select>
-  <button id="unsubBtn" disabled>Seçilenlerin Aboneliğinden Çık</button>
-  <button id="deleteBtn" disabled>Seçilenleri Çöpe Taşı</button>
-  <button id="undoBtn" class="secondary-btn" type="button" hidden>Son silmeyi geri al</button>
+  <button id="unsubBtn" type="button" disabled aria-describedby="selectedInfo">Seçilenlerin aboneliğinden çık</button>
+  <button id="deleteBtn" type="button" disabled aria-describedby="selectedInfo">Seçilenleri Çöp Kutusu'na taşı</button>
+  <button id="undoBtn" class="secondary-btn" type="button" hidden>Son taşımayı geri al</button>
 </div>
 
+<dialog id="confirmDialog" aria-labelledby="confirmTitle">
+  <form method="dialog">
+    <div class="dialog-body">
+      <h2 id="confirmTitle"></h2>
+      <div id="confirmContent"></div>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" class="secondary-btn" id="confirmCancel">Vazgeç</button>
+      <button value="ok" id="confirmOk"></button>
+    </div>
+  </form>
+</dialog>
+
 <script>
-let data = null;
-let sortMode = 'count_desc';
-let scope = 'inbox';
-let viewMode = 'address';
-let categoryFilter = '';
 const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: 'Bildirim', kisisel: 'Kişisel' };
+const DIALOG_LIST_LIMIT = 8;
+const DELETE_LABEL = "Seçilenleri Çöp Kutusu'na taşı";
+const UNSUB_LABEL = 'Seçilenlerin aboneliğinden çık';
 
-let searchText = '';
-let onlyWithUnsubscribe = false;
+const state = {
+  data: null,
+  sortMode: 'count_desc',
+  scope: 'inbox',
+  viewMode: 'address',
+  categoryFilter: '',
+  searchText: '',
+  onlyWithUnsubscribe: false,
+  protectedList: { adresler: [], alanlar: [] },
+  // Seçim DOM'da değil burada tutulur; liste yeniden çizilince (sıralama, görünüm, filtre) kaybolmasın.
+  selected: new Set(),
+  // Tarama, taşıma, geri alma ya da abonelik işlemi sürerken işlem butonları kapalı kalır.
+  busy: false,
+  openPanels: new Set(),
+  previewCache: new Map(),
+};
 
-function passesFilters(g) {
-  if (categoryFilter && g.kategori !== categoryFilter) return false;
-  if (onlyWithUnsubscribe && !g.abonelik) return false;
-  if (searchText) {
-    const haystack = `${g.ad} ${g.gonderen}`.toLocaleLowerCase('tr');
-    if (!haystack.includes(searchText)) return false;
+const $ = id => document.getElementById(id);
+
+// --- Küçük yardımcılar -------------------------------------------------------
+
+// Mail başlıklarından gelen metin sayfaya yalnız textContent ile girer (innerHTML yok):
+// gönderen adı HTML ya da yeni bir attribute açamaz.
+// el('button', { class: 'x', onclick: fn }, 'metin', çocukEleman)
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === undefined || value === null || value === false) continue;
+    if (key.startsWith('on')) node.addEventListener(key.slice(2), value);
+    else if (key === 'class') node.className = value;
+    else if (value === true) node.setAttribute(key, '');
+    else node.setAttribute(key, value);
   }
-  return true;
-}
-let protectedList = { adresler: [], alanlar: [] };
-// Sunucudaki is_protected ile aynı kural: alan adı alt alan adlarını da kapsar.
-function isProtected(address) {
-  const email = address.toLowerCase();
-  const domain = domainOf(email);
-  return protectedList.adresler.includes(email) ||
-    protectedList.alanlar.some(d => domain === d.slice(1) || domain.endsWith('.' + d.slice(1)));
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
 }
 
-// Seçim DOM'da değil burada tutulur; liste yeniden çizilince (sıralama, görünüm) kaybolmasın.
-const selected = new Set();
+class ApiError extends Error {
+  constructor(message, status, body) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// Bütün sunucu çağrıları buradan geçer: JSON olmayan hata sayfası ya da kapalı sunucu
+// da okunur bir mesaja dönüşür.
+async function api(url, payload) {
+  const options = payload === undefined ? {} : {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  };
+  let res;
+  try {
+    res = await fetch(url, options);
+  } catch (err) {
+    throw new ApiError('Sunucuya ulaşılamadı. Uygulama hâlâ çalışıyor mu?', 0, null);
+  }
+  let body = null;
+  try { body = await res.json(); } catch (err) { /* JSON değil */ }
+  if (!res.ok) throw new ApiError(body?.error || `Sunucu hatası (${res.status})`, res.status, body);
+  return body;
+}
 
 function domainOf(address) {
   const at = address.lastIndexOf('@');
   return at === -1 ? address : address.slice(at + 1);
 }
 
+// Sunucudaki is_protected ile aynı kural: alan adı alt alan adlarını da kapsar.
+function isProtected(address) {
+  const email = address.toLowerCase();
+  const domain = domainOf(email);
+  return state.protectedList.adresler.includes(email) ||
+    state.protectedList.alanlar.some(d => domain === d.slice(1) || domain.endsWith('.' + d.slice(1)));
+}
+
+function formatDate(ms) {
+  if (!ms) return '';
+  return new Date(Number(ms)).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return 'bir dakikadan az';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `yaklaşık ${minutes} dk`;
+  return `yaklaşık ${Math.floor(minutes / 60)} sa ${minutes % 60} dk`;
+}
+
+// --- Bildirim alanı ----------------------------------------------------------
+
+// notify('metin', { error, details: [...], action: { label, onclick } })
+function notify(text, { error = false, details = null, action = null } = {}) {
+  const box = $('notice');
+  box.classList.toggle('error', error);
+  box.replaceChildren(el('div', { class: 'notice-row' },
+    el('span', { class: 'notice-text' }, text),
+    action && el('button', { type: 'button', class: 'small-btn', onclick: action.onclick }, action.label),
+    el('button', { type: 'button', class: 'small-btn', 'aria-label': 'Bildirimi kapat', onclick: clearNotice }, '✕'),
+  ));
+  if (details && details.length) {
+    box.append(el('details', {}, el('summary', {}, 'Ayrıntılar'), el('ul', {}, details.map(d => el('li', {}, d)))));
+  }
+  box.scrollIntoView({ block: 'nearest' });
+}
+
+function clearNotice() {
+  $('notice').classList.remove('error');
+  $('notice').replaceChildren();
+}
+
+function notifyError(prefix, err) {
+  notify(`${prefix}: ${err.message}`, { error: true });
+}
+
+// --- Onay penceresi ----------------------------------------------------------
+
+// Tarayıcının confirm()'ü uzun listeleri taşırır; burada ilk birkaç gönderen görünür, gerisi katlanır.
+// Odak "Vazgeç"te başlar: Enter'a yanlışlıkla basmak işlemi başlatmasın.
+function confirmDialog({ title, lines = [], items = [], warning = '', confirmLabel }) {
+  const dialog = $('confirmDialog');
+  $('confirmTitle').textContent = title;
+  const rest = items.slice(DIALOG_LIST_LIMIT);
+  // replaceChildren null'ı "null" metni olarak ekler; boş parçaları ayıkla.
+  $('confirmContent').replaceChildren(...[
+    ...lines.map(line => el('p', {}, line)),
+    items.length ? el('ul', {}, items.slice(0, DIALOG_LIST_LIMIT).map(item => el('li', {}, item))) : null,
+    rest.length ? el('details', {}, el('summary', {}, `ve ${rest.length} gönderen daha`),
+                     el('ul', {}, rest.map(item => el('li', {}, item)))) : null,
+    warning ? el('p', { class: 'dialog-warning' }, warning) : null,
+  ].filter(Boolean));
+  $('confirmOk').textContent = confirmLabel;
+  dialog.returnValue = '';
+  return new Promise(resolve => {
+    dialog.addEventListener('close', () => resolve(dialog.returnValue === 'ok'), { once: true });
+    dialog.showModal();
+    $('confirmCancel').focus();
+  });
+}
+
+// --- Veri ve liste -----------------------------------------------------------
+
+function passesFilters(g) {
+  if (state.categoryFilter && g.kategori !== state.categoryFilter) return false;
+  if (state.onlyWithUnsubscribe && !g.abonelik) return false;
+  if (state.searchText) {
+    const haystack = `${g.ad} ${g.gonderen}`.toLocaleLowerCase('tr');
+    if (!haystack.includes(state.searchText)) return false;
+  }
+  return true;
+}
+
 // Ekrandaki satırlar: adres görünümünde gönderen başına, alan adı görünümünde alan adı başına bir satır.
 function buildRows() {
-  const visible = data.gonderenler.filter(passesFilters);
-  if (viewMode === 'address') {
+  const visible = state.data.gonderenler.filter(passesFilters);
+  if (state.viewMode === 'address') {
     return visible.map(g => ({
-      key: g.gonderen,
-      label: g.ad || g.gonderen,
-      sub: g.ad ? g.gonderen : '',
-      count: g.mail_sayisi,
-      members: [g],
+      key: g.gonderen, label: g.ad || g.gonderen, sub: g.ad ? g.gonderen : '',
+      count: g.mail_sayisi, members: [g], single: true,
     }));
   }
   const groups = new Map();
@@ -322,573 +451,565 @@ function buildRows() {
     groups.get(domain).push(g);
   });
   return [...groups].map(([domain, members]) => ({
-    key: '@' + domain,
-    label: domain,
-    sub: `${members.length} adres`,
-    count: members.reduce((sum, g) => sum + g.mail_sayisi, 0),
-    members,
+    key: '@' + domain, label: domain, sub: `${members.length} adres`,
+    count: members.reduce((sum, g) => sum + g.mail_sayisi, 0), members, single: false,
   }));
 }
 
 function sortedRows() {
   const rows = buildRows();
   rows.sort((a, b) => {
-    if (sortMode === 'name_asc') return a.label.localeCompare(b.label, 'tr');
-    if (sortMode === 'name_desc') return b.label.localeCompare(a.label, 'tr');
+    if (state.sortMode === 'name_asc') return a.label.localeCompare(b.label, 'tr');
+    if (state.sortMode === 'name_desc') return b.label.localeCompare(a.label, 'tr');
     const diff = a.count - b.count;
-    return sortMode === 'count_asc' ? diff : -diff;
+    return state.sortMode === 'count_asc' ? diff : -diff;
   });
   return rows;
 }
 
-// textContent → innerHTML yöntemi tırnakları kaçırmaz; değer attribute içine
-// (title="...") girdiğinde gönderen adı yeni attribute açabilirdi.
-const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
-function escapeHtml(str) {
-  return String(str ?? '').replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
-}
-
-async function copyToClipboard(text, btnEl) {
-  const originalText = btnEl.textContent;
-  try {
-    await navigator.clipboard.writeText(text);
-    btnEl.textContent = 'Kopyalandı!';
-  } catch (err) {
-    btnEl.textContent = 'Kopyalanamadı';
-  } finally {
-    setTimeout(() => { btnEl.textContent = originalText; }, 1500);
-  }
+function setData(body) {
+  state.data = body;
+  const known = new Set(state.data.gonderenler.map(g => g.gonderen));
+  [...state.selected].forEach(key => {
+    if (!known.has(key) || isProtected(key)) state.selected.delete(key);
+  });
+  render();
 }
 
 async function load() {
   try {
-    const [res, protRes] = await Promise.all([fetch('/api/senders'), fetch('/api/protected')]);
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
-    const prot = await protRes.json();
-    if (!protRes.ok) throw new Error(prot.error || `Sunucu hatası (${protRes.status})`);
-    protectedList = prot;
-    setData(body);
+    const [senders, protectedList] = await Promise.all([api('/api/senders'), api('/api/protected')]);
+    state.protectedList = protectedList;
+    setData(senders);
   } catch (err) {
-    document.getElementById('senders').innerHTML =
-      `<p class="error-state">Gönderenler yüklenemedi: ${escapeHtml(err.message)}</p>`;
+    $('senders').replaceChildren(el('div', { class: 'empty-state' },
+      el('p', {}, `Gönderenler yüklenemedi: ${err.message}`),
+      el('button', { type: 'button', class: 'secondary-btn', onclick: load }, 'Yeniden dene'),
+    ));
   }
 }
 
-function setData(body) {
-  data = body;
-  const known = new Set(data.gonderenler.map(g => g.gonderen));
-  [...selected].forEach(key => { if (!known.has(key) || isProtected(key)) selected.delete(key); });
-  render();
+// Liste yeniden çizilince odak kaybolmasın: aynı satırın aynı butonuna geri ver.
+function rememberFocus() {
+  const active = document.activeElement;
+  const row = active?.closest?.('.sender-row');
+  return row ? { key: row.dataset.key, role: active.dataset.role } : null;
+}
+
+function restoreFocus(focus) {
+  if (!focus) return;
+  const row = [...document.querySelectorAll('.sender-row')].find(r => r.dataset.key === focus.key);
+  row?.querySelector(`[data-role="${focus.role}"]`)?.focus();
 }
 
 function render() {
-  document.getElementById('grandTotal').textContent =
-    `Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen`;
+  const focus = rememberFocus();
+  const data = state.data;
+  $('grandTotal').textContent = `Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen`;
+  // Kategori ve abonelik bilgisi yalnız yeni taramada toplanır; eski kayıtta filtreleri gösterme.
+  $('categoryFilterWrap').hidden = !data.gonderenler.some(g => g.kategori);
+  $('unsubFilterWrap').hidden = !data.gonderenler.some(g => 'abonelik' in g);
 
-  const container = document.getElementById('senders');
-  container.innerHTML = '';
-
+  const container = $('senders');
   if (!data.gonderenler.length) {
-    container.innerHTML =
-      '<p class="empty-state">Henüz veri yok. Yukarıdaki "Gelen Kutusunu Tara" butonuna ' +
-      'basarak başlayabilirsin.</p>';
+    container.replaceChildren(el('p', { class: 'empty-state' },
+      'Henüz veri yok. Yukarıdaki "Gelen Kutusunu Tara" butonuyla başla.'));
     updateSelection();
     return;
   }
-
-  // Kategori yalnız yeni taramada toplanır; eski kayıtta filtreyi gösterme.
-  document.getElementById('categoryFilterWrap').hidden = !data.gonderenler.some(g => g.kategori);
-  document.getElementById('unsubFilterWrap').hidden = !data.gonderenler.some(g => 'abonelik' in g);
 
   const rows = sortedRows();
   if (!rows.length) {
-    container.innerHTML = '<p class="empty-state">Filtreye uyan gönderen yok.</p>';
-    syncSelectAll();
+    container.replaceChildren(el('div', { class: 'empty-state' },
+      el('p', {}, 'Filtreye uyan gönderen yok.'),
+      el('button', { type: 'button', class: 'secondary-btn', onclick: clearFilters }, 'Filtreleri temizle'),
+    ));
     updateSelection();
     return;
   }
 
-  const list = document.createElement('div');
-  list.className = 'sender-list';
-
-  rows.forEach(rowData => {
-    const item = document.createElement('div');
-    item.className = 'sender-item';
-    const single = rowData.members.length === 1 && viewMode === 'address';
-    const g = rowData.members[0];
-    // Alan adı satırının kilidi alan adını, adres satırınınki yalnız adresi korur.
-    const lockValue = single ? g.gonderen : rowData.key;
-    const locked = single ? isProtected(g.gonderen) : protectedList.alanlar.includes(rowData.key);
-    // Alan adı satırında korunan adresler seçime girmez; satır yalnız hepsi korunuyorsa kapanır.
-    const selectable = rowData.members.filter(m => !isProtected(m.gonderen));
-    const anyLocked = selectable.length === 0;
-
-    const row = document.createElement('div');
-    row.className = 'sender-row' + (anyLocked ? ' protected' : '');
-    const title = single && g.ad ? `${g.ad} <${g.gonderen}>` : rowData.key;
-    row.innerHTML = `
-      <input type="checkbox" class="sender-checkbox" ${anyLocked ? 'disabled title="Korunan gönderen"' : ''}>
-      <div class="sender-info" title="${escapeHtml(title)}">
-        <span class="sender-name">${escapeHtml(rowData.label)}${single && CATEGORY_LABELS[g.kategori]
-          ? ` <span class="badge badge-${g.kategori}">${CATEGORY_LABELS[g.kategori]}</span>` : ''}</span>
-        ${rowData.sub ? `<span class="sender-email">${escapeHtml(rowData.sub)}</span>` : ''}
-      </div>
-      <span class="sender-count">${rowData.count}</span>
-      <button class="preview-btn" type="button">${single ? 'Önizle' : 'Adresler'}</button>
-      <button class="copy-btn" type="button" title="${single ? 'E-posta adresini' : 'Alan adını'} kopyala">Kopyala</button>
-      <button class="lock-btn" type="button" title="${locked ? 'Korumayı kaldır' : 'Koru: seçilemez ve silinemez'}">${locked ? '🔒' : '🔓'}</button>
-      ${single ? `<button class="unsub-btn" type="button" ${anyLocked ? 'disabled' : ''}>Çık</button><span class="unsub-result"></span>` : ''}
-    `;
-
-    const previewPanel = document.createElement('div');
-    previewPanel.className = 'sender-preview';
-
-    const checkbox = row.querySelector('.sender-checkbox');
-    checkbox.rowMembers = selectable;
-    syncRowCheckbox(checkbox);
-    checkbox.addEventListener('change', () => {
-      selectable.forEach(m => checkbox.checked ? selected.add(m.gonderen) : selected.delete(m.gonderen));
-      syncSelectAll();
-      updateSelection();
-    });
-    row.querySelector('.preview-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (single) togglePreview(g.gonderen, previewPanel, e.target);
-      else toggleMembers(rowData.members, previewPanel, e.target);
-    });
-    row.querySelector('.copy-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      copyToClipboard(single ? g.gonderen : domainOf(g.gonderen), e.target);
-    });
-    row.querySelector('.lock-btn').addEventListener('click', (e) => {
-      e.stopPropagation();
-      toggleProtected(lockValue, !locked, e.target);
-    });
-    if (single) {
-      row.querySelector('.unsub-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        runUnsubscribe([g.gonderen], row.querySelector('.unsub-result'), e.target);
-      });
-    }
-
-    item.appendChild(row);
-    item.appendChild(previewPanel);
-    list.appendChild(item);
-  });
-
-  container.appendChild(list);
-  syncSelectAll();
+  container.replaceChildren(el('div', { class: 'sender-list' }, rows.map(createRow)));
   updateSelection();
+  restoreFocus(focus);
 }
 
-async function toggleProtected(value, makeProtected, btnEl) {
-  btnEl.disabled = true;
-  try {
-    const res = await fetch('/api/protected', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ value, protected: makeProtected })
-    });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
-    protectedList = body;
-    setData(data);
-  } catch (err) {
-    btnEl.disabled = false;
-    document.getElementById('status').textContent = 'Koruma değiştirilemedi: ' + err.message;
-  }
+function createRow(rowData) {
+  const { single, members } = rowData;
+  const g = members[0];
+  // Alan adı satırında korunan adresler seçime girmez; satır yalnız hepsi korunuyorsa kapanır.
+  const selectable = members.filter(m => !isProtected(m.gonderen));
+  const allLocked = selectable.length === 0;
+  // Alan adı satırının kilidi alan adını, adres satırınınki yalnız adresi korur.
+  const lockValue = single ? g.gonderen : rowData.key;
+  const locked = single ? isProtected(g.gonderen) : state.protectedList.alanlar.includes(rowData.key);
+
+  const checkbox = el('input', {
+    type: 'checkbox', class: 'sender-checkbox', 'data-role': 'select',
+    'aria-label': `${rowData.label} seç`, disabled: allLocked,
+    title: allLocked ? 'Korunan gönderen: seçilemez' : null,
+    onchange: () => {
+      selectable.forEach(m => checkbox.checked ? state.selected.add(m.gonderen) : state.selected.delete(m.gonderen));
+      updateSelection();
+    },
+  });
+  checkbox.rowMembers = selectable;
+
+  const panel = el('div', { class: 'sender-preview', id: `panel-${rowData.key.replace(/[^a-zA-Z0-9_-]/g, '_')}` });
+  const previewBtn = el('button', {
+    type: 'button', class: 'small-btn', 'data-role': 'preview',
+    'aria-expanded': 'false', 'aria-controls': panel.id,
+    'aria-label': single ? `${rowData.label}: son mailleri önizle` : `${rowData.label}: adresleri göster`,
+    onclick: () => togglePanel(rowData, panel, previewBtn),
+  }, single ? 'Önizle' : 'Adresler');
+
+  const copyText = single ? g.gonderen : domainOf(g.gonderen);
+  const copyBtn = el('button', {
+    type: 'button', class: 'small-btn copy-btn', 'data-role': 'copy',
+    'aria-label': `${copyText} kopyala`, onclick: () => copyToClipboard(copyText, copyBtn),
+  }, 'Kopyala');
+
+  const lockBtn = el('button', {
+    type: 'button', class: 'small-btn lock-btn', 'data-role': 'lock', 'aria-pressed': String(locked),
+    title: locked ? 'Korumayı kaldır' : 'Koru: seçilemez, taşınamaz, abonelikten çıkılamaz',
+    onclick: () => toggleProtected(lockValue, !locked, lockBtn),
+  }, el('span', { 'aria-hidden': 'true' }, locked ? '🔒 ' : '🔓 '), locked ? 'Korunuyor' : 'Koru');
+
+  const unsubResult = el('span', { class: 'unsub-result', 'data-result-for': g.gonderen });
+  const unsubBtn = single && el('button', {
+    type: 'button', class: 'small-btn danger unsub-btn', 'data-role': 'unsub', disabled: allLocked,
+    'aria-label': `${rowData.label} aboneliğinden çık`,
+    onclick: () => unsubscribeRow(g.gonderen, unsubResult, unsubBtn),
+  }, 'Abonelikten çık');
+
+  const badge = single && CATEGORY_LABELS[g.kategori]
+    ? el('span', { class: `badge badge-${g.kategori}` }, CATEGORY_LABELS[g.kategori]) : null;
+  const protectedCount = members.length - selectable.length;
+  const protectedBadge = protectedCount
+    ? el('span', { class: 'badge badge-protected' }, single ? 'Korunuyor' : `${protectedCount} korunuyor`) : null;
+
+  const row = el('div', { class: 'sender-row' + (allLocked ? ' protected' : ''), 'data-key': rowData.key },
+    checkbox,
+    el('div', { class: 'sender-info', title: single && g.ad ? `${g.ad} <${g.gonderen}>` : rowData.key },
+      el('span', { class: 'sender-name' }, rowData.label, badge, protectedBadge),
+      rowData.sub ? el('span', { class: 'sender-email' }, rowData.sub) : null,
+    ),
+    el('span', { class: 'sender-count', 'aria-label': `${rowData.count} mail` }, rowData.count),
+    el('div', { class: 'row-actions' }, previewBtn, copyBtn, lockBtn, unsubBtn, unsubResult),
+  );
+  syncRowCheckbox(checkbox);
+
+  if (state.openPanels.has(rowData.key)) togglePanel(rowData, panel, previewBtn, true);
+  return el('div', { class: 'sender-item' }, row, panel);
 }
 
 function syncRowCheckbox(checkbox) {
-  const picked = checkbox.rowMembers.filter(m => selected.has(m.gonderen)).length;
+  const picked = checkbox.rowMembers.filter(m => state.selected.has(m.gonderen)).length;
   checkbox.checked = picked > 0 && picked === checkbox.rowMembers.length;
   checkbox.indeterminate = picked > 0 && !checkbox.checked;
 }
 
-function toggleMembers(members, panel, btnEl) {
-  const open = panel.classList.toggle('open');
-  btnEl.textContent = open ? 'Gizle' : 'Adresler';
-  if (!open) return;
-  panel.innerHTML = members
-    .slice().sort((a, b) => b.mail_sayisi - a.mail_sayisi)
-    .map(m => `
-      <div class="preview-item">
-        <div class="preview-subject">${escapeHtml(m.gonderen)} · ${m.mail_sayisi} mail</div>
-        ${m.ad ? `<div class="preview-snippet">${escapeHtml(m.ad)}</div>` : ''}
-      </div>
-    `).join('');
+function clearFilters() {
+  state.searchText = '';
+  state.categoryFilter = '';
+  state.onlyWithUnsubscribe = false;
+  $('searchInput').value = '';
+  $('categorySelect').value = '';
+  $('unsubFilter').checked = false;
+  render();
 }
 
-function formatDate(ms) {
-  if (!ms) return '';
-  return new Date(Number(ms)).toLocaleDateString('tr-TR',
-    { day: 'numeric', month: 'short', year: 'numeric' });
-}
+// --- Önizleme ve adres listesi -----------------------------------------------
 
-async function togglePreview(sender, panel, btnEl) {
-  if (panel.classList.contains('open')) {
-    panel.classList.remove('open');
-    btnEl.textContent = 'Önizle';
+async function togglePanel(rowData, panel, btn, forceOpen = false) {
+  const open = forceOpen || !panel.classList.contains('open');
+  panel.classList.toggle('open', open);
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? 'Gizle' : (rowData.single ? 'Önizle' : 'Adresler');
+  if (!open) {
+    state.openPanels.delete(rowData.key);
     return;
   }
-  panel.classList.add('open');
-  btnEl.textContent = 'Gizle';
-  if (panel.dataset.loaded === '1') return;  // bir kez yükle, tekrar açılınca cache'ten göster
+  state.openPanels.add(rowData.key);
 
-  panel.innerHTML = '<div class="preview-loading">Yükleniyor...</div>';
+  if (!rowData.single) {
+    panel.replaceChildren(...rowData.members.slice().sort((a, b) => b.mail_sayisi - a.mail_sayisi).map(m =>
+      el('div', { class: 'preview-item' },
+        el('div', { class: 'preview-subject' }, `${m.gonderen} · ${m.mail_sayisi} mail`,
+           isProtected(m.gonderen) ? el('span', { class: 'badge badge-protected' }, 'Korunuyor') : null),
+        m.ad ? el('div', { class: 'preview-snippet' }, m.ad) : null,
+      )));
+    return;
+  }
+
+  const sender = rowData.members[0].gonderen;
+  const cacheKey = `${state.scope}|${sender}`;
+  if (state.previewCache.has(cacheKey)) {
+    renderPreviews(panel, state.previewCache.get(cacheKey));
+    return;
+  }
+  panel.replaceChildren(el('div', { class: 'muted' }, 'Yükleniyor…'));
   try {
-    const res = await fetch('/api/preview', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sender, scope })
-    });
-    const body = await res.json();
-    if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
-
-    if (!body.previews.length) {
-      panel.innerHTML = '<div class="preview-empty">Bu gönderenden mail bulunamadı.</div>';
-    } else {
-      panel.innerHTML = body.previews.map(p => `
-        <div class="preview-item">
-          <div class="preview-subject">${escapeHtml(p.subject)}</div>
-          <div class="preview-snippet"><span class="preview-date">${formatDate(p.date)}</span>${p.snippet ? ' — ' + escapeHtml(p.snippet) : ''}</div>
-        </div>
-      `).join('');
-    }
-    panel.dataset.loaded = '1';
+    const body = await api('/api/preview', { sender, scope: state.scope });
+    state.previewCache.set(cacheKey, body.previews);
+    renderPreviews(panel, body.previews);
   } catch (err) {
-    panel.innerHTML = `<div class="error-state">Önizleme yüklenemedi: ${escapeHtml(err.message)}</div>`;
+    panel.replaceChildren(el('div', { class: 'muted' }, `Önizleme yüklenemedi: ${err.message}`));
   }
 }
 
-function syncSelectAll() {
-  const boxes = [...document.querySelectorAll('.sender-checkbox:not(:disabled)')];
-  const selectAll = document.getElementById('selectAll');
-  selectAll.checked = boxes.length > 0 && boxes.every(b => b.checked);
-  selectAll.indeterminate = boxes.some(b => b.checked || b.indeterminate) && !selectAll.checked;
+function renderPreviews(panel, previews) {
+  if (!previews.length) {
+    panel.replaceChildren(el('div', { class: 'muted' }, 'Bu kapsamda bu gönderenden mail bulunamadı.'));
+    return;
+  }
+  panel.replaceChildren(...previews.map(p => el('div', { class: 'preview-item' },
+    el('div', { class: 'preview-subject' }, p.subject),
+    el('div', { class: 'preview-snippet' }, formatDate(p.date), p.snippet ? ` — ${p.snippet}` : ''),
+  )));
 }
 
+async function copyToClipboard(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Kopyalandı';
+    notify(`${text} panoya kopyalandı.`);
+  } catch (err) {
+    btn.textContent = 'Kopyalanamadı';
+  } finally {
+    setTimeout(() => { btn.textContent = 'Kopyala'; }, 1500);
+  }
+}
+
+// --- Seçim -------------------------------------------------------------------
+
 function getSelected() {
-  return data ? data.gonderenler.filter(g => selected.has(g.gonderen)) : [];
+  return state.data ? state.data.gonderenler.filter(g => state.selected.has(g.gonderen)) : [];
+}
+
+function visibleCheckboxes() {
+  return [...document.querySelectorAll('.sender-checkbox:not(:disabled)')];
 }
 
 function updateSelection() {
   const picked = getSelected();
   const totalMail = picked.reduce((sum, g) => sum + g.mail_sayisi, 0);
-  // Filtre değişince önceki seçimler gizli kalabilir; silmeye girdiklerini açıkça göster.
+  // Filtre değişince önceki seçimler gizli kalabilir; işleme girdiklerini açıkça göster.
   const hidden = picked.filter(g => !passesFilters(g)).length;
-  document.getElementById('selectedInfo').textContent =
-    (picked.length ? `${picked.length} gönderen, ${totalMail} mail seçildi` : '0 mail seçildi') +
-    (hidden ? ` (${hidden} tanesi filtre yüzünden görünmüyor)` : '');
-  document.getElementById('deleteBtn').disabled = busy || picked.length === 0;
-  document.getElementById('unsubBtn').disabled = busy || picked.length === 0;
+  $('selectedInfo').textContent =
+    (picked.length ? `${picked.length} gönderen seçildi (${totalMail} mail)` : 'Seçim yok') +
+    (hidden ? ` · ${hidden} tanesi filtre yüzünden görünmüyor` : '');
+  $('deleteBtn').disabled = state.busy || picked.length === 0;
+  $('unsubBtn').disabled = state.busy || picked.length === 0;
+
+  const boxes = visibleCheckboxes();
+  const filtered = state.searchText || state.categoryFilter || state.onlyWithUnsubscribe;
+  $('selectAllLabel').textContent = `${filtered ? 'Görünenleri seç' : 'Tümünü seç'} (${boxes.length})`;
+  $('selectAll').checked = boxes.length > 0 && boxes.every(b => b.checked);
+  $('selectAll').indeterminate = boxes.some(b => b.checked || b.indeterminate) && !$('selectAll').checked;
 }
 
+function setBusy(busy) {
+  state.busy = busy;
+  $('undoBtn').disabled = busy;
+  $('scanBtn').disabled = busy;
+  updateSelection();
+}
+
+// --- Koruma ------------------------------------------------------------------
+
+async function toggleProtected(value, makeProtected, btn) {
+  // disabled yerine aria-disabled: disabled buton odağı kaybeder, liste yeniden çizilince odak geri verilemez.
+  if (btn.getAttribute('aria-disabled') === 'true') return;
+  btn.setAttribute('aria-disabled', 'true');
+  try {
+    state.protectedList = await api('/api/protected', { value, protected: makeProtected });
+    setData(state.data);
+    notify(makeProtected ? `${value} korunuyor: seçilemez, taşınamaz.` : `${value} artık korunmuyor.`);
+  } catch (err) {
+    btn.removeAttribute('aria-disabled');
+    notifyError('Koruma değiştirilemedi', err);
+  }
+}
+
+// --- Abonelikten çıkma -------------------------------------------------------
+
 function describeUnsubResult(r) {
-  if (r.status === 'done') return `✅ otomatik çıkıldı`;
-  if (r.status === 'manual_link') return `🔗 link: ${r.url}`;
-  if (r.status === 'manual_mailto') return `✉️ mail gönder: ${r.url}`;
-  if (r.status === 'not_found') return `– mail bulunamadı`;
-  return `– abonelik linki yok`;
+  if (r.status === 'done') return '✅ Otomatik olarak çıkıldı';
+  if (r.status === 'manual_link') return '🔗 Çıkış sayfası var';
+  if (r.status === 'manual_mailto') return '✉️ Çıkış maili adresi var';
+  if (r.status === 'not_found') return 'Bu gönderenden mail bulunamadı';
+  return 'Abonelik linki yok';
 }
 
 // Link, fetch'ten sonra window.open ile açılırsa popup engelleyicisine takılır;
 // bunun yerine kullanıcının tıklayacağı bir bağlantı gösteriyoruz.
 function showUnsubResult(resultEl, r) {
-  resultEl.textContent = '';
-  const isLink = (r.status === 'manual_link' || r.status === 'manual_mailto') &&
-    /^(https?:|mailto:)/i.test(r.url || '');
+  const isLink = (r.status === 'manual_link' || r.status === 'manual_mailto') && /^(https?:|mailto:)/i.test(r.url || '');
   if (!isLink) {
     resultEl.textContent = describeUnsubResult(r);
     return;
   }
-  const a = document.createElement('a');
-  a.href = r.url;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-  a.textContent = r.status === 'manual_link' ? '🔗 Çıkış sayfasını aç' : '✉️ Çıkış maili gönder';
-  resultEl.appendChild(a);
+  resultEl.replaceChildren(el('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' },
+    r.status === 'manual_link' ? '🔗 Çıkış sayfasını aç' : '✉️ Çıkış maili gönder'));
 }
 
-async function postUnsubscribe(senders, confirmOneClick) {
-  const res = await fetch('/api/unsubscribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ senders, confirm_one_click: confirmOneClick })
-  });
-  const body = await res.json();
-  if (!res.ok) throw new Error(body.error || `Sunucu hatası (${res.status})`);
-  return body.results;
-}
-
-// Önce onaysız sorulur: sunucu hiçbir yere POST atmadan hangi gönderenlerde tek tıkla
+// Önce onaysız sorulur: sunucu hiçbir yere istek atmadan hangi gönderenlerde tek tıkla
 // çıkış yapılabileceğini söyler. Kullanıcı onaylarsa yalnız onlar için tekrar istenir.
 // Onay verilmezse o gönderenler için çıkış sayfası linki gösterilir.
 async function unsubscribeWithConfirmation(senders) {
-  const first = await postUnsubscribe(senders, false);
+  const first = (await api('/api/unsubscribe', { senders, confirm_one_click: false })).results;
   const oneClick = first.filter(r => r.status === 'one_click_available');
   if (!oneClick.length) return first;
 
-  const ok = confirm(
-    `Şu ${oneClick.length} gönderende tek tıkla abonelikten çıkılacak (geri alınamaz):\n\n` +
-    oneClick.map(r => `- ${r.email}`).join('\n') + '\n\nDevam edilsin mi?'
-  );
-  if (!ok) {
-    return first.map(r => r.status === 'one_click_available' ? { ...r, status: 'manual_link' } : r);
-  }
-  const confirmed = await postUnsubscribe(oneClick.map(r => r.sender), true);
+  const ok = await confirmDialog({
+    title: 'Tek tıkla abonelikten çıkılsın mı?',
+    lines: [`${oneClick.length} gönderenden otomatik olarak çıkılacak. Bu işlem geri alınamaz.`],
+    items: oneClick.map(r => r.email),
+    confirmLabel: 'Abonelikten çık',
+  });
+  if (!ok) return first.map(r => r.status === 'one_click_available' ? { ...r, status: 'manual_link' } : r);
+
+  const confirmed = (await api('/api/unsubscribe',
+    { senders: oneClick.map(r => r.sender), confirm_one_click: true })).results;
   const bySender = new Map(confirmed.map(r => [r.sender, r]));
   return first.map(r => bySender.get(r.sender) || r);
 }
 
-async function runUnsubscribe(senders, resultEl, btnEl) {
-  if (btnEl) { btnEl.disabled = true; btnEl.textContent = '...'; }
+function showUnsubResultsInRows(results) {
+  results.forEach(r => {
+    const target = document.querySelector(`.unsub-result[data-result-for="${CSS.escape(r.sender)}"]`);
+    if (target) showUnsubResult(target, r);
+  });
+}
+
+async function unsubscribeRow(sender, resultEl, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Bakılıyor…';
   try {
-    const results = await unsubscribeWithConfirmation(senders);
-    if (resultEl) showUnsubResult(resultEl, results[0]);
-    return results;
+    const [result] = await unsubscribeWithConfirmation([sender]);
+    showUnsubResult(resultEl, result);
   } catch (err) {
-    if (resultEl) {
-      resultEl.textContent = `Hata: ${err.message}`;
-      return [];
-    }
-    throw err;
+    resultEl.textContent = `Hata: ${err.message}`;
   } finally {
-    if (btnEl) { btnEl.disabled = false; btnEl.textContent = 'Çık'; }
+    btn.disabled = false;
+    btn.textContent = 'Abonelikten çık';
   }
 }
 
-// Tarama, silme ya da abonelik işlemi sürerken işlem butonları kapalı kalır;
-// filtre/sıralama değişince updateSelection onları yeniden açmamalı.
-let busy = false;
-function setActionButtonsDisabled(disabled) {
-  busy = disabled;
-  document.getElementById('unsubBtn').disabled = disabled;
-  document.getElementById('deleteBtn').disabled = disabled;
-  document.getElementById('undoBtn').disabled = disabled;
+async function unsubscribeSelected() {
+  const senders = getSelected().map(g => g.gonderen);
+  setBusy(true);
+  $('unsubBtn').textContent = 'Bakılıyor…';
+  notify(`${senders.length} gönderen için abonelik bilgisi kontrol ediliyor…`);
+  try {
+    const results = await unsubscribeWithConfirmation(senders);
+    showUnsubResultsInRows(results);
+    const done = results.filter(r => r.status === 'done').length;
+    const links = results.filter(r => r.status === 'manual_link' || r.status === 'manual_mailto').length;
+    notify(`${done} gönderenden otomatik çıkıldı` +
+      (links ? `; ${links} gönderenin çıkış linki kendi satırında.` : '.'),
+      { details: results.map(r => `${r.email}: ${describeUnsubResult(r)}`) });
+  } catch (err) {
+    notifyError('Abonelik işlemi yapılamadı', err);
+  } finally {
+    $('unsubBtn').textContent = UNSUB_LABEL;
+    setBusy(false);
+  }
 }
 
-function showScanProgress(state) {
-  const pct = state.total ? Math.floor(state.processed / state.total * 100) : 0;
-  document.getElementById('scanBtn').textContent = state.total ? `Taranıyor %${pct}` : 'Taranıyor...';
-  const status = document.getElementById('status');
-  status.innerHTML = state.total
-    ? `<progress max="${state.total}" value="${state.processed}"></progress>
-       <div>${state.processed} / ${state.total} mail tarandı (%${pct})</div>`
-    : 'Gelen kutusundaki mailler listeleniyor...';
+// --- Çöp Kutusu'na taşıma ve geri alma ---------------------------------------
+
+async function deleteSelected() {
+  const picked = getSelected();
+  const senders = picked.map(g => g.gonderen);
+  const hidden = picked.filter(g => !passesFilters(g)).length;
+  setBusy(true);
+  try {
+    // Taramadaki sayı yalnız gelen kutusunu sayar; onayda seçilen kapsamın gerçek sayısı görünsün.
+    $('deleteBtn').textContent = 'Sayılıyor…';
+    const count = await api('/api/count', { senders, scope: state.scope });
+    const skipped = count.details.reduce((sum, d) => sum + (d.skipped || 0), 0);
+    const scopeText = state.scope === 'all' ? 'tüm maillerde (arşiv dahil)' : 'gelen kutusunda';
+
+    const ok = await confirmDialog({
+      title: `${count.total} mail Çöp Kutusu'na taşınsın mı?`,
+      lines: [
+        `${picked.length} gönderenden ${scopeText} bulunan ${count.total} mail taşınacak. 30 gün içinde geri alabilirsin.`,
+        skipped ? `${skipped} mail atlandı: gönderen adresi tam eşleşmiyor ya da gönderen korunuyor.` : null,
+      ].filter(Boolean),
+      items: count.details.map(d => `${d.email} · ${d.count} mail`),
+      warning: hidden ? `${hidden} seçili gönderen şu an filtre yüzünden görünmüyor; onlar da taşınacak.` : '',
+      confirmLabel: "Çöp Kutusu'na taşı",
+    });
+    if (!ok) return;
+
+    $('deleteBtn').textContent = 'Taşınıyor…';
+    notify('Taşınıyor; bu sekmeyi kapatma…');
+    const result = await api('/api/delete', { senders, scope: state.scope });
+
+    const removed = new Set(result.details.map(d => d.sender));
+    const remaining = state.data.gonderenler.filter(g => !removed.has(g.gonderen));
+    setData({ toplam_mail_sayisi: remaining.reduce((sum, g) => sum + g.mail_sayisi, 0), gonderenler: remaining });
+    await refreshUndo();
+    notify(`${result.total_deleted} mail Çöp Kutusu'na taşındı.`, {
+      details: result.details.map(d => `${d.email}: ${d.deleted} mail`),
+      action: result.total_deleted ? { label: 'Geri al', onclick: undoLastDelete } : null,
+    });
+  } catch (err) {
+    notifyError('Taşınamadı', err);
+    // İşlem yarıda kesildiyse bir kısmı taşınmış olabilir: listeyi ve geri alma durumunu tazele.
+    load();
+    refreshUndo();
+  } finally {
+    $('deleteBtn').textContent = DELETE_LABEL;
+    setBusy(false);
+  }
+}
+
+async function refreshUndo() {
+  const btn = $('undoBtn');
+  try {
+    const info = await api('/api/undo');
+    btn.hidden = !info.available;
+    if (info.available) {
+      btn.textContent = `Son taşımayı geri al (${info.count} mail)`;
+      btn.title = 'Gönderenler: ' + info.senders.join(', ');
+    }
+  } catch (err) {
+    btn.hidden = true;  // geri alma bilgisi alınamazsa butonu göstermemek yeterli
+  }
+}
+
+async function undoLastDelete() {
+  setBusy(true);
+  notify('Son taşıma geri alınıyor…');
+  try {
+    const result = await api('/api/undo', {});
+    await load();
+    notify(`${result.restored} mail Çöp Kutusu'ndan geri alındı.` +
+      (result.missing ? ` ${result.missing} mail artık Çöp Kutusu'nda değildi (kalıcı silinmiş olabilir).` : ''),
+      { details: result.senders });
+  } catch (err) {
+    notifyError('Geri alınamadı', err);
+  } finally {
+    setBusy(false);
+    refreshUndo();
+  }
+}
+
+// --- Tarama ------------------------------------------------------------------
+
+function showScanProgress(scan) {
+  const pct = scan.total ? Math.floor(scan.processed / scan.total * 100) : 0;
+  $('scanBtn').textContent = scan.total ? `Taranıyor %${pct}` : 'Taranıyor…';
+  const box = $('notice');
+  let progress = box.querySelector('progress');
+  // İlerleme çubuğu bir kez kurulur; her yoklamada yalnız değeri değişir (ekran okuyucu her seferinde baştan okumasın).
+  if (!progress) {
+    box.classList.remove('error');
+    box.replaceChildren(el('span', { class: 'notice-text', id: 'scanText' }),
+      el('progress', { max: '1', value: '0', 'aria-label': 'Tarama ilerlemesi' }));
+    progress = box.querySelector('progress');
+  }
+  progress.max = scan.total || 1;
+  progress.value = scan.processed;
+  let text = 'Gelen kutusundaki mailler listeleniyor…';
+  if (scan.total) {
+    text = `${scan.processed} / ${scan.total} mail tarandı (%${pct}).`;
+    const elapsed = scan.started_at ? Date.now() / 1000 - scan.started_at : 0;
+    if (scan.processed > 0 && elapsed > 5) {
+      text += ` Kalan süre ${formatDuration((scan.total - scan.processed) * elapsed / scan.processed)}.`;
+    }
+    text += ' Gmail dakikada en fazla ~300 mail okumaya izin veriyor.';
+  }
+  $('scanText').textContent = text;
 }
 
 // Tarama sunucuda arka planda sürer; bitene kadar durumu yokla.
 async function pollScan() {
-  const btn = document.getElementById('scanBtn');
-  btn.disabled = true;
-  setActionButtonsDisabled(true);
+  setBusy(true);
   try {
     while (true) {
-      const res = await fetch('/api/scan/status');
-      const state = await res.json();
-      if (!res.ok) throw new Error(state.error || `Sunucu hatası (${res.status})`);
-      if (!state.running) {
-        if (state.error) throw new Error(state.error);
+      const scan = await api('/api/scan/status');
+      if (!scan.running) {
+        if (scan.error) throw new Error(scan.error);
         await load();
-        document.getElementById('status').textContent =
-          `Tarama tamamlandı. Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen.`;
+        notify(`Tarama tamamlandı: ${state.data.toplam_mail_sayisi} mail, ${state.data.gonderenler.length} gönderen.`);
         return;
       }
-      showScanProgress(state);
-      await new Promise(r => setTimeout(r, 700));
+      showScanProgress(scan);
+      await new Promise(r => setTimeout(r, 1000));
     }
   } catch (err) {
-    document.getElementById('status').textContent = 'Tarama sırasında hata oluştu: ' + err.message;
+    notifyError('Tarama sırasında hata oluştu', err);
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Gelen Kutusunu Tara';
-    setActionButtonsDisabled(false);
-    updateSelection();
+    $('scanBtn').textContent = 'Gelen Kutusunu Tara';
+    setBusy(false);
   }
 }
 
 async function scanInbox() {
   try {
-    const res = await fetch('/api/scan', { method: 'POST' });
-    const result = await res.json();
+    showScanProgress(await api('/api/scan', {}));
+  } catch (err) {
     // 409: başka bir sekmede başlamış tarama; onu izlemeye devam et.
-    if (!res.ok && res.status !== 409) throw new Error(result.error || `Sunucu hatası (${res.status})`);
-    showScanProgress(result);
-    await pollScan();
-  } catch (err) {
-    document.getElementById('status').textContent = 'Tarama başlatılamadı: ' + err.message;
-  }
-}
-
-async function refreshUndo() {
-  const btn = document.getElementById('undoBtn');
-  try {
-    const res = await fetch('/api/undo');
-    const info = await res.json();
-    btn.hidden = !(res.ok && info.available);
-    if (!btn.hidden) {
-      btn.textContent = `Son silmeyi geri al (${info.count} mail)`;
-      btn.title = 'Gönderenler: ' + info.senders.join(', ');
+    if (!(err.status === 409 && err.body?.running)) {
+      notifyError('Tarama başlatılamadı', err);
+      return;
     }
-  } catch (err) {
-    btn.hidden = true;
   }
+  await pollScan();
 }
-
-async function undoLastDelete() {
-  setActionButtonsDisabled(true);
-  document.getElementById('status').textContent = 'Son silme geri alınıyor...';
-  try {
-    const res = await fetch('/api/undo', { method: 'POST' });
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
-    await load();
-    document.getElementById('status').textContent =
-      `${result.restored} mail çöpten geri alındı (${result.senders.join(', ')}).` +
-      (result.missing ? ` ${result.missing} mail artık çöpte değildi (silinmiş olabilir).` : '');
-  } catch (err) {
-    document.getElementById('status').textContent = 'Geri alınamadı: ' + err.message;
-  } finally {
-    setActionButtonsDisabled(false);
-    updateSelection();
-    refreshUndo();
-  }
-}
-
-document.getElementById('undoBtn').addEventListener('click', undoLastDelete);
 
 async function resumeScanIfRunning() {
   try {
-    const res = await fetch('/api/scan/status');
-    const state = await res.json();
-    if (res.ok && state.running) pollScan();
+    if ((await api('/api/scan/status')).running) pollScan();
   } catch (err) { /* durum alınamazsa sayfa normal açılır */ }
 }
 
-document.getElementById('scanBtn').addEventListener('click', scanInbox);
+// --- Olaylar -----------------------------------------------------------------
 
-document.getElementById('sortSelect').addEventListener('change', (e) => {
-  sortMode = e.target.value;
-  if (data) render();
+$('scanBtn').addEventListener('click', scanInbox);
+$('deleteBtn').addEventListener('click', deleteSelected);
+$('unsubBtn').addEventListener('click', unsubscribeSelected);
+$('undoBtn').addEventListener('click', undoLastDelete);
+
+$('searchInput').addEventListener('input', e => {
+  state.searchText = e.target.value.trim().toLocaleLowerCase('tr');
+  if (state.data) render();
+});
+$('unsubFilter').addEventListener('change', e => {
+  state.onlyWithUnsubscribe = e.target.checked;
+  if (state.data) render();
+});
+$('categorySelect').addEventListener('change', e => {
+  state.categoryFilter = e.target.value;
+  if (state.data) render();
+});
+$('viewSelect').addEventListener('change', e => {
+  state.viewMode = e.target.value;
+  state.openPanels.clear();
+  if (state.data) render();
+});
+$('sortSelect').addEventListener('change', e => {
+  state.sortMode = e.target.value;
+  if (state.data) render();
+});
+// Kapsam değişince önizlemeler yeni kapsamla yeniden yüklensin; açık paneller açık kalır.
+$('scopeSelect').addEventListener('change', e => {
+  state.scope = e.target.value;
+  state.previewCache.clear();
+  if (state.data) render();
 });
 
-document.getElementById('scopeSelect').addEventListener('change', (e) => {
-  scope = e.target.value;
-  if (data) render();  // açık önizlemeler eski kapsamla yüklendi; kapatıp yeniden yükletelim
-});
-
-document.getElementById('searchInput').addEventListener('input', (e) => {
-  searchText = e.target.value.trim().toLocaleLowerCase('tr');
-  if (data) render();
-});
-
-document.getElementById('unsubFilter').addEventListener('change', (e) => {
-  onlyWithUnsubscribe = e.target.checked;
-  if (data) render();
-});
-
-document.getElementById('categorySelect').addEventListener('change', (e) => {
-  categoryFilter = e.target.value;
-  if (data) render();
-});
-
-document.getElementById('viewSelect').addEventListener('change', (e) => {
-  viewMode = e.target.value;
-  if (data) render();
-});
-
-// Yalnız ekranda görünen satırları seçer/bırakır.
-document.getElementById('selectAll').addEventListener('change', (e) => {
+// Yalnız ekranda görünen (ve korunmayan) satırları seçer ya da bırakır.
+$('selectAll').addEventListener('change', e => {
   const checked = e.target.checked;
-  document.querySelectorAll('.sender-checkbox:not(:disabled)').forEach(cb => {
-    cb.rowMembers.forEach(m => checked ? selected.add(m.gonderen) : selected.delete(m.gonderen));
+  visibleCheckboxes().forEach(cb => {
+    cb.rowMembers.forEach(m => checked ? state.selected.add(m.gonderen) : state.selected.delete(m.gonderen));
     syncRowCheckbox(cb);
   });
   updateSelection();
-});
-
-document.getElementById('unsubBtn').addEventListener('click', async () => {
-  const selected = getSelected();
-  const btn = document.getElementById('unsubBtn');
-  setActionButtonsDisabled(true);
-  btn.textContent = 'İşleniyor...';
-  document.getElementById('status').textContent = `${selected.length} gönderen için abonelik bilgisi kontrol ediliyor...`;
-
-  try {
-    const results = await runUnsubscribe(selected.map(g => g.gonderen), null, null);
-    const lines = results.map(r => `- ${r.sender}: ${describeUnsubResult(r)}`);
-    document.getElementById('status').textContent =
-      'Abonelik işlemi tamamlandı:\n\n' + lines.join('\n') +
-      '\n\n🔗 ve ✉️ ile işaretlenenler için gönderen satırındaki "Çık" butonuna bas; satırda tıklanabilir link çıkar.';
-  } catch (err) {
-    document.getElementById('status').textContent = 'Hata oluştu: ' + err.message;
-  } finally {
-    btn.textContent = 'Seçilenlerin Aboneliğinden Çık';
-    setActionButtonsDisabled(false);
-    updateSelection();
-  }
-});
-
-document.getElementById('deleteBtn').addEventListener('click', async () => {
-  const selected = getSelected();
-  const senders = selected.map(g => g.gonderen);
-  const btn = document.getElementById('deleteBtn');
-  setActionButtonsDisabled(true);
-
-  try {
-    // Taramadaki sayı yalnız gelen kutusunu sayar; onayda seçilen kapsamın gerçek sayısı görünsün.
-    btn.textContent = 'Sayılıyor...';
-    const countRes = await fetch('/api/count', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ senders, scope })
-    });
-    const count = await countRes.json();
-    if (!countRes.ok) throw new Error(count.error || `Sunucu hatası (${countRes.status})`);
-
-    const scopeText = scope === 'all' ? 'tüm maillerde (arşiv dahil)' : 'gelen kutusunda';
-    const skipped = count.details.reduce((sum, d) => sum + (d.skipped || 0), 0);
-    const ok = confirm(
-      `${selected.length} gönderenden ${scopeText} bulunan ${count.total} mail Çöp Kutusu'na taşınacak.` +
-      (skipped ? `\n\nAramaya takılan ${skipped} mail, gönderen adresi birebir aynı olmadığı (ya da korunduğu) için dışarıda bırakıldı.` : '') +
-      '\n\nDevam edilsin mi?'
-    );
-    if (!ok) return;
-
-    btn.textContent = 'Taşınıyor...';
-    document.getElementById('status').textContent = 'İşlem sürüyor, tarayıcı sekmesini kapatma...';
-
-    const res = await fetch('/api/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ senders, scope })
-    });
-    const result = await res.json();
-    if (!res.ok) throw new Error(result.error || `Sunucu hatası (${res.status})`);
-
-    const removed = new Set(result.details.map(d => d.sender));
-    const remaining = data.gonderenler.filter(g => !removed.has(g.gonderen));
-    setData({
-      toplam_mail_sayisi: remaining.reduce((sum, g) => sum + g.mail_sayisi, 0),
-      gonderenler: remaining,
-    });
-
-    refreshUndo();
-    const lines = result.details.map(d => `- ${d.sender}: ${d.deleted} mail çöpe taşındı`);
-    document.getElementById('status').textContent =
-      `Tamamlandı. Toplam ${result.total_deleted} mail çöpe taşındı.\n\n` + lines.join('\n');
-  } catch (err) {
-    document.getElementById('status').textContent = 'Hata oluştu: ' + err.message;
-    // Silme yarıda kesildiyse bir kısmı çöpe gitmiş olabilir: listeyi ve geri al durumunu tazele.
-    load();
-    refreshUndo();
-  } finally {
-    btn.textContent = 'Seçilenleri Çöpe Taşı';
-    setActionButtonsDisabled(false);
-    updateSelection();
-  }
 });
 
 load().then(resumeScanIfRunning);
