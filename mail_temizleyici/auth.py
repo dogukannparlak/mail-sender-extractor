@@ -32,21 +32,59 @@ def account_email(service):
     return service.users().getProfile(userId='me').execute()['emailAddress'].lower()
 
 
-def add_account(accounts_dir):
-    """Yeni bir Google hesabıyla giriş yapar; token'ı <accounts_dir>/<adres>/token.json'a yazar, adresi döner.
+class WrongAccount(ValueError):
+    pass
 
+
+def validate_client_config(config):
+    """Google Cloud'dan indirilen istemci dosyası (client_secret_….json) Masaüstü uygulaması türünde olmalı."""
+    if not isinstance(config, dict):
+        raise ValueError('İstemci dosyası okunamadı: JSON nesnesi bekleniyor.')
+    if 'web' in config and 'installed' not in config:
+        raise ValueError('Bu istemci "Web application" türünde; Google Cloud\'da "Desktop app" türünde bir istemci oluştur.')
+    installed = config.get('installed')
+    if not isinstance(installed, dict) or not installed.get('client_id') or not installed.get('client_secret'):
+        raise ValueError('Bu bir Google OAuth istemci dosyası değil (client_secret_….json bekleniyor).')
+    return {'installed': installed}
+
+
+def add_account(accounts_dir, client_config, expected_email=None):
+    """Verilen istemciyle Google'a giriş yapar; istemciyi ve token'ı <accounts_dir>/<adres>/ altına yazar, adresi döner.
+
+    Her hesap kendi Google Cloud istemcisiyle bağlanır; ortak bir "ana" hesap yoktur.
     prompt=select_account: tarayıcıda açık olan hesap sessizce seçilmesin, kullanıcı hangisi olduğunu seçsin.
+    expected_email verilirse (klasörü önceden hazırlanmış hesap) başka bir hesapla giriş reddedilir.
     """
+    client_config = validate_client_config(client_config)
     with _auth_lock:
-        creds = _sign_in(prompt='select_account')
+        flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
+        creds = flow.run_local_server(port=0, prompt='select_account')
         email = account_email(build('gmail', 'v1', credentials=creds))
+        if expected_email and email != expected_email.lower():
+            raise WrongAccount(f'Google\'da {email} ile giriş yapıldı ama bu klasör {expected_email} için. '
+                               f'Giriş penceresinde {expected_email} hesabını seç.')
         folder = os.path.join(accounts_dir, email)
         os.makedirs(folder, mode=0o700, exist_ok=True)
+        _write_private(os.path.join(folder, 'credentials.json'), json.dumps(client_config, indent=2) + '\n')
         _save_token(creds, os.path.join(folder, 'token.json'))
     return email
 
 
+def load_client_config(path):
+    with open(path, encoding='utf-8') as f:
+        return json.load(f)
+
+
+def _write_private(path, text):
+    """İstemci sırrı ve token yalnız dosya sahibince okunabilsin (0600)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w') as f:
+        f.write(text)
+    os.chmod(path, 0o600)
+
+
 def _sign_in(**kwargs):
+    """Tek hesaplı eski düzen için: kökteki credentials.json ile giriş."""
     if not os.path.exists(CREDENTIALS_PATH):
         raise FileNotFoundError(
             f"credentials.json bulunamadı ({CREDENTIALS_PATH}). "
@@ -57,11 +95,8 @@ def _sign_in(**kwargs):
 
 
 def _save_token(creds, token_path):
-    # Token Gmail'e yazma yetkisi taşır; yalnız dosya sahibi okuyabilsin.
-    fd = os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, 'w') as token:
-        token.write(json.dumps(json.loads(creds.to_json()), indent=2) + '\n')  # okunaklı; içerik aynı
-    os.chmod(token_path, 0o600)
+    # Token Gmail'e yazma yetkisi taşır; yalnız dosya sahibi okuyabilsin. Okunaklı yazılır; içerik aynı.
+    _write_private(token_path, json.dumps(json.loads(creds.to_json()), indent=2) + '\n')
 
 
 def _load_credentials(token_path):

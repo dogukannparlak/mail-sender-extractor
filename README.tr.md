@@ -49,13 +49,20 @@ mail); veri dosyaları geçici bir klasöre yazılır, abonelik istekleri bilgis
 
 ## Kendi Gmail'inle kullan
 
-### 1. Google Cloud kimlik bilgisi (`credentials.json`)
+"Ana" bir hesap yok: **her Gmail hesabı kendi başına bağlanır**; kendi Google Cloud projesindeki
+OAuth istemcisiyle. Başkasının projesine, onayına ya da test kullanıcı listesine gerek yoktur.
+1–2. adımları bir kez, 3–4. adımları eklemek istediğin **her hesap için** yap.
 
-1. [Google Cloud Console](https://console.cloud.google.com/)'da bir proje oluştur (ya da seç).
-2. **APIs & Services > Library** altında **Gmail API**'yi etkinleştir.
-3. **APIs & Services > Credentials** altında **Create Credentials > OAuth client ID** seç,
-   uygulama türü **Desktop app**.
-4. İndirdiğin JSON dosyasını bu klasöre `credentials.json` adıyla kaydet.
+### 1. Kur
+
+```bash
+git clone https://github.com/dogukannparlak/mail-sender-extractor.git
+cd mail-sender-extractor
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # isteğe bağlı: ayarlar, aşağıda "Ayarlar"
+```
 
 ### 2. Çalıştır
 
@@ -64,18 +71,67 @@ source venv/bin/activate
 python app.py
 ```
 
-`http://localhost:5050` adresini aç, **+ Hesap ekle**'ye bas, açılan pencerede Google hesabını seç ve
-izin ver. Sonra **Gelen Kutusunu Tara**'ya bas.
+`http://localhost:5050` adresini aç. Uygulamayı kullanırken bu terminal açık kalsın; `Ctrl+C`
+uygulamayı durdurur.
 
-Silinen mailler doğrudan kalıcı olarak silinmez, Gmail'in **Çöp Kutusu**'na taşınır. Gmail Çöp
-Kutusu'nu 30 gün sonra boşaltır.
+### 3. Google Cloud kurulumu (her hesap için bir kez, ~10 dakika)
 
-### 3. Birden fazla hesap
+[Google Cloud Console](https://console.cloud.google.com/)'a **eklemek üzere olduğun Gmail hesabıyla**
+gir. Google menü adlarını zaman zaman değiştiriyor; ad farklıysa en yakın olanı seç.
+
+1. **Proje oluştur.** Üstteki proje seçici › **New project** › bir ad ver (ör. `mail-temizleyici`)
+   › **Create**. Üstte yeni projenin seçili olduğundan emin ol.
+2. **Gmail API'yi aç.**
+   [APIs & Services › Library › Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com)
+   sayfasında **Enable**'a bas.
+3. **Giriş ekranını kur.** [Google Auth Platform](https://console.cloud.google.com/auth/overview)
+   › **Get started**:
+   - **App information:** herhangi bir uygulama adı (ör. `Mail Temizleyici`), destek e-postası
+     olarak kendi adresin.
+   - **Audience:** **External**.
+   - **Contact information:** kendi adresin. Politikayı kabul et › **Create**.
+4. **Kendini test kullanıcısı yap.** **Audience** › **Test users** › **Add users** › bu hesabın
+   Gmail adresini yaz › **Save**. Bunu yapmazsan giriş `Hata 403: access_denied` verir.
+5. **Gmail iznini ekle** (önerilir). **Data access** › **Add or remove scopes** ›
+   `https://www.googleapis.com/auth/gmail.modify` iznini bul (ya da "Manually add scopes" kutusuna
+   yapıştır) › **Update** › **Save**.
+6. **İstemciyi oluştur.** **Clients** › **Create client** › Application type **Desktop app** ›
+   herhangi bir ad › **Create** › **Download JSON**. `client_secret_1234….json` gibi bir dosya
+   iner. Kimseyle paylaşma: projeni tanıtır.
+
+### 4. Hesabı uygulamaya ekle
+
+1. Sayfanın üstündeki **+ Hesap ekle**'ye bas.
+2. 3.6'da indirdiğin `client_secret_….json` dosyasını seç.
+3. Google penceresi açılır. **Aynı hesabı** seç, sonra:
+   - "Google bu uygulamayı doğrulamadı" uyarısı çıkar; proje test modunda ve yalnız sen
+     kullanıyorsun. **Devam**'a bas.
+   - Gmail erişimine izin ver (okuma ve değiştirme: uygulama mailleri Çöp Kutusu'na taşıyabilsin).
+4. Uygulamaya döndüğünde "<adres> eklendi" yazar. **Gelen Kutusunu Tara**'ya bas.
+
+Uygulama o hesabın istemci dosyasını ve giriş anahtarını `hesaplar/<adres>/` klasörüne koyar (git
+bu klasörü yok sayar). Silinen mailler doğrudan kalıcı olarak silinmez, Gmail'in **Çöp Kutusu**'na
+taşınır; Gmail Çöp Kutusu'nu 30 gün sonra boşaltır.
+
+**Hesap eklemenin diğer yolları:**
+
+| Elinde olan | Yapılacak |
+|---|---|
+| Hesabın `client_secret_….json` dosyası, klasörleri elle hazırlamak istiyorsun | `hesaplar/<adres>/` klasörünü oluştur, dosyayı oraya `credentials.json` adıyla koy. Hesap **+ Hesap ekle** penceresinde "girişi bekleyen" olarak çıkar; ona bas. Başka bir Google hesabıyla giriş reddedilir. |
+| O hesabın istemcisiyle oluşturulmuş hazır bir `token.json` | `tokenlar/` klasörüne koy, `.env`'e `ACCOUNT_2=<adres>=tokenlar/<dosya>.json` satırını ekle (bkz. "Ayarlar"). |
+| Proje klasöründe tek, ortak bir `credentials.json` | Hâlâ çalışır: **+ Hesap ekle** bunu da önerir. O zaman her hesap o tek projenin test kullanıcısı olmalı. |
+
+**Test modu notu:** Google test modundaki uygulamaların girişini yaklaşık 7 gün sonra düşürebilir.
+Öyle olunca uygulama oturumun süresinin dolduğunu söyler: **Hesabı çıkar**, sonra aynı dosyayla
+yeniden ekle. (Google Auth Platform › Audience'ta uygulamayı yayınlamak bunu önler, karşılığında
+"doğrulanmamış uygulama" uyarısı çıkar; Google'ın bu konudaki güncel kurallarını doğrulamadım.)
+
+### 5. Birden fazla hesap
 
 Birden çok Gmail hesabını (kişisel, okul, iş) aynı sayfadan yönetebilirsin.
 
-1. **Ekle:** **+ Hesap ekle**'ye bas. Google hesap seçme ekranını gösterir; tarayıcıda o an açık
-   olan hesap sessizce seçilmez. Hesabı seç ve izin ver.
+1. **Ekle:** her hesap için yukarıdaki 3–4. adımları uygula. Google hesap seçme ekranını gösterir;
+   tarayıcıda o an açık olan hesap sessizce seçilmez.
 2. **Geçiş yap:** üstteki hesap seçiciden hesabı seç. Liste, seçim, önizlemeler ve "Geri al" o
    hesaba aittir; geçişte seçim diğer hesaba taşınmaz.
 3. **Çalış:** tarama, taşıma, geri alma ve abonelikten çıkma her zaman yalnız seçili hesapta yapılır.
@@ -85,21 +141,17 @@ Birden çok Gmail hesabını (kişisel, okul, iş) aynı sayfadan yönetebilirsi
    Uygulamanın Google'daki iznini de kaldırmak için:
    [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
 
-| Ne | Hesap başına mı, ortak mı? |
-|---|---|
-| Giriş anahtarı, gönderen listesi, tarama dizini, son taşıma kaydı | Hesap başına: `hesaplar/<adres>/` |
-| Korunan gönderenler (`korunanlar.json`) | Ortak: kilitlediğin banka her hesapta korunur |
-| Gmail kotası (dakikada ~300 mail okuma) | Gmail hesap başına sayar; uygulama bütün hesapları birlikte yavaşlatır, iki tarama aynı anda yaklaşık yarı hızda ilerler |
-
-**Testing modu:** Google Cloud'daki OAuth uygulaman "Testing" durumundaysa her hesabı
-**OAuth consent screen › Test users** listesine ekle. Yoksa o hesapla giriş "erişim engellendi"
-hatası verir.
+| Ne                                                                      | Hesap başına mı, ortak mı?                                                                                                       |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| Google Cloud istemcisi, giriş anahtarı, gönderen listesi, tarama dizini, son taşıma kaydı | Hesap başına: `hesaplar/<adres>/`                                                                                                |
+| Korunan gönderenler (`korunanlar.json`)                              | Ortak: kilitlediğin banka her hesapta korunur                                                                                       |
+| Gmail kotası (dakikada ~300 mail okuma)                                | Gmail hesap başına sayar; uygulama bütün hesapları birlikte yavaşlatır, iki tarama aynı anda yaklaşık yarı hızda ilerler |
 
 **Tek hesaplı sürümden geçiş:** ilk açılışta mevcut `token.json` ve veri dosyaları (`gonderenler.csv`,
-`taranan_idler.json`, `son_islem.json`) ait oldukları hesabın klasörüne taşınır. Sayfa hangi hesaba
+`taranan_idler.json`, `son_islem.json`) ait oldukları hesabın klasörüne taşınır; o token onunla oluşturulduysa `credentials.json` da taşınır. Sayfa hangi hesaba
 taşındığını yazar.
 
-### 4. Ayarlar (`.env`)
+### 6. Ayarlar (`.env`)
 
 Ayarlar proje klasöründeki `.env` dosyasında durur (git'e girmez). Örnekten başla:
 
@@ -107,18 +159,18 @@ Ayarlar proje klasöründeki `.env` dosyasında durur (git'e girmez). Örnekten 
 cp .env.example .env
 ```
 
-| Ayar | Varsayılan | Ne yapar |
-|---|---|---|
-| `PORT` | `5050` | `http://localhost:<PORT>` portu |
-| `DEMO` | `0` | `1` = sahte hesaplarla demo modu, Gmail'e bağlanmaz |
-| `FLASK_DEBUG` | `0` | Flask hata ayıklama modu (yalnız geliştirirken) |
-| `COMPACT_FILES` | `0` | `0` = uygulamanın yazdığı JSON dosyaları girintili ve okunaklı, `1` = sıkışık tek satır |
-| `CREDENTIALS_PATH` | `credentials.json` | Google OAuth istemci dosyan |
-| `ACCOUNTS_DIR` | `hesaplar` | Her hesap için bir alt klasör içeren klasör |
-| `ACCOUNT_1`, `ACCOUNT_2`, … | boş | Token dosyası elinde olan her hesap için bir satır: `adres=token_yolu` (ör. `tokenlar/ikinci.json`) |
-| `EXTRA_ACCOUNTS` | boş | Aynısı tek satırda: `adres=token_yolu, adres=token_yolu` |
-| `GMAIL_QUOTA_PER_MINUTE` | `5400` | Uygulamanın kendine izin verdiği dakikalık kota birimi (Gmail sınırı 6.000) |
-| `DEFAULT_SCOPE` | `inbox` | Taşıma/önizlemenin varsayılan kapsamı: `inbox` ya da `all` |
+| Ayar                             | Varsayılan          | Ne yapar                                                                                                    |
+| -------------------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `PORT`                         | `5050`             | `http://localhost:<PORT>` portu                                                                           |
+| `DEMO`                         | `0`                | `1` = sahte hesaplarla demo modu, Gmail'e bağlanmaz                                                      |
+| `FLASK_DEBUG`                  | `0`                | Flask hata ayıklama modu (yalnız geliştirirken)                                                          |
+| `COMPACT_FILES`                | `0`                | `0` = uygulamanın yazdığı JSON dosyaları girintili ve okunaklı, `1` = sıkışık tek satır      |
+| `CREDENTIALS_PATH` | `credentials.json` | İsteğe bağlı ortak OAuth istemcisi; normalde her hesap kendi dosyasını getirir |
+| `ACCOUNTS_DIR`                 | `hesaplar`         | Her hesap için bir alt klasör içeren klasör                                                             |
+| `ACCOUNT_1`, `ACCOUNT_2`, … | boş                 | Token dosyası elinde olan her hesap için bir satır: `adres=token_yolu` (ör. `tokenlar/ikinci.json`) |
+| `EXTRA_ACCOUNTS`               | boş                 | Aynısı tek satırda: `adres=token_yolu, adres=token_yolu`                                               |
+| `GMAIL_QUOTA_PER_MINUTE`       | `5400`             | Uygulamanın kendine izin verdiği dakikalık kota birimi (Gmail sınırı 6.000)                           |
+| `DEFAULT_SCOPE`                | `inbox`            | Taşıma/önizlemenin varsayılan kapsamı: `inbox` ya da `all`                                         |
 
 Komut satırında verilen değer `.env`'nin önüne geçer (`DEMO=1 python app.py`). Göreli yollar proje
 klasörüne göredir; `~` açılır. Hatalı bir değer uygulamayı açılışta, hangi ayar olduğunu yazarak
@@ -153,20 +205,20 @@ Flask app.py ── Host / Origin kontrolü ── Gmail API (google-api-python-
 Proje klasöründeki giriş dosyaları: `app.py` (web uygulaması), `demo.py` (demo modu),
 `extract_senders.py` (CLI). Kod `mail_temizleyici/` paketinde, her iş için bir modül:
 
-| Modül | Ne yapar |
-|---|---|
-| `config.py` | `.env`'i okur, değerleri denetler |
-| `auth.py` | Google girişi, hesap başına bir token (`0600`) |
-| `gmail.py` | Gmail API ortak parçaları: adres ayrıştırma, kota sınırlayıcı, yeniden denemeli batch |
-| `scanner.py` | Gelen kutusu taraması: adres başına sayım, görünen ad, kategori; CSV okuma/yazma |
-| `accounts.py` | Hesap klasörleri, hesap listesi, eski tek hesaplı dosyaların taşınması |
-| `protected.py` | Korunan gönderenler (bütün hesaplarda ortak) |
-| `state.py` | Hesap başına tarama/taşıma durumu ve kilitler |
-| `mailbox.py` | Sayma, Çöp Kutusu'na taşıma, geri alma, önizleme (gönderen birebir kontrolüyle) |
-| `unsubscribe.py` | List-Unsubscribe ve SSRF korumalı tek tıkla çıkış |
-| `web.py` | Flask uygulaması: sayfa, JSON API, istek denetimi, hata eşleme |
-| `demo.py` | Demo modu için sahte posta kutuları |
-| `templates/index.html` | Sayfa (düz JS, derleme adımı yok) |
+| Modül                   | Ne yapar                                                                                       |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `config.py`            | `.env`'i okur, değerleri denetler                                                           |
+| `auth.py`              | Google girişi, hesap başına bir token (`0600`)                                            |
+| `gmail.py`             | Gmail API ortak parçaları: adres ayrıştırma, kota sınırlayıcı, yeniden denemeli batch |
+| `scanner.py`           | Gelen kutusu taraması: adres başına sayım, görünen ad, kategori; CSV okuma/yazma         |
+| `accounts.py`          | Hesap klasörleri, hesap listesi, eski tek hesaplı dosyaların taşınması                   |
+| `protected.py`         | Korunan gönderenler (bütün hesaplarda ortak)                                                |
+| `state.py`             | Hesap başına tarama/taşıma durumu ve kilitler                                              |
+| `mailbox.py`           | Sayma, Çöp Kutusu'na taşıma, geri alma, önizleme (gönderen birebir kontrolüyle)         |
+| `unsubscribe.py`       | List-Unsubscribe ve SSRF korumalı tek tıkla çıkış                                        |
+| `web.py`               | Flask uygulaması: sayfa, JSON API, istek denetimi, hata eşleme                               |
+| `demo.py`              | Demo modu için sahte posta kutuları                                                          |
+| `templates/index.html` | Sayfa (düz JS, derleme adımı yok)                                                           |
 
 ## Güvenlik notları
 

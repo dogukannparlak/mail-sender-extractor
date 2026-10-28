@@ -83,17 +83,91 @@ def test_scan_of_one_account_does_not_block_another(client, two_accounts, monkey
     assert allowed.get_json() == {'ok': OTHER}
 
 
-def test_add_account_signs_in_and_lists_it(client, monkeypatch):
-    def fake_add(accounts_dir):
+CLIENT = {'installed': {'client_id': 'id.apps.googleusercontent.com', 'client_secret': 's',
+                        'redirect_uris': ['http://localhost']}}
+
+
+def _fake_add(calls):
+    def fake_add(accounts_dir, client_config, expected_email=None):
         import os
-        os.makedirs(os.path.join(accounts_dir, OTHER))
-        open(os.path.join(accounts_dir, OTHER, 'token.json'), 'w').close()
-        return OTHER
-    monkeypatch.setattr(gmail_auth, 'add_account', fake_add)
+        calls.append((client_config, expected_email))
+        account = expected_email or OTHER
+        os.makedirs(os.path.join(accounts_dir, account), exist_ok=True)
+        open(os.path.join(accounts_dir, account, 'token.json'), 'w').close()
+        return account
+    return fake_add
+
+
+def test_add_account_with_uploaded_client_file(client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(gmail_auth, 'add_account', _fake_add(calls))
+
+    resp = client.post('/api/accounts/add', json={'client': CLIENT})
+
+    assert resp.get_json() == {'account': OTHER, 'accounts': sorted([TEST_ACCOUNT, OTHER]), 'pending': []}
+    assert calls == [(CLIENT, None)]
+
+
+def test_add_account_without_client_file_explains_what_to_do(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(gmail_auth, 'CREDENTIALS_PATH', str(tmp_path / 'yok.json'))
+    add = MagicMock()
+    monkeypatch.setattr(gmail_auth, 'add_account', add)
 
     resp = client.post('/api/accounts/add', json={})
 
-    assert resp.get_json() == {'account': OTHER, 'accounts': sorted([TEST_ACCOUNT, OTHER])}
+    assert resp.status_code == 400 and 'client_secret' in resp.get_json()['error']
+    add.assert_not_called()
+
+
+def test_pending_folder_signs_in_with_its_own_client(client, monkeypatch):
+    import json, os
+    pending = 'bekleyen@example.com'
+    folder = os.path.join(accounts.ACCOUNTS_DIR, pending)
+    os.makedirs(folder)
+    with open(os.path.join(folder, 'credentials.json'), 'w') as f:
+        json.dump(CLIENT, f)
+    calls = []
+    monkeypatch.setattr(gmail_auth, 'add_account', _fake_add(calls))
+
+    assert client.get('/api/accounts').get_json()['pending'] == [pending]
+    resp = client.post('/api/accounts/add', json={'pending': pending})
+
+    assert resp.get_json()['account'] == pending
+    assert calls == [(CLIENT, pending)]
+    assert client.get('/api/accounts').get_json()['pending'] == []
+
+
+def test_client_file_of_wrong_type_is_rejected():
+    import pytest as _pytest
+    with _pytest.raises(ValueError, match='Desktop app'):
+        gmail_auth.validate_client_config({'web': {'client_id': 'x', 'client_secret': 'y'}})
+    with _pytest.raises(ValueError, match='istemci dosyası değil'):
+        gmail_auth.validate_client_config({'installed': {}})
+
+
+def test_shared_credentials_move_to_the_account_they_belong_to(monkeypatch, tmp_path):
+    import json, os
+    shared = tmp_path / 'credentials.json'
+    shared.write_text(json.dumps({'installed': {'client_id': 'ortak-id', 'client_secret': 's'}}))
+    monkeypatch.setattr(gmail_auth, 'CREDENTIALS_PATH', str(shared))
+    paths = accounts.AccountPaths(TEST_ACCOUNT)
+    with open(paths.token, 'w') as f:
+        json.dump({'client_id': 'ortak-id', 'refresh_token': 'r'}, f)
+
+    assert accounts.adopt_shared_client(paths) is True
+    assert not shared.exists() and os.path.exists(paths.client)
+
+
+def test_shared_credentials_of_another_client_stay(monkeypatch, tmp_path):
+    import json
+    shared = tmp_path / 'credentials.json'
+    shared.write_text(json.dumps({'installed': {'client_id': 'baska-id', 'client_secret': 's'}}))
+    monkeypatch.setattr(gmail_auth, 'CREDENTIALS_PATH', str(shared))
+    paths = accounts.AccountPaths(TEST_ACCOUNT)
+    with open(paths.token, 'w') as f:
+        json.dump({'client_id': 'ortak-id'}, f)
+
+    assert accounts.adopt_shared_client(paths) is False and shared.exists()
 
 
 def test_add_account_is_refused_in_demo_mode(client, monkeypatch):

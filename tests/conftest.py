@@ -163,6 +163,8 @@ def isolate_data_files(tmp_path, monkeypatch):
     monkeypatch.setattr(accounts, 'EXTRA_ACCOUNT_TOKENS', {})
     monkeypatch.setattr(protected, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))
     monkeypatch.setattr(accounts, 'LEGACY_TOKEN_PATH', str(tmp_path / 'token.json'))
+    # Ortak istemci dosyası: testler gerçek credentials.json'u okumasın ve asla taşımasın.
+    monkeypatch.setattr(auth, 'CREDENTIALS_PATH', str(tmp_path / 'credentials.json'))
     monkeypatch.setattr(state, 'scans', {})
     monkeypatch.setattr(state, 'mutations', {})
     mailbox.clear_verify_cache()

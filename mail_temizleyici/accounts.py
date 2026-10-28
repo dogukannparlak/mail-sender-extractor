@@ -1,4 +1,5 @@
 """Hesaplar: her Gmail hesabının token'ı ve verileri ayrı klasörde (ACCOUNTS_DIR/<adres>/)."""
+import json
 import os
 import shutil
 import threading
@@ -25,17 +26,35 @@ class AccountPaths:
         self.root = os.path.join(ACCOUNTS_DIR, account)
         self.external_token = account in EXTRA_ACCOUNT_TOKENS
         self.token = EXTRA_ACCOUNT_TOKENS.get(account) or os.path.join(self.root, 'token.json')
+        # Bu hesabın kendi Google Cloud istemcisi (client_secret_….json); her hesap bağımsız bağlanır.
+        self.client = os.path.join(self.root, 'credentials.json')
         self.csv = os.path.join(self.root, 'gonderenler.csv')
         self.undo = os.path.join(self.root, 'son_islem.json')
         # Taramada görülen mail id'leri (gönderen başına); silmede bu maillerin From'unu yeniden okumayız.
         self.scan_ids = os.path.join(self.root, 'taranan_idler.json')
 
 
+def _folder_names():
+    if not os.path.isdir(ACCOUNTS_DIR):
+        return set()
+    return {name for name in os.listdir(ACCOUNTS_DIR) if EMAIL_RE.match(name)}
+
+
 def list_accounts():
-    names = set(EXTRA_ACCOUNT_TOKENS)
-    if os.path.isdir(ACCOUNTS_DIR):
-        names.update(name for name in os.listdir(ACCOUNTS_DIR) if EMAIL_RE.match(name))
+    """Bağlı hesaplar: token'ı olanlar."""
+    names = _folder_names() | set(EXTRA_ACCOUNT_TOKENS)
     return sorted(name for name in names if os.path.exists(AccountPaths(name).token))
+
+
+def list_pending():
+    """Girişi bekleyen hesaplar: klasörüne istemci dosyası konmuş ama henüz token'ı olmayanlar."""
+    return sorted(name for name in _folder_names()
+                  if os.path.exists(AccountPaths(name).client) and not os.path.exists(AccountPaths(name).token))
+
+
+def has_shared_client():
+    """Proje klasöründe ortak bir credentials.json var mı (isteğe bağlı; her hesap kendi istemcisini de kullanabilir)."""
+    return os.path.exists(auth.CREDENTIALS_PATH)
 
 
 def resolve(account):
@@ -57,8 +76,19 @@ def get_service(account):
     return auth.get_service(paths.token)
 
 
-def add_account():
-    return auth.add_account(ACCOUNTS_DIR)
+def add_account(client_config=None, pending=None):
+    """Hesap bağlar. Öncelik: girişi bekleyen klasör > yüklenen istemci dosyası > (varsa) ortak credentials.json."""
+    if pending:
+        pending = str(pending).strip().lower()
+        if pending not in list_pending():
+            raise ValueError(f'Girişi bekleyen böyle bir hesap yok: {pending!r}')
+        return auth.add_account(ACCOUNTS_DIR, auth.load_client_config(AccountPaths(pending).client), pending)
+    if client_config is not None:
+        return auth.add_account(ACCOUNTS_DIR, client_config)
+    if has_shared_client():
+        return auth.add_account(ACCOUNTS_DIR, auth.load_client_config(auth.CREDENTIALS_PATH))
+    raise ValueError('Bu hesabın Google Cloud istemci dosyasını (client_secret_….json) seç. '
+                     'Nasıl oluşturulacağı README\'de adım adım yazıyor.')
 
 
 def remove_token(paths):
@@ -85,7 +115,32 @@ def migrate_legacy_account():
         os.remove(LEGACY_TOKEN_PATH)  # aynı hesap zaten eklenmiş; eski kopya gereksiz
     else:
         shutil.move(LEGACY_TOKEN_PATH, paths.token)
+    adopt_shared_client(paths)
     return account
+
+
+def _client_id(path, kind):
+    try:
+        with open(path, encoding='utf-8') as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return (data.get('installed') or {}).get('client_id') if kind == 'client' else data.get('client_id')
+
+
+def adopt_shared_client(paths):
+    """Ortak credentials.json bu hesabın token'ını üreten istemciyse onu hesabın klasörüne taşır.
+
+    Böylece "ana" bir hesap kalmaz: istemci, ait olduğu hesabın yanında durur.
+    """
+    shared = auth.CREDENTIALS_PATH
+    if not os.path.exists(shared) or os.path.exists(paths.client):
+        return False
+    if _client_id(shared, 'client') != _client_id(paths.token, 'token'):
+        return False
+    shutil.move(shared, paths.client)
+    os.chmod(paths.client, 0o600)
+    return True
 
 
 # --- Hesabın gönderen listesi (CSV) ------------------------------------------

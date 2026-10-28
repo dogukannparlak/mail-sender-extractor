@@ -236,3 +236,24 @@ def test_add_account_is_explained_in_demo(ui_page):
     page = ui_page
     page.click('#addAccountBtn')
     page.wait_for_selector('#notice.error >> text=Demo modunda hesap eklenmez')
+
+
+def test_add_account_dialog_offers_file_and_pending_accounts(ui_browser, server_url, demo_mode, monkeypatch):
+    import os
+    from mail_temizleyici import web
+    monkeypatch.setattr(web, 'DEMO_MODE', False)  # pencereyi göstermek için; giriş denenmez
+    pending = os.path.join(accounts.ACCOUNTS_DIR, 'yeni@ornek.example')
+    os.makedirs(pending)
+    with open(os.path.join(pending, 'credentials.json'), 'w') as f:
+        f.write('{"installed": {"client_id": "x", "client_secret": "y"}}')
+    context = ui_browser.new_context()
+    page = context.new_page()
+    page.goto(server_url)
+    page.wait_for_selector('#accountSelect:not([hidden])')
+
+    page.click('#addAccountBtn')
+    page.wait_for_selector('#addAccountDialog[open]')
+    assert page.locator('#clientFileInput').is_visible()
+    assert page.get_by_role('button', name='yeni@ornek.example için giriş yap').is_visible()
+    page.locator('#addAccountCancel').click()
+    context.close()

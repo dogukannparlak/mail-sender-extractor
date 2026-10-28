@@ -25,6 +25,8 @@ DEFAULT_SCOPE = settings.default_scope
 DEMO_MODE = False
 
 app = Flask(__name__)
+# İstekler küçük JSON'lar; en büyüğü yüklenen istemci dosyası (~1 KB).
+app.config['MAX_CONTENT_LENGTH'] = 256 * 1024
 
 ALLOWED_HOSTNAMES = {'localhost', '127.0.0.1', '[::1]'}
 
@@ -134,7 +136,8 @@ def index():
 @handle_errors
 def api_accounts():
     migrated = accounts.migrate_legacy_account()
-    return jsonify({'accounts': accounts.list_accounts(), 'migrated': migrated, 'demo': DEMO_MODE})
+    return jsonify({'accounts': accounts.list_accounts(), 'pending': accounts.list_pending(),
+                    'shared_client': accounts.has_shared_client(), 'migrated': migrated, 'demo': DEMO_MODE})
 
 
 @app.route('/api/accounts/add', methods=['POST'])
@@ -142,9 +145,13 @@ def api_accounts():
 def api_accounts_add():
     if DEMO_MODE:
         raise ValueError('Demo modunda hesap eklenmez; gerçek hesap için uygulamayı DEMO olmadan başlat.')
+    body = _json_body()
+    client = body.get('client')
+    if client is not None and not isinstance(client, dict):
+        raise ValueError("'client' istemci dosyasının (client_secret_….json) içeriği olmalı.")
     # Tarayıcıda Google giriş penceresi açılır; kullanıcı girişi bitirene kadar istek bekler.
-    account = accounts.add_account()
-    return jsonify({'account': account, 'accounts': accounts.list_accounts()})
+    account = accounts.add_account(client_config=client, pending=body.get('pending'))
+    return jsonify({'account': account, 'accounts': accounts.list_accounts(), 'pending': accounts.list_pending()})
 
 
 @app.route('/api/accounts/remove', methods=['POST'])

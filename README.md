@@ -47,13 +47,20 @@ data files go to a temporary folder and unsubscribe requests never leave your ma
 
 ## Use it with your Gmail
 
-### 1. Google Cloud credentials (`credentials.json`)
+There is no "main" account: **every Gmail account connects on its own**, with an OAuth client
+from its own Google Cloud project. Nobody else's project, approval or test-user list is involved.
+Do steps 1–2 once, then steps 3–4 for **each** account you want to add.
 
-1. Create (or select) a project in the [Google Cloud Console](https://console.cloud.google.com/).
-2. Under **APIs & Services > Library**, enable the **Gmail API**.
-3. Under **APIs & Services > Credentials**, choose **Create Credentials > OAuth client ID**,
-   application type **Desktop app**.
-4. Download the client JSON and save it in this folder as `credentials.json`.
+### 1. Install
+
+```bash
+git clone https://github.com/dogukannparlak/mail-sender-extractor.git
+cd mail-sender-extractor
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env        # optional: settings, see "Settings" below
+```
 
 ### 2. Run
 
@@ -62,18 +69,67 @@ source venv/bin/activate
 python app.py
 ```
 
-Open `http://localhost:5050`, click **+ Add account**, pick your Google account in the window that
-opens and allow access. Then click **Scan Inbox**.
+Open `http://localhost:5050`. Keep this terminal open while you use the app; `Ctrl+C` stops it.
 
-Deleted messages go to Gmail's **Trash**, not straight to permanent deletion. Gmail empties the
-Trash after 30 days.
+### 3. Google Cloud setup (once per account, ~10 minutes)
 
-### 3. Multiple accounts
+Sign in to the [Google Cloud Console](https://console.cloud.google.com/) **with the Gmail account
+you are about to add**. Google renames menu items now and then; if a name differs, look for the
+closest one.
+
+1. **Create a project.** Click the project picker at the top › **New project** › give it a name
+   (e.g. `mail-cleaner`) › **Create**. Make sure the new project is selected at the top.
+2. **Turn on the Gmail API.** Open
+   [APIs & Services › Library › Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com)
+   and click **Enable**.
+3. **Set up the sign-in screen.** Open
+   [Google Auth Platform](https://console.cloud.google.com/auth/overview) › **Get started**:
+   - **App information:** any app name (e.g. `Mail Cleaner`) and your address as support email.
+   - **Audience:** **External**.
+   - **Contact information:** your address. Accept the policy › **Create**.
+4. **Add yourself as a test user.** **Audience** › **Test users** › **Add users** › type the
+   Gmail address of this account › **Save**. Without this, sign-in fails with
+   `Error 403: access_denied`.
+5. **Allow the Gmail permission** (recommended). **Data access** › **Add or remove scopes** › find
+   `https://www.googleapis.com/auth/gmail.modify` (or paste it under "Manually add scopes") ›
+   **Update** › **Save**.
+6. **Create the client.** **Clients** › **Create client** › Application type **Desktop app** › any
+   name › **Create** › **Download JSON**. You get a file like `client_secret_1234….json`.
+   Keep it private: it identifies your project.
+
+### 4. Add the account in the app
+
+1. Click **+ Add account** at the top of the page.
+2. Choose the `client_secret_….json` file from step 3.6.
+3. A Google window opens. Pick **the same account**, then:
+   - "Google hasn't verified this app" appears because the project is in testing mode and only
+     you use it. Click **Continue**.
+   - Allow access to Gmail (read and change, so the app can move mail to Trash).
+4. Back in the app you see "<address> added". Click **Scan Inbox**.
+
+The app stores that account's client file and sign-in token in `hesaplar/<address>/` (git
+ignores this folder). Deleted messages go to Gmail's **Trash**, not straight to permanent
+deletion; Gmail empties the Trash after 30 days.
+
+**Other ways to add an account:**
+
+| You have | Do this |
+|---|---|
+| The account's `client_secret_….json` and want to prepare folders by hand | Create `hesaplar/<address>/`, put the file there as `credentials.json`. The account shows up in **+ Add account** as "waiting for sign-in"; click it. Signing in with a different Google account is refused. |
+| A ready `token.json` made with that account's client | Put it in `tokenlar/` and add a line `ACCOUNT_2=<address>=tokenlar/<file>.json` to `.env` (see "Settings"). |
+| One shared `credentials.json` in the project folder | Still works: **+ Add account** offers it. Then every account must be a test user of that one project. |
+
+**Testing mode note:** Google may sign apps in testing mode out after about 7 days. When that
+happens the app says the session expired: **Remove account**, then add it again with the same
+file. (Publishing the app in Google Auth Platform › Audience avoids this, at the cost of an
+"unverified app" warning; I have not verified Google's current rules for this.)
+
+### 5. Multiple accounts
 
 You can manage several Gmail accounts (personal, school, work) from the same page.
 
-1. **Add:** click **+ Add account**. Google shows its account picker, so the account that happens
-   to be signed in to your browser is not chosen silently. Pick the account and allow access.
+1. **Add:** follow steps 3–4 above for each account. Google shows its account picker, so the
+   account that happens to be signed in to your browser is not chosen silently.
 2. **Switch:** choose the account in the picker at the top. The list, selection, previews and
    "Undo" belong to that account; switching never carries a selection over.
 3. **Work:** scan, trash, undo and unsubscribe always act on the selected account only. The confirm
@@ -85,18 +141,16 @@ You can manage several Gmail accounts (personal, school, work) from the same pag
 
 | What | Per account or shared? |
 |---|---|
-| Sign-in token, sender list, scan index, last-trash record | Per account: `hesaplar/<address>/` |
+| Google Cloud client, sign-in token, sender list, scan index, last-trash record | Per account: `hesaplar/<address>/` |
 | Protected senders (`korunanlar.json`) | Shared: a bank you lock is protected in every account |
 | Gmail quota (~300 message reads per minute) | Gmail counts it per account; the app paces all accounts together, so two scans at once each run at about half speed |
 
-**Testing mode:** if your OAuth app in Google Cloud is in "Testing", add every account under
-**OAuth consent screen › Test users**. Otherwise sign-in for that account fails with "access blocked".
-
 **Upgrading from the single-account version:** on first start an existing `token.json` and its
 data files (`gonderenler.csv`, `taranan_idler.json`, `son_islem.json`) are moved into the folder of
-the account they belong to. The page tells you which account they were moved to.
+the account they belong to, and so is `credentials.json` if that token was made with it. The page
+tells you which account they were moved to.
 
-### 4. Settings (`.env`)
+### 6. Settings (`.env`)
 
 Settings live in a `.env` file in the project folder (not committed). Start from the example:
 
@@ -110,7 +164,7 @@ cp .env.example .env
 | `DEMO` | `0` | `1` = demo mode with fake accounts, no Gmail |
 | `FLASK_DEBUG` | `0` | Flask debug mode (development only) |
 | `COMPACT_FILES` | `0` | `0` = the JSON files the app writes are indented and easy to read, `1` = one compact line |
-| `CREDENTIALS_PATH` | `credentials.json` | Your Google OAuth client file |
+| `CREDENTIALS_PATH` | `credentials.json` | Optional shared OAuth client; normally each account brings its own file instead |
 | `ACCOUNTS_DIR` | `hesaplar` | Folder with one sub-folder per account |
 | `ACCOUNT_1`, `ACCOUNT_2`, … | empty | One line per account whose token file you already have: `address=token_path` (e.g. `tokenlar/second.json`) |
 | `EXTRA_ACCOUNTS` | empty | The same on one line: `address=token_path, address=token_path` |

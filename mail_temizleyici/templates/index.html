@@ -181,6 +181,8 @@
   .dialog-body p { margin: 8px 0; font-size: 14px; line-height: 1.45; }
   .dialog-body ul { margin: 8px 0; padding-left: 20px; font-size: 13px; max-height: 220px; overflow: auto; }
   .dialog-warning { color: var(--accent-text); }
+  .dialog-body code { font-size: 12px; }
+  #clientFileInput { margin-top: 6px; max-width: 100%; }
   .dialog-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 22px 18px; flex-wrap: wrap; }
   .dialog-actions button { padding: 9px 18px; font-size: 14px; }
 
@@ -274,6 +276,26 @@
   <button id="undoBtn" class="secondary-btn" type="button" hidden>Son taşımayı geri al</button>
 </div>
 
+<dialog id="addAccountDialog" aria-labelledby="addAccountTitle">
+  <form method="dialog">
+    <div class="dialog-body">
+      <h2 id="addAccountTitle">Gmail hesabı ekle</h2>
+      <p>Her hesap kendi Google Cloud istemcisiyle bağlanır. O hesap için indirdiğin
+        <code>client_secret_….json</code> dosyasını seç; Google giriş penceresi açılır.
+        Dosyayı nasıl oluşturacağın README'de "Google Cloud kurulumu" bölümünde adım adım yazıyor.</p>
+      <p><label for="clientFileInput"><strong>İstemci dosyası:</strong></label>
+        <input type="file" id="clientFileInput" accept=".json,application/json"></p>
+      <div id="pendingAccounts"></div>
+      <p id="sharedClientOption" hidden>
+        <button type="button" class="secondary-btn" id="useSharedClientBtn">Proje klasöründeki ortak credentials.json ile giriş yap</button>
+      </p>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" class="secondary-btn" id="addAccountCancel">Vazgeç</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="confirmDialog" aria-labelledby="confirmTitle">
   <form method="dialog">
     <div class="dialog-body">
@@ -295,6 +317,8 @@ const UNSUB_LABEL = 'Seçilenlerin aboneliğinden çık';
 
 const state = {
   accounts: [],
+  pending: [],
+  sharedClient: false,
   account: null,
   data: null,
   sortMode: 'count_desc',
@@ -953,6 +977,9 @@ function renderAccounts() {
 async function loadAccounts(preferred = null) {
   const info = await api('/api/accounts');
   state.accounts = info.accounts;
+  state.pending = info.pending || [];
+  state.sharedClient = Boolean(info.shared_client);
+  state.demo = Boolean(info.demo);
   if (info.migrated) notify(`Eski tek hesaplı kayıtlar ${info.migrated} hesabına taşındı.`);
   const wanted = [preferred, state.account, rememberedAccount()].find(a => a && state.accounts.includes(a));
   await switchAccount(wanted || state.accounts[0] || null);
@@ -983,11 +1010,39 @@ async function switchAccount(account) {
   await resumeScanIfRunning();
 }
 
-async function addAccount() {
-  setBusy(true);
-  notify('Tarayıcıda Google giriş penceresi açıldı: eklemek istediğin hesabı seç ve izin ver. Bitince buraya dön.');
+// Hesap ekleme penceresi: istemci dosyası seç, girişi bekleyen bir klasörü bağla ya da (varsa) ortak istemciyi kullan.
+function addAccount() {
+  if (state.demo) return signIn({});  // sunucu demo'da hesap eklemeyi reddeder ve nedenini söyler
+  const dialog = $('addAccountDialog');
+  $('clientFileInput').value = '';
+  $('pendingAccounts').replaceChildren(...(state.pending.length ? [
+    el('p', {}, el('strong', {}, 'Girişi bekleyen hesaplar'),
+       ' (klasörüne istemci dosyası konmuş, henüz giriş yapılmamış):'),
+    ...state.pending.map(account => el('p', {},
+      el('button', { type: 'button', class: 'secondary-btn', onclick: () => {
+        dialog.close();
+        signIn({ pending: account }, account);
+      } }, `${account} için giriş yap`))),
+  ] : []));
+  $('sharedClientOption').hidden = !state.sharedClient;
+  dialog.showModal();
+  $('addAccountCancel').focus();
+}
+
+async function readClientFile(file) {
+  const text = await file.text();
   try {
-    const result = await api('/api/accounts/add', {});
+    return JSON.parse(text);
+  } catch (err) {
+    throw new Error('Seçilen dosya JSON değil; Google Cloud\'dan indirdiğin client_secret_….json dosyasını seç.');
+  }
+}
+
+async function signIn(payload, expected = null) {
+  setBusy(true);
+  notify(`Tarayıcıda Google giriş penceresi açıldı: ${expected || 'eklemek istediğin hesabı'} seç ve izin ver. Bitince buraya dön.`);
+  try {
+    const result = await api('/api/accounts/add', payload);
     notify(`${result.account} eklendi. "Gelen Kutusunu Tara" ile başla.`);
     setBusy(false);
     await loadAccounts(result.account);
@@ -1137,6 +1192,20 @@ $('selectAll').addEventListener('change', e => {
 
 $('accountSelect').addEventListener('change', e => switchAccount(e.target.value));
 $('addAccountBtn').addEventListener('click', addAccount);
+$('clientFileInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('addAccountDialog').close();
+  try {
+    await signIn({ client: await readClientFile(file) });
+  } catch (err) {
+    notifyError('Hesap eklenemedi', err);
+  }
+});
+$('useSharedClientBtn').addEventListener('click', () => {
+  $('addAccountDialog').close();
+  signIn({});
+});
 $('removeAccountBtn').addEventListener('click', removeAccount);
 
 loadAccounts().catch(err => notifyError('Hesaplar yüklenemedi', err));
