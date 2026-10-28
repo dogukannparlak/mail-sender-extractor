@@ -176,7 +176,7 @@
     font-size: 13px;
     color: var(--muted);
   }
-  .toolbar-spacer { flex: 1; }
+  .toolbar-spacer { flex: 0; }
   .badge {
     display: inline-block; font-size: 11px; padding: 1px 7px; margin-left: 6px;
     border-radius: 10px; border: 1px solid var(--border); color: var(--muted); vertical-align: 1px;
@@ -186,6 +186,12 @@
   .badge-bildirim { color: #6d28d9; border-color: rgba(109,40,217,0.4); }
   .badge-kisisel { color: #15803d; border-color: rgba(21,128,61,0.4); }
   .select-all { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .toolbar { flex-wrap: wrap; }
+  .select-all[hidden] { display: none; }
+  #searchInput {
+    flex: 1; min-width: 160px; background: var(--card); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-size: 13px;
+  }
   .action-bar select, .toolbar select {
     background: var(--card);
     color: var(--text);
@@ -210,7 +216,9 @@
     Çöp Kutusu'na taşınır. Gmail 30 gün sonra çöp kutusunu otomatik boşaltır, o zamana kadar geri alabilirsin.
   </div>
   <div class="toolbar">
-    <label class="select-all"><input type="checkbox" id="selectAll"> Tümünü seç</label>
+    <label class="select-all" title="Yalnız ekranda görünenleri seçer"><input type="checkbox" id="selectAll"> Tümünü seç</label>
+    <input type="search" id="searchInput" placeholder="Ad ya da adres ara..." autocomplete="off">
+    <label class="select-all" id="unsubFilterWrap" hidden><input type="checkbox" id="unsubFilter"> Abonelik linki olanlar</label>
     <span class="toolbar-spacer"></span>
     <span id="categoryFilterWrap" hidden>
       <label for="categorySelect">Kategori:</label>
@@ -259,8 +267,16 @@ let viewMode = 'address';
 let categoryFilter = '';
 const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: 'Bildirim', kisisel: 'Kişisel' };
 
+let searchText = '';
+let onlyWithUnsubscribe = false;
+
 function passesFilters(g) {
   if (categoryFilter && g.kategori !== categoryFilter) return false;
+  if (onlyWithUnsubscribe && !g.abonelik) return false;
+  if (searchText) {
+    const haystack = `${g.ad} ${g.gonderen}`.toLocaleLowerCase('tr');
+    if (!haystack.includes(searchText)) return false;
+  }
   return true;
 }
 let protectedList = { adresler: [], alanlar: [] };
@@ -376,6 +392,7 @@ function render() {
 
   // Kategori yalnız yeni taramada toplanır; eski kayıtta filtreyi gösterme.
   document.getElementById('categoryFilterWrap').hidden = !data.gonderenler.some(g => g.kategori);
+  document.getElementById('unsubFilterWrap').hidden = !data.gonderenler.some(g => 'abonelik' in g);
 
   const rows = sortedRows();
   if (!rows.length) {
@@ -550,8 +567,11 @@ function getSelected() {
 function updateSelection() {
   const picked = getSelected();
   const totalMail = picked.reduce((sum, g) => sum + g.mail_sayisi, 0);
+  // Filtre değişince önceki seçimler gizli kalabilir; silmeye girdiklerini açıkça göster.
+  const hidden = picked.filter(g => !passesFilters(g)).length;
   document.getElementById('selectedInfo').textContent =
-    picked.length ? `${picked.length} gönderen, ${totalMail} mail seçildi` : '0 mail seçildi';
+    (picked.length ? `${picked.length} gönderen, ${totalMail} mail seçildi` : '0 mail seçildi') +
+    (hidden ? ` (${hidden} tanesi filtre yüzünden görünmüyor)` : '');
   document.getElementById('deleteBtn').disabled = picked.length === 0;
   document.getElementById('unsubBtn').disabled = picked.length === 0;
 }
@@ -716,6 +736,16 @@ document.getElementById('sortSelect').addEventListener('change', (e) => {
 document.getElementById('scopeSelect').addEventListener('change', (e) => {
   scope = e.target.value;
   if (data) render();  // açık önizlemeler eski kapsamla yüklendi; kapatıp yeniden yükletelim
+});
+
+document.getElementById('searchInput').addEventListener('input', (e) => {
+  searchText = e.target.value.trim().toLocaleLowerCase('tr');
+  if (data) render();
+});
+
+document.getElementById('unsubFilter').addEventListener('change', (e) => {
+  onlyWithUnsubscribe = e.target.checked;
+  if (data) render();
 });
 
 document.getElementById('categorySelect').addEventListener('change', (e) => {
