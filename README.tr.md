@@ -90,8 +90,10 @@ gir. Google menü adlarını zaman zaman değiştiriyor; ad farklıysa en yakın
      olarak kendi adresin.
    - **Audience:** **External**.
    - **Contact information:** kendi adresin. Politikayı kabul et › **Create**.
-4. **Kendini test kullanıcısı yap.** **Audience** › **Test users** › **Add users** › bu hesabın
-   Gmail adresini yaz › **Save**. Bunu yapmazsan giriş `Hata 403: access_denied` verir.
+4. **Kendini test kullanıcısı yap** (proje senin olsa da gerekli). **Audience** › **Test users** ›
+   **Add users** › bu hesabın Gmail adresini yazıp sonuna virgül koy; adres yuvarlak bir etikete
+   dönüşsün › **Save**. Listede "1 user (1 test)" yazdığını kontrol et. Bunu yapmazsan giriş
+   `Hata 403: access_denied` verir.
 5. **Gmail iznini ekle** (önerilir). **Data access** › **Add or remove scopes** ›
    `https://www.googleapis.com/auth/gmail.modify` iznini bul (ya da "Manually add scopes" kutusuna
    yapıştır) › **Update** › **Save**.

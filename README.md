@@ -87,9 +87,10 @@ closest one.
    - **App information:** any app name (e.g. `Mail Cleaner`) and your address as support email.
    - **Audience:** **External**.
    - **Contact information:** your address. Accept the policy › **Create**.
-4. **Add yourself as a test user.** **Audience** › **Test users** › **Add users** › type the
-   Gmail address of this account › **Save**. Without this, sign-in fails with
-   `Error 403: access_denied`.
+4. **Add yourself as a test user** (needed even though it is your own project).
+   **Audience** › **Test users** › **Add users** › type the Gmail address of this account followed
+   by a comma, so it turns into a chip › **Save**. Check that the list now shows "1 user (1 test)".
+   Without this, sign-in fails with `Error 403: access_denied`.
 5. **Allow the Gmail permission** (recommended). **Data access** › **Add or remove scopes** › find
    `https://www.googleapis.com/auth/gmail.modify` (or paste it under "Manually add scopes") ›
    **Update** › **Save**.
