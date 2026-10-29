@@ -161,6 +161,14 @@ def _run_sign_in(client_config, expected):
     except ValueError as e:
         with _signin_lock:
             _signin.update(state='error', error=str(e))
+    except HttpError as e:
+        # Sık görülen: projede Gmail API açılmamış (403 accessNotConfigured).
+        message = _http_error_message(e)
+        if 'accessNotConfigured' in str(e.content) or 'has not been used' in str(e.content):
+            message = ('Bu hesabın Google Cloud projesinde Gmail API açık değil: APIs & Services › Library › '
+                       'Gmail API › Enable, birkaç dakika bekle ve tekrar dene.')
+        with _signin_lock:
+            _signin.update(state='error', error=message)
     except Exception:
         app.logger.exception('Google girişi hatası')
         with _signin_lock:

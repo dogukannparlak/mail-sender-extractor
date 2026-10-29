@@ -247,3 +247,18 @@ def test_legacy_single_account_files_are_moved(client, monkeypatch, tmp_path):
     assert open(moved.token).read() == '{"eski": true}'
     assert os.path.exists(moved.csv)
     assert not (tmp_path / 'token.json').exists() and not (tmp_path / 'gonderenler.csv').exists()
+
+
+def test_sign_in_explains_disabled_gmail_api(client, monkeypatch, inline_scan, idle_sign_in):
+    import httplib2
+    from googleapiclient.errors import HttpError
+
+    def disabled(accounts_dir, client_config, expected_email=None, on_url=None):
+        raise HttpError(httplib2.Response({'status': 403}),
+                        b'{"error": {"message": "Gmail API has not been used in project 1", "errors": '
+                        b'[{"reason": "accessNotConfigured"}]}}')
+    monkeypatch.setattr(gmail_auth, 'add_account', disabled)
+
+    client.post('/api/accounts/add', json={'client': CLIENT})
+
+    assert 'Gmail API açık değil' in client.get('/api/accounts/add/status').get_json()['error']
