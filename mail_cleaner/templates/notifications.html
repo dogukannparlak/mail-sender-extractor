@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bildirimler · Mail Temizleyici</title>
 <style>
-{% include '_sayfa_css.html' %}
+{% include '_page_css.html' %}
 </style>
 </head>
 <body>
 <main>
-  {% set sayfa = 'bildirimler' %}{% include '_gezinme.html' %}
+  {% set current_page = 'notifications' %}{% include '_nav.html' %}
   <h1>Bildirimler{% if page_account %} · {{ page_account }}{% endif %}</h1>
   <p class="hint">Her taramadan sonra üretilir: taramada ilk kez görülen abonelikler ve aboneliğinden çıktığın göndericilerden gelen yeni mailler.
     İlk taramada yeni abonelik bildirimi üretilmez.</p>
@@ -44,10 +44,10 @@
       <td class="time">{{ n.zaman | int | datetimeformat }}</td>
       {% if n.tur == 'yeni_abonelik' %}
         <td><span class="pill">Yeni abonelik</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ n.sayi }} mail.
-          <a href="/abonelikler?account={{ page_account | urlencode }}">Abonelikler</a> sayfasında çıkış bağlantısı var.</td>
+          <a href="/subscriptions?account={{ page_account | urlencode }}">Abonelikler</a> sayfasında çıkış bağlantısı var.</td>
       {% elif n.tur == 'mail_geliyor' %}
         <td><span class="pill err">Çıktığın halde mail geliyor</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · çıkıştan sonra {{ n.sayi }} yeni mail.
-          Çıkış işe yaramamış olabilir; <a href="/abonelikler?account={{ page_account | urlencode }}">bağlantıyı elle dene</a> ya da göndericiyi sil.</td>
+          Çıkış işe yaramamış olabilir; <a href="/subscriptions?account={{ page_account | urlencode }}">bağlantıyı elle dene</a> ya da göndericiyi sil.</td>
       {% else %}
         <td>{{ n.tur }}: {{ n.gonderen }}</td>
       {% endif %}
@@ -61,7 +61,7 @@
   <p>Henüz bildirim yok. Bir tarama bittikten sonra burada görünür.</p>
   {% endif %}
 </main>
-{% include '_liste_js.html' %}
+{% include '_list_js.html' %}
 <script>
 const $ = id => document.getElementById(id);
 if ($('sort')) {

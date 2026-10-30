@@ -6,8 +6,9 @@ import time
 
 from .gmail import fetch_metadata, gmail_execute, message_headers, sender_key
 
-CSV_HEADER = ['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']
-LEGACY_CSV_HEADER = ['İsim/Adres', 'Mail Sayısı']
+CSV_HEADER = ['Address', 'Name', 'Mail Count', 'Category', 'Unsubscribe']
+# Eski sürümlerin Türkçe başlığı hâlâ okunur; ham From başlığı + sayı biçimi (legacy) de.
+TURKISH_CSV_HEADER_FIRST = 'Adres'
 
 
 
@@ -156,7 +157,7 @@ def _csv_unsafe(value):
     return value[1:] if value.startswith("'") and value[1:].startswith(FORMULA_PREFIXES) else value
 
 
-def save_to_csv(senders, filename='gonderenler.csv'):
+def save_to_csv(senders, filename='senders.csv'):
     # Önce geçici dosyaya yaz: okuyan biri yarım dosya görmesin.
     tmp = filename + '.tmp'
     with open(tmp, 'w', newline='', encoding='utf-8') as f:
@@ -176,7 +177,7 @@ def load_csv(filename):
     with open(filename, encoding='utf-8') as f:
         reader = csv.reader(f)
         header = next(reader, None)
-        legacy = header is not None and header[:1] != CSV_HEADER[:1]
+        legacy = header is not None and header[:1] not in (CSV_HEADER[:1], [TURKISH_CSV_HEADER_FIRST])
         for row in reader:
             if legacy:
                 if len(row) >= 2 and row[1].strip().isdigit():

@@ -17,7 +17,7 @@ sys.path.insert(0, ROOT)
 from playwright.sync_api import sync_playwright  # noqa: E402
 from werkzeug.serving import make_server  # noqa: E402
 
-from mail_temizleyici import accounts, activity, demo, subscriptions, web  # noqa: E402
+from mail_cleaner import accounts, activity, demo, subscriptions, web  # noqa: E402
 
 OUT = os.path.join(ROOT, 'docs', 'screenshots')
 VIEWPORT = {'width': 1280, 'height': 800}

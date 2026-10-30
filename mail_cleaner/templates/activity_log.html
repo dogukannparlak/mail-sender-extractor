@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>İşlem günlüğü · Mail Temizleyici</title>
 <style>
-{% include '_sayfa_css.html' %}
+{% include '_page_css.html' %}
 </style>
 </head>
 <body>
 <main>
-  {% set sayfa = 'gunluk' %}{% include '_gezinme.html' %}
+  {% set current_page = 'activity-log' %}{% include '_nav.html' %}
   <h1>İşlem günlüğü{% if page_account %} · {{ page_account }}{% endif %}</h1>
-  <p class="hint">Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>hesaplar/{{ page_account }}/islem_gunlugu.jsonl</code></p>
+  <p class="hint">Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>accounts/{{ page_account }}/activity_log.jsonl</code></p>
   {% if events %}
   <div class="chips">
     <span class="chip">{{ events | length }} işlem</span>
@@ -71,7 +71,7 @@
   <p>Henüz kayıtlı işlem yok.</p>
   {% endif %}
 </main>
-{% include '_liste_js.html' %}
+{% include '_list_js.html' %}
 <script>
 const $ = id => document.getElementById(id);
 if ($('sort')) {

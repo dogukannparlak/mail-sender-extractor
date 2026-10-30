@@ -2,8 +2,8 @@ import os
 
 import pytest
 
-from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
-from mail_temizleyici import config
+from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_cleaner import config
 from conftest import TEST_ACCOUNT
 
 
@@ -17,7 +17,7 @@ def test_defaults_without_env_file(tmp_path):
     settings = config.load_settings(str(tmp_path / 'yok.env'), environ={})
 
     assert (settings.port, settings.demo, settings.default_scope, settings.quota_per_minute) == (5050, False, 'inbox', 5400)
-    assert settings.accounts_dir == os.path.join(config.BASE_DIR, 'hesaplar')
+    assert settings.accounts_dir == os.path.join(config.BASE_DIR, 'accounts')
     assert settings.extra_accounts == {}
 
 

@@ -255,7 +255,7 @@ Flask app.py ── Host / Origin kontrolü ── Gmail API (google-api-python-
 ```
 
 Proje klasöründeki giriş dosyaları: `app.py` (web uygulaması), `demo.py` (demo modu),
-`extract_senders.py` (CLI). Kod `mail_temizleyici/` paketinde, her iş için bir modül:
+`extract_senders.py` (CLI). Kod `mail_cleaner/` paketinde, her iş için bir modül:
 
 | Modül                   | Ne yapar                                                                                       |
 | ------------------------ | ---------------------------------------------------------------------------------------------- |

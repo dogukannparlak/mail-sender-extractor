@@ -12,8 +12,8 @@ playwright_sync = pytest.importorskip('playwright.sync_api')
 
 from werkzeug.serving import make_server
 
-from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
-from mail_temizleyici.demo import DEMO_SENDERS
+from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_cleaner.demo import DEMO_SENDERS
 
 ADDRESSES = {address for _, address, *_ in DEMO_SENDERS}
 WITH_UNSUBSCRIBE = {address for _, address, _, _, unsub, _ in DEMO_SENDERS if unsub}
@@ -246,7 +246,7 @@ def test_add_account_is_explained_in_demo(ui_page):
 
 def test_add_account_dialog_offers_file_and_pending_accounts(ui_browser, server_url, demo_mode, monkeypatch):
     import os
-    from mail_temizleyici import web
+    from mail_cleaner import web
     monkeypatch.setattr(web, 'DEMO_MODE', False)  # pencereyi göstermek için; giriş denenmez
     pending = os.path.join(accounts.ACCOUNTS_DIR, 'yeni@ornek.example')
     os.makedirs(pending)
@@ -295,8 +295,8 @@ def test_addresses_inside_a_domain_group_have_their_own_actions(ui_page):
 
 
 def _seed_subscription_data():
-    from mail_temizleyici import subscriptions
-    from mail_temizleyici.storage import write_json
+    from mail_cleaner import subscriptions
+    from mail_cleaner.storage import write_json
     paths = accounts.AccountPaths('demo@ornek.example')
     unsub = '<https://x.example/u>'
     write_json(paths.scan_cache, {
@@ -321,7 +321,7 @@ def _names(page):
 def test_subscriptions_page_sorts_and_filters(ui_page, server_url):
     _seed_subscription_data()
     page = ui_page
-    page.goto(f'{server_url}/abonelikler?account=demo@ornek.example')
+    page.goto(f'{server_url}/subscriptions?account=demo@ornek.example')
 
     assert [n.split('\n')[0] for n in _names(page)] == ['Alfa', 'Beta']  # bağlantısız Gama listede yok
     page.select_option('#sort', 'son:desc')
@@ -339,7 +339,7 @@ def test_subscriptions_page_sorts_and_filters(ui_page, server_url):
 def test_notifications_page_filters_by_type_and_unread(ui_page, server_url):
     _seed_subscription_data()
     page = ui_page
-    page.goto(f'{server_url}/bildirimler?account=demo@ornek.example')
+    page.goto(f'{server_url}/notifications?account=demo@ornek.example')
 
     assert len(_names(page)) == 2
     page.select_option('#fTur', 'mail_geliyor')

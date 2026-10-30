@@ -255,7 +255,7 @@ Flask app.py ── Host / Origin checks ── Gmail API (google-api-python-cli
 ```
 
 Entry points in the project folder: `app.py` (web app), `demo.py` (demo mode), `extract_senders.py`
-(CLI). The code lives in the `mail_temizleyici/` package, one module per job:
+(CLI). The code lives in the `mail_cleaner/` package, one module per job:
 
 | Module | What it does |
 |---|---|

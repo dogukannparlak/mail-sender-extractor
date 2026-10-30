@@ -2,8 +2,8 @@ import csv
 
 import pytest
 
-from mail_temizleyici.scanner import extract_senders, load_csv, message_category, save_to_csv
-from mail_temizleyici.gmail import sender_key
+from mail_cleaner.scanner import extract_senders, load_csv, message_category, save_to_csv
+from mail_cleaner.gmail import sender_key
 
 
 def _metadata_response(sender_header_value):
@@ -117,7 +117,7 @@ def test_save_to_csv_writes_header_and_rows_sorted_by_count_desc(tmp_path):
     with open(out_file, encoding='utf-8') as f:
         rows = list(csv.reader(f))
 
-    assert rows[0] == ['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']
+    assert rows[0] == ['Address', 'Name', 'Mail Count', 'Category', 'Unsubscribe']
     assert rows[1:] == [
         ['b@example.com', 'Bee', '5', '', ''],
         ['c@example.com', '', '3', '', ''],
@@ -133,7 +133,7 @@ def test_save_to_csv_handles_empty_input(tmp_path):
     with open(out_file, encoding='utf-8') as f:
         rows = list(csv.reader(f))
 
-    assert rows == [['Adres', 'Ad', 'Mail Sayısı', 'Kategori', 'Abonelik']]
+    assert rows == [['Address', 'Name', 'Mail Count', 'Category', 'Unsubscribe']]
 
 
 def test_load_csv_round_trips_save_to_csv(tmp_path):
@@ -300,7 +300,7 @@ def test_csv_neutralises_formulas_and_round_trips(tmp_path):
 
 
 def test_quota_limiter_waits_when_the_minute_budget_is_spent():
-    from mail_temizleyici.gmail import QuotaLimiter
+    from mail_cleaner.gmail import QuotaLimiter
     now = [0.0]
     sleeps = []
 
@@ -319,7 +319,7 @@ def test_quota_limiter_waits_when_the_minute_budget_is_spent():
 def test_user_rate_limit_403_is_retried():
     import httplib2
     from googleapiclient.errors import HttpError
-    from mail_temizleyici.gmail import _is_retryable
+    from mail_cleaner.gmail import _is_retryable
     err = HttpError(httplib2.Response({'status': 403}),
                     b'{"error": {"errors": [{"reason": "userRateLimitExceeded"}]}}')
     assert _is_retryable(err)
@@ -384,7 +384,7 @@ def test_extract_senders_scans_spam_and_archive_but_not_trash(fake_service_facto
 
 
 def test_accounts_have_separate_quota_budgets():
-    from mail_temizleyici import gmail
+    from mail_cleaner import gmail
     now = [0.0]
     sleeps = []
     a, b = gmail.AccountQuota(), gmail.AccountQuota()

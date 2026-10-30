@@ -8,11 +8,11 @@ import pytest
 import requests
 from googleapiclient.errors import HttpError
 
-from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
 from conftest import TEST_ACCOUNT, acct_paths
-from mail_temizleyici.web import app, _senders_payload, _validated_senders
-from mail_temizleyici.mailbox import extract_email, from_query, find_message_ids
-from mail_temizleyici.unsubscribe import is_safe_one_click_url, find_unsubscribe_info
+from mail_cleaner.web import app, _senders_payload, _validated_senders
+from mail_cleaner.mailbox import extract_email, from_query, find_message_ids
+from mail_cleaner.unsubscribe import is_safe_one_click_url, find_unsubscribe_info
 
 
 @pytest.fixture
@@ -682,7 +682,7 @@ class TestUndo:
         assert box.labels == before
 
     def test_undo_restores_csv_rows_and_is_single_use(self, client, monkeypatch, fake_service_factory, tmp_path):
-        from mail_temizleyici.scanner import save_to_csv
+        from mail_cleaner.scanner import save_to_csv
         save_to_csv({'a@example.com': {'ad': 'A', 'mail_sayisi': 2}, 'b@example.com': {'ad': '', 'mail_sayisi': 1}},
                     filename=acct_paths().csv)
         box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})
@@ -1069,7 +1069,7 @@ class TestActivityLog:
         events = web.activity.recent(acct_paths())
         assert [e['islem'] for e in events][::-1] == ['tarama', 'silme', 'geri_alma']
         assert events[1]['gonderenler'] == {'a@example.com': 1}
-        page = client.get('/gunluk')
+        page = client.get('/activity-log')
         assert page.status_code == 200
         body = page.get_data(as_text=True)
         assert 'a@example.com: 1 mail' in body and 'Geri alma' in body
@@ -1084,7 +1084,7 @@ class TestActivityLog:
         assert web.activity.recent(acct_paths())[0]['hata'] == 'boom'
 
     def test_empty_log_page(self, client):
-        assert 'Henüz kayıtlı işlem yok' in client.get('/gunluk').get_data(as_text=True)
+        assert 'Henüz kayıtlı işlem yok' in client.get('/activity-log').get_data(as_text=True)
 
 
 def _entry(address, date_ms, unsub='<https://a.example/u>, <mailto:u@a.example>', unsubscribe=True):
@@ -1093,7 +1093,7 @@ def _entry(address, date_ms, unsub='<https://a.example/u>, <mailto:u@a.example>'
 
 class TestSubscriptions:
     def test_first_scan_gives_no_new_subscription_notifications_then_new_senders_do(self, client):
-        from mail_temizleyici import subscriptions
+        from mail_cleaner import subscriptions
         paths = acct_paths()
         cache = {'m1': _entry('a@example.com', 1_000)}
 
@@ -1106,7 +1106,7 @@ class TestSubscriptions:
         assert subscriptions.unread_count(paths) == 1
 
     def test_mail_after_unsubscribing_is_reported_once_per_new_mail(self, client):
-        from mail_temizleyici import subscriptions
+        from mail_cleaner import subscriptions
         paths = acct_paths()
         cache = {'m1': _entry('a@example.com', 1_000)}
         subscriptions.after_scan(paths, cache)
@@ -1125,7 +1125,7 @@ class TestSubscriptions:
         assert [n['sayi'] for n in second] == [2]
 
     def test_rows_only_list_subscription_senders_with_safe_links(self, client):
-        from mail_temizleyici import subscriptions
+        from mail_cleaner import subscriptions
         cache = {
             'm1': _entry('a@example.com', 1_000, unsub='<javascript:alert(1)>, <https://a.example/old>'),
             'm2': _entry('a@example.com', 2_000, unsub='<https://a.example/new>, <javascript:alert(1)>, <mailto:u@a.example>'),
@@ -1140,7 +1140,7 @@ class TestSubscriptions:
         assert rows[0]['sayi'] == 2 and rows[1]['baglantilar'] == []
 
     def test_successful_one_click_unsubscribe_marks_sender_and_pages_render(self, client, monkeypatch):
-        from mail_temizleyici import subscriptions
+        from mail_cleaner import subscriptions
         monkeypatch.setattr(accounts, 'get_service', lambda *_: object())
         monkeypatch.setattr(web, 'find_unsubscribe_info', lambda service, email, confirm: {'status': 'done', 'url': 'x'})
         write = web.write_json
@@ -1150,12 +1150,12 @@ class TestSubscriptions:
 
         rows = subscriptions.rows(acct_paths(), web.read_json(acct_paths().scan_cache, {}))
         assert rows[0]['cikis']['yontem'] == 'otomatik'
-        page = client.get('/abonelikler').get_data(as_text=True)
+        page = client.get('/subscriptions').get_data(as_text=True)
         assert 'https://a.example/u' in page and 'Çıkıldı' in page
-        assert client.get('/bildirimler').status_code == 200
+        assert client.get('/notifications').status_code == 200
 
     def test_mark_endpoint_and_read_all(self, client):
-        from mail_temizleyici import subscriptions
+        from mail_cleaner import subscriptions
         paths = acct_paths()
         web.write_json(paths.scan_cache, {'m1': _entry('a@example.com', 1_000)})
 
@@ -1173,7 +1173,7 @@ class TestSubscriptions:
 
 class TestLinkLabel:
     def test_long_links_become_short_labels(self):
-        from mail_temizleyici.web import link_label
+        from mail_cleaner.web import link_label
         assert link_label('https://emails.wix.com/pub/optout/Unsubscribe?YES=true&_ri_=' + 'X' * 300) == 'emails.wix.com'
         assert link_label('mailto:unsubscribe-AQjk@imh.rsys121.origin.responsys.ocs.oraclecloud.com?subject=List-Unsubscribe') \
             == 'E-posta ile çık · imh.rsys121.origin.responsys.ocs.oraclecloud.com'
@@ -1214,18 +1214,18 @@ class TestScanAll:
 
 
 def test_subscription_rows_can_be_limited_to_senders_with_links(client):
-    from mail_temizleyici import subscriptions
+    from mail_cleaner import subscriptions
     cache = {'m1': _entry('a@example.com', 1_000),
              'm2': ['legacy@example.com', 'Legacy', 'bulten', True]}  # eski önbellek: bağlantı yok
 
     assert [r['adres'] for r in subscriptions.rows(acct_paths(), cache)] == ['a@example.com', 'legacy@example.com']
     assert [r['adres'] for r in subscriptions.rows(acct_paths(), cache, only_links=True)] == ['a@example.com']
-    page = client.get('/abonelikler').get_data(as_text=True)
+    page = client.get('/subscriptions').get_data(as_text=True)
     assert 'legacy@example.com' not in page
 
 
 def test_senders_payload_marks_only_senders_with_a_readable_unsubscribe_link(client):
-    from mail_temizleyici.scanner import save_to_csv
+    from mail_cleaner.scanner import save_to_csv
     save_to_csv({'a@example.com': {'ad': 'A', 'mail_sayisi': 2, 'abonelik': True},
                  'b@example.com': {'ad': 'B', 'mail_sayisi': 1, 'abonelik': True}}, filename=acct_paths().csv)
     web.write_json(acct_paths().scan_cache, {

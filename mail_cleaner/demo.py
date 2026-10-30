@@ -190,7 +190,7 @@ def enable():
 
     mailboxes = {account: DemoMailbox(senders, seed) for account, (senders, seed) in DEMO_ACCOUNTS.items()}
     data_dir = tempfile.mkdtemp(prefix='mail-temizleyici-demo-')
-    accounts.ACCOUNTS_DIR = os.path.join(data_dir, 'hesaplar')
+    accounts.ACCOUNTS_DIR = os.path.join(data_dir, 'accounts')
     accounts.EXTRA_ACCOUNT_TOKENS = {}  # .env'deki gerçek hesaplar demo'ya karışmasın
     accounts.LEGACY_TOKEN_PATH = os.path.join(data_dir, 'token.json')
     for account in mailboxes:
@@ -199,7 +199,7 @@ def enable():
         with open(os.path.join(accounts.ACCOUNTS_DIR, account, 'token.json'), 'w') as f:
             f.write('{}')
     accounts.get_service = lambda account: mailboxes[account]
-    protected.PROTECTED_PATH = os.path.join(data_dir, 'korunanlar.json')
+    protected.PROTECTED_PATH = os.path.join(data_dir, 'protected.json')
     gmail.quota.units_per_minute = 0  # sahte kutuda Gmail kotası yok
     # .example alan adları çözülmez; one-click kontrolü genel IP görsün, istek dışarı gitmesin.
     unsubscribe._resolve_host = lambda hostname: {'93.184.215.14'}

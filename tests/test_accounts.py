@@ -3,8 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
-from mail_temizleyici import auth as gmail_auth
+from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_cleaner import auth as gmail_auth
 from conftest import TEST_ACCOUNT
 
 OTHER = 'is@example.com'
@@ -245,7 +245,7 @@ def test_legacy_single_account_files_are_moved(client, monkeypatch, tmp_path):
     assert body['accounts'] == sorted([TEST_ACCOUNT, 'eski@example.com'])
     moved = accounts.AccountPaths('eski@example.com')
     assert open(moved.token).read() == '{"eski": true}'
-    assert os.path.exists(moved.csv)
+    assert os.path.exists(moved.csv) and moved.csv.endswith('senders.csv')
     assert not (tmp_path / 'token.json').exists() and not (tmp_path / 'gonderenler.csv').exists()
 
 
@@ -265,7 +265,7 @@ def test_sign_in_explains_disabled_gmail_api(client, monkeypatch, inline_scan, i
 
 
 def test_subscriptions_notifications_and_log_pages_show_only_the_chosen_account(client, two_accounts):
-    from mail_temizleyici import activity, subscriptions
+    from mail_cleaner import activity, subscriptions
     mine = accounts.AccountPaths(TEST_ACCOUNT)
     web.write_json(mine.scan_cache, {'m1': ['a@mine.example', 'Mine', 'bulten', True, 1000, '<https://mine.example/u>']})
     web.write_json(two_accounts.scan_cache, {'m1': ['b@other.example', 'Other', 'bulten', True, 1000, '<https://other.example/u>']})
@@ -273,15 +273,15 @@ def test_subscriptions_notifications_and_log_pages_show_only_the_chosen_account(
                                                      'ad': '', 'sayi': 1, 'okundu': False}])
     activity.record(mine, 'hesap_eklendi')
 
-    mine_page = client.get(f'/abonelikler?account={TEST_ACCOUNT}').get_data(as_text=True)
-    other_page = client.get(f'/abonelikler?account={OTHER}').get_data(as_text=True)
+    mine_page = client.get(f'/subscriptions?account={TEST_ACCOUNT}').get_data(as_text=True)
+    other_page = client.get(f'/subscriptions?account={OTHER}').get_data(as_text=True)
 
     assert 'a@mine.example' in mine_page and 'b@other.example' not in mine_page
     assert 'b@other.example' in other_page and 'a@mine.example' not in other_page
-    assert 'b@other.example' not in client.get(f'/bildirimler?account={TEST_ACCOUNT}').get_data(as_text=True)
-    assert 'b@other.example' in client.get(f'/bildirimler?account={OTHER}').get_data(as_text=True)
-    assert 'Hesap eklendi' in client.get(f'/gunluk?account={TEST_ACCOUNT}').get_data(as_text=True)
-    assert 'Hesap eklendi' not in client.get(f'/gunluk?account={OTHER}').get_data(as_text=True)
+    assert 'b@other.example' not in client.get(f'/notifications?account={TEST_ACCOUNT}').get_data(as_text=True)
+    assert 'b@other.example' in client.get(f'/notifications?account={OTHER}').get_data(as_text=True)
+    assert 'Hesap eklendi' in client.get(f'/activity-log?account={TEST_ACCOUNT}').get_data(as_text=True)
+    assert 'Hesap eklendi' not in client.get(f'/activity-log?account={OTHER}').get_data(as_text=True)
     assert client.get(f'/api/notifications/unread?account={TEST_ACCOUNT}').get_json() == {'unread': 0}
     assert client.get(f'/api/notifications/unread?account={OTHER}').get_json() == {'unread': 1}
     client.post('/api/notifications/read', json={'account': TEST_ACCOUNT})

@@ -1,0 +1,18 @@
+{% from '_icons.html' import icon %}
+{% set q = ('?account=' ~ (page_account | urlencode)) if page_account else '' %}
+<header class="topbar">
+  <a href="/" class="back">{{ icon('back') }}Uygulama</a>
+  <nav class="tabs" aria-label="Sayfalar">
+    <a href="/subscriptions{{ q }}"{% if current_page == 'subscriptions' %} class="current" aria-current="page"{% endif %}>{{ icon('subscription') }}Abonelikler</a>
+    <a href="/notifications{{ q }}"{% if current_page == 'notifications' %} class="current" aria-current="page"{% endif %}>{{ icon('notification') }}Bildirimler<span class="count-badge" {% if not unread_notifications %}hidden{% endif %}>{{ unread_notifications }}</span></a>
+    <a href="/activity-log{{ q }}"{% if current_page == 'activity-log' %} class="current" aria-current="page"{% endif %}>{{ icon('log') }}İşlem günlüğü</a>
+  </nav>
+  {% if account_list %}
+  <label class="account-pick" title="Hesap">{{ icon('account') }}
+    <select id="accountPick" aria-label="Hesap">
+      {% for name in account_list %}<option value="{{ name }}"{% if name == page_account %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
+  <script>document.getElementById('accountPick').addEventListener('change', e => { location.search = '?account=' + encodeURIComponent(e.target.value); });</script>
+  {% endif %}
+</header>

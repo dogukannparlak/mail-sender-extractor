@@ -10,8 +10,8 @@ from .gmail import EMAIL_RE
 
 # Proje klasörü (paketin bir üstü): .env, credentials.json ve veriler burada.
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# MAIL_TEMIZLEYICI_ENV_FILE başka bir dosyayı gösterebilir; boş verilirse .env hiç okunmaz (testler böyle çalışır).
-ENV_PATH = os.environ.get('MAIL_TEMIZLEYICI_ENV_FILE', os.path.join(BASE_DIR, '.env'))
+# MAIL_CLEANER_ENV_FILE başka bir dosyayı gösterebilir; boş verilirse .env hiç okunmaz (testler böyle çalışır).
+ENV_PATH = os.environ.get('MAIL_CLEANER_ENV_FILE', os.path.join(BASE_DIR, '.env'))
 
 
 
@@ -91,7 +91,7 @@ class Settings:
         self.flask_debug = _bool('FLASK_DEBUG', get('FLASK_DEBUG', '0'))
         self.compact_files = _bool('COMPACT_FILES', get('COMPACT_FILES', '0'))
         self.credentials_path = _path(get('CREDENTIALS_PATH', 'credentials.json'))
-        self.accounts_dir = _path(get('ACCOUNTS_DIR', 'hesaplar'))
+        self.accounts_dir = _path(get('ACCOUNTS_DIR', 'accounts'))
         self.quota_per_minute = _int('GMAIL_QUOTA_PER_MINUTE', get('GMAIL_QUOTA_PER_MINUTE', '5400'), 0)
         self.default_scope = get('DEFAULT_SCOPE', 'inbox')
         if self.default_scope not in ('inbox', 'all'):

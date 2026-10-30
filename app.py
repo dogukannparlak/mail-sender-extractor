@@ -2,7 +2,7 @@
 import sys
 
 try:
-    from mail_temizleyici.web import app, main  # noqa: F401  (app: testler ve WSGI için)
+    from mail_cleaner.web import app, main  # noqa: F401  (app: testler ve WSGI için)
 except ValueError as e:  # config.ConfigError: .env'de hatalı bir değer
     sys.exit(f'Ayar hatası: {e}')
 

@@ -245,11 +245,11 @@
   <span class="summary" id="grandTotal"></span>
   </div>
   <div class="header-row">
-  {% from '_ikonlar.html' import ikon %}
+  {% from '_icons.html' import icon %}
   <nav class="header-links" aria-label="Sayfalar">
-  <a href="/abonelikler" target="_blank" rel="noopener" class="log-link" data-page="abonelikler">{{ ikon('abonelik') }}Abonelikler</a>
-  <a href="/bildirimler" target="_blank" rel="noopener" class="log-link" id="notifLink" data-page="bildirimler">{{ ikon('bildirim') }}Bildirimler<span class="count-badge" id="notifCount" hidden></span></a>
-  <a href="/gunluk" target="_blank" rel="noopener" class="log-link" data-page="gunluk">{{ ikon('gunluk') }}İşlem günlüğü</a>
+  <a href="/subscriptions" target="_blank" rel="noopener" class="log-link" data-page="subscriptions">{{ icon('subscription') }}Abonelikler</a>
+  <a href="/notifications" target="_blank" rel="noopener" class="log-link" id="notifLink" data-page="notifications">{{ icon('notification') }}Bildirimler<span class="count-badge" id="notifCount" hidden></span></a>
+  <a href="/activity-log" target="_blank" rel="noopener" class="log-link" data-page="activity-log">{{ icon('log') }}İşlem günlüğü</a>
   </nav>
   <div class="scan-actions">
   <button id="scanBtn" type="button" disabled>Gelen Kutusunu Tara</button>

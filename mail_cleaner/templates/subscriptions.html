@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Abonelikler · Mail Temizleyici</title>
 <style>
-{% include '_sayfa_css.html' %}
+{% include '_page_css.html' %}
 </style>
 </head>
 <body>
 <main>
-  {% from '_ikonlar.html' import ikon %}
-  {% set sayfa = 'abonelikler' %}{% include '_gezinme.html' %}
+  {% from '_icons.html' import icon %}
+  {% set current_page = 'subscriptions' %}{% include '_nav.html' %}
   {% set kategori_adlari = {'bulten': 'Bülten', 'promosyon': 'Promosyon', 'bildirim': 'Bildirim', 'kisisel': 'Kişisel', 'spam': 'Spam'} %}
   <h1>Abonelikler{% if page_account %} · {{ page_account }}{% endif %}</h1>
   <p class="hint">Yalnızca çıkış bağlantısı (List-Unsubscribe) olan göndericiler. Bağlantıyı kendin açıp çıktıysan "Çıktım" ile işaretle;
@@ -59,7 +59,7 @@
         {% else %}<span class="pill muted">Çıkılmadı</span>{% endif %}
       </td>
       <td class="links">
-        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ ikon('dis_baglanti') }}{{ url | link_label }}</a></div>{% endfor %}
+        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ icon('external') }}{{ url | link_label }}</a></div>{% endfor %}
       </td>
       <td><button type="button" data-account="{{ page_account }}" data-sender="{{ r.adres }}"
                   data-unsubscribed="{{ 'false' if r.cikis else 'true' }}">{{ 'İşareti kaldır' if r.cikis else 'Çıktım' }}</button></td>
@@ -75,7 +75,7 @@
   <p>Önce bir Gmail hesabı ekle.</p>
   {% endif %}
 </main>
-{% include '_liste_js.html' %}
+{% include '_list_js.html' %}
 <script>
 const $ = id => document.getElementById(id);
 if ($('sort')) {

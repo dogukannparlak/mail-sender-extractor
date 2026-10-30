@@ -10,7 +10,7 @@ from flask import Flask, jsonify, request, render_template
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 
-from . import accounts, activity, mailbox, protected, state, subscriptions
+from . import accounts, activity, mailbox, migrate, protected, state, subscriptions
 from .config import settings
 from .gmail import quota
 from .mailbox import extract_email
@@ -350,28 +350,28 @@ def api_scan_status():
 
 # --- İşlem günlüğü -----------------------------------------------------------
 
-@app.route('/gunluk')
+@app.route('/activity-log')
 def log_page():
     paths = _page_paths()
-    return render_template('gunluk.html', events=activity.recent(paths) if paths else [])
+    return render_template('activity_log.html', events=activity.recent(paths) if paths else [])
 
 
 # --- Abonelikler ve bildirimler ----------------------------------------------
 
-@app.route('/abonelikler')
+@app.route('/subscriptions')
 def subscriptions_page():
     paths = _page_paths()
     cache = read_json(paths.scan_cache, {}) if paths else {}
     rows = subscriptions.rows(paths, cache, only_links=True) if paths else []
     without_links = len(subscriptions.rows(paths, cache)) - len(rows) if paths else 0
-    return render_template('abonelikler.html', rows=rows, without_links=without_links,
+    return render_template('subscriptions.html', rows=rows, without_links=without_links,
                            scanned=bool(paths and os.path.exists(paths.scan_cache)))
 
 
-@app.route('/bildirimler')
+@app.route('/notifications')
 def notifications_page():
     paths = _page_paths()
-    return render_template('bildirimler.html', notifications=subscriptions.all_notifications(paths) if paths else [])
+    return render_template('notifications.html', notifications=subscriptions.all_notifications(paths) if paths else [])
 
 
 @app.route('/api/notifications/unread')
@@ -498,6 +498,9 @@ def api_unsubscribe():
 
 
 def main():
+    if not settings.demo:
+        for old, new in migrate.run():
+            print(f'Taşındı: {old} → {new}')
     if settings.demo:
         from . import demo
         demo.enable()

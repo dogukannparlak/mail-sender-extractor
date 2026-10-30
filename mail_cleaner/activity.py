@@ -1,4 +1,4 @@
-"""Yapılan işlemlerin basit günlüğü: hesap klasöründe satır başına bir JSON (islem_gunlugu.jsonl).
+"""Yapılan işlemlerin basit günlüğü: hesap klasöründe satır başına bir JSON (activity_log.jsonl).
 
 Günlük yazılamazsa asıl işlem bozulmasın diye hatalar yutulur. Her hesabın günlüğü ayrıdır.
 """

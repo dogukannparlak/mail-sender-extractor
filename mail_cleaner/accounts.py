@@ -15,7 +15,9 @@ ACCOUNTS_DIR = settings.accounts_dir
 EXTRA_ACCOUNT_TOKENS = settings.extra_accounts
 # Çoklu hesaptan önceki tek hesaplı düzen; ilk açılışta hesabın klasörüne taşınır.
 LEGACY_TOKEN_PATH = os.path.join(BASE_DIR, 'token.json')
-LEGACY_DATA_FILES = ('gonderenler.csv', 'taranan_idler.json', 'son_islem.json')
+# Tek hesaplı sürümün kökteki dosyaları → hesap klasöründeki yeni adları.
+LEGACY_DATA_FILES = {'gonderenler.csv': 'senders.csv', 'taranan_idler.json': 'scan_ids.json',
+                     'son_islem.json': 'last_action.json'}
 
 
 class AccountPaths:
@@ -28,17 +30,17 @@ class AccountPaths:
         self.token = EXTRA_ACCOUNT_TOKENS.get(account) or os.path.join(self.root, 'token.json')
         # Bu hesabın kendi Google Cloud istemcisi (client_secret_….json); her hesap bağımsız bağlanır.
         self.client = os.path.join(self.root, 'credentials.json')
-        self.csv = os.path.join(self.root, 'gonderenler.csv')
-        self.undo = os.path.join(self.root, 'son_islem.json')
+        self.csv = os.path.join(self.root, 'senders.csv')
+        self.undo = os.path.join(self.root, 'last_action.json')
         # Taramada görülen mail id'leri (gönderen başına); silmede bu maillerin From'unu yeniden okumayız.
-        self.scan_ids = os.path.join(self.root, 'taranan_idler.json')
+        self.scan_ids = os.path.join(self.root, 'scan_ids.json')
         # Mail başına okunmuş başlıklar; sonraki taramalar yalnız yeni mailleri okur.
-        self.scan_cache = os.path.join(self.root, 'tarama_onbellegi.json')
+        self.scan_cache = os.path.join(self.root, 'scan_cache.json')
         # Yapılan işlemlerin günlüğü (tarama, silme, geri alma, abonelik, hesap).
-        self.log = os.path.join(self.root, 'islem_gunlugu.jsonl')
-        # Abonelik çıkış durumu (abonelikler.json) ve bildirimler (bildirimler.json).
-        self.subscriptions = os.path.join(self.root, 'abonelikler.json')
-        self.notifications = os.path.join(self.root, 'bildirimler.json')
+        self.log = os.path.join(self.root, 'activity_log.jsonl')
+        # Abonelik çıkış durumu (subscriptions.json) ve bildirimler (notifications.json).
+        self.subscriptions = os.path.join(self.root, 'subscriptions.json')
+        self.notifications = os.path.join(self.root, 'notifications.json')
 
 
 def _folder_names():
@@ -121,10 +123,10 @@ def migrate_legacy_account():
     account = auth.account_email(auth.get_service(LEGACY_TOKEN_PATH))
     paths = AccountPaths(account)
     os.makedirs(paths.root, mode=0o700, exist_ok=True)
-    for name in LEGACY_DATA_FILES:
-        source = os.path.join(BASE_DIR, name)
-        if os.path.exists(source) and not os.path.exists(os.path.join(paths.root, name)):
-            shutil.move(source, os.path.join(paths.root, name))
+    for old_name, new_name in LEGACY_DATA_FILES.items():
+        source = os.path.join(BASE_DIR, old_name)
+        if os.path.exists(source) and not os.path.exists(os.path.join(paths.root, new_name)):
+            shutil.move(source, os.path.join(paths.root, new_name))
     if os.path.exists(paths.token):
         os.remove(LEGACY_TOKEN_PATH)  # aynı hesap zaten eklenmiş; eski kopya gereksiz
     else:

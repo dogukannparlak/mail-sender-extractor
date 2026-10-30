@@ -9,7 +9,7 @@ from .config import BASE_DIR
 from .gmail import EMAIL_RE
 from .storage import read_json, write_json
 
-PROTECTED_PATH = os.path.join(BASE_DIR, 'korunanlar.json')
+PROTECTED_PATH = os.path.join(BASE_DIR, 'protected.json')
 DOMAIN_RE = re.compile(r'^@[\w-]+(\.[\w-]+)+$')
 
 
