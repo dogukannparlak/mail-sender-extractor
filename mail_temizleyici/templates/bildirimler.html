@@ -13,18 +13,41 @@
   {% set sayfa = 'bildirimler' %}{% include '_gezinme.html' %}
   <h1>Bildirimler{% if page_account %} · {{ page_account }}{% endif %}</h1>
   <p class="hint">Her taramadan sonra üretilir: taramada ilk kez görülen abonelikler ve aboneliğinden çıktığın göndericilerden gelen yeni mailler.
-    <button id="readAll" type="button">Hepsini okundu yap</button></p>
+    İlk taramada yeni abonelik bildirimi üretilmez.</p>
   {% if notifications %}
+  <div class="chips">
+    <span class="chip">{{ notifications | length }} bildirim</span>
+    {% set okunmamis = notifications | rejectattr('okundu') | list | length %}
+    {% if okunmamis %}<span class="chip warn">{{ okunmamis }} okunmamış</span>{% endif %}
+    {% set sorunlu = notifications | selectattr('tur', 'equalto', 'mail_geliyor') | list | length %}
+    {% if sorunlu %}<span class="chip warn">{{ sorunlu }} çıkış işe yaramamış</span>{% endif %}
+  </div>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Ad ya da adres ara…" aria-label="Bildirimlerde ara" autocomplete="off">
+    <label>Tür
+      <select id="fTur"><option value="">Hepsi</option><option value="yeni_abonelik">Yeni abonelik</option>
+        <option value="mail_geliyor">Çıktığın halde mail geliyor</option></select></label>
+    <label><input type="checkbox" id="fOkunmamis"> Yalnız okunmamış</label>
+    <label>Sırala
+      <select id="sort"><option value="zaman:desc">En yeni</option><option value="zaman:asc">En eski</option>
+        <option value="sayi:desc">Mail sayısı (çoktan aza)</option></select></label>
+    <button id="readAll" type="button" {% if not okunmamis %}disabled{% endif %}>Hepsini okundu yap</button>
+    <span class="result-count" id="count" aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Zaman</th><th>Bildirim</th></tr></thead>
     <tbody>
     {% for n in notifications %}
-    <tr{% if not n.okundu %} class="unread"{% endif %}>
+    <tr{% if not n.okundu %} class="unread"{% endif %} data-tur="{{ n.tur }}" data-okunmamis="{{ '0' if n.okundu else '1' }}"
+        data-sort-zaman="{{ n.zaman | int }}" data-sort-sayi="{{ n.sayi }}">
       <td class="time">{{ n.zaman | int | datetimeformat }}</td>
       {% if n.tur == 'yeni_abonelik' %}
-        <td><span class="tag">Yeni abonelik:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ n.sayi }} mail. <a href="/abonelikler?account={{ page_account | urlencode }}">Abonelikler</a> sayfasında çıkış bağlantısı var.</td>
+        <td><span class="pill">Yeni abonelik</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ n.sayi }} mail.
+          <a href="/abonelikler?account={{ page_account | urlencode }}">Abonelikler</a> sayfasında çıkış bağlantısı var.</td>
       {% elif n.tur == 'mail_geliyor' %}
-        <td><span class="tag err">Çıktığın halde mail geliyor:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · çıkıştan sonra {{ n.sayi }} yeni mail. Çıkış işe yaramamış olabilir; <a href="/abonelikler?account={{ page_account | urlencode }}">bağlantıyı elle dene</a> ya da göndericiyi sil.</td>
+        <td><span class="pill err">Çıktığın halde mail geliyor</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · çıkıştan sonra {{ n.sayi }} yeni mail.
+          Çıkış işe yaramamış olabilir; <a href="/abonelikler?account={{ page_account | urlencode }}">bağlantıyı elle dene</a> ya da göndericiyi sil.</td>
       {% else %}
         <td>{{ n.tur }}: {{ n.gonderen }}</td>
       {% endif %}
@@ -32,19 +55,29 @@
     {% endfor %}
     </tbody>
   </table>
+  <p class="no-match" id="noMatch" hidden>Filtreye uyan bildirim yok.</p>
+  </div>
   {% else %}
-  <p>Henüz bildirim yok. Bir tarama bittikten sonra burada görünür (ilk taramada yeni abonelik bildirimi üretilmez).</p>
+  <p>Henüz bildirim yok. Bir tarama bittikten sonra burada görünür.</p>
   {% endif %}
 </main>
+{% include '_liste_js.html' %}
 <script>
-document.getElementById('readAll').addEventListener('click', async () => {
-  await fetch('/api/notifications/read', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ account: {{ page_account | tojson }} }),
+const $ = id => document.getElementById(id);
+if ($('sort')) {
+  setupList({
+    rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
+    selects: [{ el: $('fTur'), attr: 'tur' }], checks: [{ el: $('fOkunmamis'), attr: 'okunmamis' }],
   });
-  location.reload();
-});
+  $('readAll').addEventListener('click', async () => {
+    await fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: {{ page_account | tojson }} }),
+    });
+    location.reload();
+  });
+}
 </script>
 </body>
 </html>

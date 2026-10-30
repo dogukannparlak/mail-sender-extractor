@@ -10,30 +10,57 @@
 </head>
 <body>
 <main>
+  {% from '_ikonlar.html' import ikon %}
   {% set sayfa = 'abonelikler' %}{% include '_gezinme.html' %}
-  <h1>Abonelikler</h1>
+  {% set kategori_adlari = {'bulten': 'Bülten', 'promosyon': 'Promosyon', 'bildirim': 'Bildirim', 'kisisel': 'Kişisel', 'spam': 'Spam'} %}
+  <h1>Abonelikler{% if page_account %} · {{ page_account }}{% endif %}</h1>
   <p class="hint">Yalnızca abonelik (List-Unsubscribe) başlığı taşıyan göndericiler. Bağlantıyı kendin açıp çıktıysan "Çıktım" ile işaretle;
     sonraki taramalarda o göndericiden yeni mail gelirse Bildirimler'de uyarı çıkar.</p>
-  {% if page_account %}
-  <h2>{{ page_account }} · {{ rows | length }} abonelik</h2>
-  {% if rows %}
+  {% if page_account and rows %}
+  <div class="chips">
+    <span class="chip">{{ rows | length }} abonelik</span>
+    <span class="chip good">{{ rows | selectattr('cikis') | list | length }} çıkıldı</span>
+    {% set uyari = rows | selectattr('yeni_mail') | list | length %}{% if uyari %}<span class="chip warn">{{ uyari }} çıktığı halde mail gönderiyor</span>{% endif %}
+    {% set baglantisiz = rows | rejectattr('baglantilar') | list | length %}{% if baglantisiz %}<span class="chip">{{ baglantisiz }} bağlantısız</span>{% endif %}
+  </div>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Ad ya da adres ara…" aria-label="Gönderen ara" autocomplete="off">
+    <label>Kategori
+      <select id="fKategori"><option value="">Hepsi</option>
+        {% for k in rows | map(attribute='kategori') | unique | select | sort %}<option value="{{ k }}">{{ kategori_adlari.get(k, k) }}</option>{% endfor %}
+      </select></label>
+    <label>Durum
+      <select id="fDurum"><option value="">Hepsi</option><option value="cikilmadi">Çıkılmadı</option>
+        <option value="cikildi">Çıkıldı</option><option value="uyari">Çıktığı halde mail geliyor</option></select></label>
+    <label>Bağlantı
+      <select id="fBaglanti"><option value="">Hepsi</option><option value="var">Bağlantısı var</option><option value="yok">Bağlantısı yok</option></select></label>
+    <label>Sırala
+      <select id="sort">
+        <option value="sayi:desc">Mail sayısı (çoktan aza)</option><option value="sayi:asc">Mail sayısı (azdan çoğa)</option>
+        <option value="son:desc">Son mail (yeniden eskiye)</option><option value="son:asc">Son mail (eskiden yeniye)</option>
+        <option value="ad:asc">İsme göre (A–Z)</option><option value="ad:desc">İsme göre (Z–A)</option>
+      </select></label>
+    <span class="result-count" id="count" aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
   <table>
     <thead><tr><th>Gönderen</th><th>Kategori</th><th>Mail</th><th>Son mail</th><th>Durum</th><th>Çıkış bağlantıları</th><th></th></tr></thead>
     <tbody>
     {% for r in rows %}
-    <tr>
+    <tr data-kategori="{{ r.kategori }}" data-durum="{{ 'uyari' if r.yeni_mail else ('cikildi' if r.cikis else 'cikilmadi') }}"
+        data-baglanti="{{ 'var' if r.baglantilar else 'yok' }}" data-sort-sayi="{{ r.sayi }}" data-sort-son="{{ r.son_mail }}"
+        data-sort-ad="{{ (r.ad or r.adres) | lower }}">
       <td>{{ r.ad or r.adres }}{% if r.ad %}<br><span class="muted">{{ r.adres }}</span>{% endif %}</td>
-      <td>{{ r.kategori }}</td>
+      <td>{{ kategori_adlari.get(r.kategori, r.kategori) }}</td>
       <td>{{ r.sayi }}</td>
       <td class="time">{% if r.son_mail %}{{ (r.son_mail / 1000) | int | datetimeformat }}{% endif %}</td>
       <td>
         {% if r.cikis %}
-          <span class="ok">Çıkıldı</span> <span class="muted">({{ r.cikis.zaman | int | datetimeformat }}, {{ r.cikis.yontem }})</span>
+          <span class="pill ok">Çıkıldı</span><br><span class="muted">{{ r.cikis.zaman | int | datetimeformat }} · {{ r.cikis.yontem }}</span>
           {% if r.yeni_mail %}<br><span class="err">Çıkıştan sonra {{ r.yeni_mail }} yeni mail geldi</span>{% endif %}
-        {% else %}Çıkılmadı{% endif %}
+        {% else %}<span class="pill muted">Çıkılmadı</span>{% endif %}
       </td>
       <td class="links">
-        {% from '_ikonlar.html' import ikon %}
         {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ ikon('dis_baglanti') }}{{ url | link_label }}</a></div>
         {% else %}<span class="muted">Bağlantı yok (eski önbellek: ana sayfadan "Tam tara")</span>{% endfor %}
       </td>
@@ -43,14 +70,23 @@
     {% endfor %}
     </tbody>
   </table>
-  {% else %}
+  <p class="no-match" id="noMatch" hidden>Filtreye uyan abonelik yok.</p>
+  </div>
+  {% elif page_account %}
   <p>{% if scanned %}Bu hesapta abonelik başlığı taşıyan gönderen yok.{% else %}Bu hesap yeni sürümle henüz taranmadı: ana sayfada bu hesabı seçip "Tam tara"ya bas.{% endif %}</p>
-  {% endif %}
   {% else %}
   <p>Önce bir Gmail hesabı ekle.</p>
   {% endif %}
 </main>
+{% include '_liste_js.html' %}
 <script>
+const $ = id => document.getElementById(id);
+if ($('sort')) {
+  setupList({
+    rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
+    selects: [{ el: $('fKategori'), attr: 'kategori' }, { el: $('fDurum'), attr: 'durum' }, { el: $('fBaglanti'), attr: 'baglanti' }],
+  });
+}
 document.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-sender]');
   if (!button) return;

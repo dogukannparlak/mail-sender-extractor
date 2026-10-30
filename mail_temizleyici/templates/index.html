@@ -58,14 +58,17 @@
     border-bottom: 1px solid var(--border);
     position: sticky; top: 0; z-index: 10;
     background: var(--bg);
-    display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;
+    display: flex; flex-direction: column; gap: 10px;
   }
+  .header-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px 16px; }
+  .header-links { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 20px; }
+  .scan-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   h1 { font-size: 20px; margin: 0; display: flex; align-items: center; gap: 8px; }
   .demo-badge {
     font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
     padding: 2px 8px; border-radius: 10px; border: 1px solid currentColor; color: var(--link);
   }
-  .summary { color: var(--muted); font-size: 14px; }
+  .summary { color: var(--muted); font-size: 14px; margin-left: auto; }
   .account-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
   #accountSelect {
     background: var(--card); color: var(--text); border: 1px solid var(--border);
@@ -170,7 +173,7 @@
   .small-btn.danger { color: var(--accent-text); border-color: currentColor; }
   .copy-btn { min-width: 76px; }
   .lock-btn[aria-pressed="true"] { color: var(--ok); border-color: currentColor; }
-  .log-link { font-size: 13px; color: var(--link); display: inline-flex; align-items: center; text-decoration: none; }
+  .log-link { font-size: 14px; color: var(--link); display: inline-flex; align-items: center; text-decoration: none; }
   .log-link:hover { text-decoration: underline; }
   .ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; margin-right: 5px; flex: none; }
   .count-badge { display: inline-block; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; margin-left: 6px; border-radius: 9px;
@@ -231,6 +234,7 @@
 <body>
 
 <header>
+  <div class="header-row">
   <h1>Mail Temizleyici{% if demo %} <span class="demo-badge" title="Sahte verilerle çalışıyor; Gmail'e bağlı değil">DEMO</span>{% endif %}</h1>
   <div class="account-bar">
     <label for="accountSelect" id="accountLabel" hidden>Taranan hesap:</label>
@@ -239,15 +243,22 @@
     <button id="removeAccountBtn" type="button" class="small-btn" hidden>Hesabı çıkar</button>
   </div>
   <span class="summary" id="grandTotal"></span>
+  </div>
+  <div class="header-row">
   {% from '_ikonlar.html' import ikon %}
+  <nav class="header-links" aria-label="Sayfalar">
   <a href="/abonelikler" target="_blank" rel="noopener" class="log-link" data-page="abonelikler">{{ ikon('abonelik') }}Abonelikler</a>
   <a href="/bildirimler" target="_blank" rel="noopener" class="log-link" id="notifLink" data-page="bildirimler">{{ ikon('bildirim') }}Bildirimler<span class="count-badge" id="notifCount" hidden></span></a>
   <a href="/gunluk" target="_blank" rel="noopener" class="log-link" data-page="gunluk">{{ ikon('gunluk') }}İşlem günlüğü</a>
+  </nav>
+  <div class="scan-actions">
   <button id="scanBtn" type="button" disabled>Gelen Kutusunu Tara</button>
   <button id="fullScanBtn" class="secondary-btn" type="button" disabled
           title="Önbelleği yok sayar, bütün mailleri yeniden okur (kategori değişikliklerini yakalar; yavaştır)">Tam tara</button>
   <button id="scanAllBtn" class="secondary-btn" type="button" hidden
           title="Bütün hesapları aynı anda tarar; Gmail kotası hesap başına olduğu için toplam süre en yavaş hesap kadar sürer">Tüm hesapları tara</button>
+  </div>
+  </div>
 </header>
 
 <main>
@@ -287,6 +298,8 @@
         <option value="count_asc">Mail sayısı (azdan çoğa)</option>
         <option value="name_asc">İsme göre (A–Z)</option>
         <option value="name_desc">İsme göre (Z–A)</option>
+        <option value="members_desc" data-domain-only hidden disabled>Adres sayısı (çoktan aza)</option>
+        <option value="members_asc" data-domain-only hidden disabled>Adres sayısı (azdan çoğa)</option>
       </select>
     </span>
   </div>
@@ -537,6 +550,10 @@ function sortedRows() {
   rows.sort((a, b) => {
     if (state.sortMode === 'name_asc') return a.label.localeCompare(b.label, 'tr');
     if (state.sortMode === 'name_desc') return b.label.localeCompare(a.label, 'tr');
+    if (state.sortMode === 'members_desc' || state.sortMode === 'members_asc') {
+      const byMembers = a.members.length - b.members.length || a.count - b.count;
+      return state.sortMode === 'members_asc' ? byMembers : -byMembers;
+    }
     const diff = a.count - b.count;
     return state.sortMode === 'count_asc' ? diff : -diff;
   });
@@ -1373,6 +1390,13 @@ $('categorySelect').addEventListener('change', e => {
 });
 $('viewSelect').addEventListener('change', e => {
   state.viewMode = e.target.value;
+  // "Adres sayısı" sıralaması yalnız alan adı görünümünde anlamlı: alan adı başına kaç adres var.
+  const domainView = state.viewMode === 'domain';
+  document.querySelectorAll('#sortSelect [data-domain-only]').forEach(o => { o.hidden = !domainView; o.disabled = !domainView; });
+  if (!domainView && state.sortMode.startsWith('members_')) {
+    state.sortMode = 'count_desc';
+    $('sortSelect').value = 'count_desc';
+  }
   state.openPanels.clear();
   if (state.data) render();
 });

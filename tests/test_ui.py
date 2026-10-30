@@ -286,3 +286,78 @@ def test_addresses_inside_a_domain_group_have_their_own_actions(ui_page):
     member.get_by_role('button', name='Koru').click()
     group.locator('.member-item', has_text='kampanya@ornekmarket.example').get_by_role('button', name='Korunuyor').wait_for()
     assert 'kampanya@ornekmarket.example' in page.evaluate('state.protectedList.adresler')
+
+
+def _seed_subscription_data():
+    from mail_temizleyici import subscriptions
+    from mail_temizleyici.storage import write_json
+    paths = accounts.AccountPaths('demo@ornek.example')
+    unsub = '<https://x.example/u>'
+    write_json(paths.scan_cache, {
+        'a1': ['alfa@x.example', 'Alfa', 'bulten', True, 3_000, unsub],
+        'a2': ['alfa@x.example', 'Alfa', 'bulten', True, 4_000, unsub],
+        'a3': ['alfa@x.example', 'Alfa', 'bulten', True, 5_000, unsub],
+        'b1': ['beta@x.example', 'Beta', 'promosyon', True, 9_000, unsub],
+        'c1': ['gama@x.example', 'Gama', 'bulten', True, 1_000, ''],
+    })
+    subscriptions.mark(paths, 'beta@x.example', True)
+    subscriptions._add_notifications(paths, [
+        {'zaman': 100, 'tur': 'yeni_abonelik', 'gonderen': 'alfa@x.example', 'ad': 'Alfa', 'sayi': 3, 'okundu': True},
+        {'zaman': 200, 'tur': 'mail_geliyor', 'gonderen': 'beta@x.example', 'ad': 'Beta', 'sayi': 2, 'okundu': False},
+    ])
+    return paths
+
+
+def _names(page):
+    return [t.strip() for t in page.locator('tbody tr:visible td:first-child').all_inner_texts()]
+
+
+def test_subscriptions_page_sorts_and_filters(ui_page, server_url):
+    _seed_subscription_data()
+    page = ui_page
+    page.goto(f'{server_url}/abonelikler?account=demo@ornek.example')
+
+    assert [n.split('\n')[0] for n in _names(page)] == ['Alfa', 'Beta', 'Gama']  # mail sayısı çoktan aza
+    page.select_option('#sort', 'son:desc')
+    assert [n.split('\n')[0] for n in _names(page)] == ['Beta', 'Alfa', 'Gama']
+    page.select_option('#fKategori', 'promosyon')
+    assert len(_names(page)) == 1 and page.locator('#count').inner_text() == '1 / 3 gösteriliyor'
+    page.select_option('#fKategori', '')
+    page.select_option('#fDurum', 'cikildi')
+    assert [n.split('\n')[0] for n in _names(page)] == ['Beta']
+    page.select_option('#fDurum', '')
+    page.select_option('#fBaglanti', 'yok')
+    assert [n.split('\n')[0] for n in _names(page)] == ['Gama']
+    page.select_option('#fBaglanti', '')
+    page.fill('#q', 'nonexistent')
+    assert page.locator('#noMatch').is_visible()
+
+
+def test_notifications_page_filters_by_type_and_unread(ui_page, server_url):
+    _seed_subscription_data()
+    page = ui_page
+    page.goto(f'{server_url}/bildirimler?account=demo@ornek.example')
+
+    assert len(_names(page)) == 2
+    page.select_option('#fTur', 'mail_geliyor')
+    assert len(_names(page)) == 1
+    page.select_option('#fTur', '')
+    page.check('#fOkunmamis')
+    assert len(_names(page)) == 1 and 'beta@x.example' in page.locator('tbody tr:visible').inner_text()
+    page.uncheck('#fOkunmamis')
+    page.select_option('#sort', 'zaman:asc')
+    assert 'alfa@x.example' in page.locator('tbody tr').first.inner_text()
+
+
+def test_domain_view_can_be_sorted_by_address_count(ui_page):
+    page = ui_page
+    assert page.locator('#sortSelect option[value="members_desc"]').is_disabled()
+    page.select_option('#viewSelect', 'domain')
+    page.select_option('#sortSelect', 'members_desc')
+    first = page.locator('.sender-item .sender-name').first.inner_text()
+    counts = page.locator('.sender-item .sender-email').all_inner_texts()
+    assert first.startswith('ornekmarket.example') or first.startswith('ornek.example') or first.startswith('okul.example')
+    numbers = [int(c.split()[0]) for c in counts]
+    assert numbers == sorted(numbers, reverse=True)
+    page.select_option('#viewSelect', 'address')
+    assert page.locator('#sortSelect').input_value() == 'count_desc'
