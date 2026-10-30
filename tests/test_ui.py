@@ -317,18 +317,15 @@ def test_subscriptions_page_sorts_and_filters(ui_page, server_url):
     page = ui_page
     page.goto(f'{server_url}/abonelikler?account=demo@ornek.example')
 
-    assert [n.split('\n')[0] for n in _names(page)] == ['Alfa', 'Beta', 'Gama']  # mail sayısı çoktan aza
+    assert [n.split('\n')[0] for n in _names(page)] == ['Alfa', 'Beta']  # bağlantısız Gama listede yok
     page.select_option('#sort', 'son:desc')
-    assert [n.split('\n')[0] for n in _names(page)] == ['Beta', 'Alfa', 'Gama']
+    assert [n.split('\n')[0] for n in _names(page)] == ['Beta', 'Alfa']
     page.select_option('#fKategori', 'promosyon')
-    assert len(_names(page)) == 1 and page.locator('#count').inner_text() == '1 / 3 gösteriliyor'
+    assert len(_names(page)) == 1 and page.locator('#count').inner_text() == '1 / 2 gösteriliyor'
     page.select_option('#fKategori', '')
     page.select_option('#fDurum', 'cikildi')
     assert [n.split('\n')[0] for n in _names(page)] == ['Beta']
     page.select_option('#fDurum', '')
-    page.select_option('#fBaglanti', 'yok')
-    assert [n.split('\n')[0] for n in _names(page)] == ['Gama']
-    page.select_option('#fBaglanti', '')
     page.fill('#q', 'nonexistent')
     assert page.locator('#noMatch').is_visible()
 
@@ -361,3 +358,18 @@ def test_domain_view_can_be_sorted_by_address_count(ui_page):
     assert numbers == sorted(numbers, reverse=True)
     page.select_option('#viewSelect', 'address')
     assert page.locator('#sortSelect').input_value() == 'count_desc'
+
+
+def test_unsubscribe_button_only_on_senders_with_an_unsubscribe_link(ui_page):
+    page = ui_page
+    for email in ADDRESSES:
+        buttons = row(page, email).locator('.unsub-btn').count()
+        assert buttons == (1 if email in WITH_UNSUBSCRIBE else 0), email
+
+    # Seçilenlerin hiçbirinde bağlantı yoksa toplu buton kapalı kalır
+    only_without = sorted(ADDRESSES - WITH_UNSUBSCRIBE)[0]
+    row(page, only_without).locator('.sender-checkbox').check()
+    assert page.locator('#unsubBtn').is_disabled()
+    with_link = sorted(WITH_UNSUBSCRIBE)[0]
+    row(page, with_link).locator('.sender-checkbox').check()
+    assert page.locator('#unsubBtn').is_enabled()

@@ -355,8 +355,11 @@ def log_page():
 @app.route('/abonelikler')
 def subscriptions_page():
     paths = _page_paths()
-    rows = subscriptions.rows(paths, read_json(paths.scan_cache, {})) if paths else []
-    return render_template('abonelikler.html', rows=rows, scanned=bool(paths and os.path.exists(paths.scan_cache)))
+    cache = read_json(paths.scan_cache, {}) if paths else {}
+    rows = subscriptions.rows(paths, cache, only_links=True) if paths else []
+    without_links = len(subscriptions.rows(paths, cache)) - len(rows) if paths else 0
+    return render_template('abonelikler.html', rows=rows, without_links=without_links,
+                           scanned=bool(paths and os.path.exists(paths.scan_cache)))
 
 
 @app.route('/bildirimler')

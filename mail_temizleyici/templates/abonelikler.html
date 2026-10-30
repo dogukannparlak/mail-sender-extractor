@@ -14,14 +14,14 @@
   {% set sayfa = 'abonelikler' %}{% include '_gezinme.html' %}
   {% set kategori_adlari = {'bulten': 'Bülten', 'promosyon': 'Promosyon', 'bildirim': 'Bildirim', 'kisisel': 'Kişisel', 'spam': 'Spam'} %}
   <h1>Abonelikler{% if page_account %} · {{ page_account }}{% endif %}</h1>
-  <p class="hint">Yalnızca abonelik (List-Unsubscribe) başlığı taşıyan göndericiler. Bağlantıyı kendin açıp çıktıysan "Çıktım" ile işaretle;
-    sonraki taramalarda o göndericiden yeni mail gelirse Bildirimler'de uyarı çıkar.</p>
+  <p class="hint">Yalnızca çıkış bağlantısı (List-Unsubscribe) olan göndericiler. Bağlantıyı kendin açıp çıktıysan "Çıktım" ile işaretle;
+    sonraki taramalarda o göndericiden yeni mail gelirse Bildirimler'de uyarı çıkar.
+    {% if without_links %}<br>{{ without_links }} abonelikte bağlantı henüz okunmadı (eski önbellek); ana sayfadan "Tam tara" ile gelir.{% endif %}</p>
   {% if page_account and rows %}
   <div class="chips">
     <span class="chip">{{ rows | length }} abonelik</span>
     <span class="chip good">{{ rows | selectattr('cikis') | list | length }} çıkıldı</span>
     {% set uyari = rows | selectattr('yeni_mail') | list | length %}{% if uyari %}<span class="chip warn">{{ uyari }} çıktığı halde mail gönderiyor</span>{% endif %}
-    {% set baglantisiz = rows | rejectattr('baglantilar') | list | length %}{% if baglantisiz %}<span class="chip">{{ baglantisiz }} bağlantısız</span>{% endif %}
   </div>
   <div class="toolbar">
     <input type="search" id="q" placeholder="Ad ya da adres ara…" aria-label="Gönderen ara" autocomplete="off">
@@ -32,8 +32,6 @@
     <label>Durum
       <select id="fDurum"><option value="">Hepsi</option><option value="cikilmadi">Çıkılmadı</option>
         <option value="cikildi">Çıkıldı</option><option value="uyari">Çıktığı halde mail geliyor</option></select></label>
-    <label>Bağlantı
-      <select id="fBaglanti"><option value="">Hepsi</option><option value="var">Bağlantısı var</option><option value="yok">Bağlantısı yok</option></select></label>
     <label>Sırala
       <select id="sort">
         <option value="sayi:desc">Mail sayısı (çoktan aza)</option><option value="sayi:asc">Mail sayısı (azdan çoğa)</option>
@@ -48,7 +46,7 @@
     <tbody>
     {% for r in rows %}
     <tr data-kategori="{{ r.kategori }}" data-durum="{{ 'uyari' if r.yeni_mail else ('cikildi' if r.cikis else 'cikilmadi') }}"
-        data-baglanti="{{ 'var' if r.baglantilar else 'yok' }}" data-sort-sayi="{{ r.sayi }}" data-sort-son="{{ r.son_mail }}"
+        data-sort-sayi="{{ r.sayi }}" data-sort-son="{{ r.son_mail }}"
         data-sort-ad="{{ (r.ad or r.adres) | lower }}">
       <td>{{ r.ad or r.adres }}{% if r.ad %}<br><span class="muted">{{ r.adres }}</span>{% endif %}</td>
       <td>{{ kategori_adlari.get(r.kategori, r.kategori) }}</td>
@@ -61,8 +59,7 @@
         {% else %}<span class="pill muted">Çıkılmadı</span>{% endif %}
       </td>
       <td class="links">
-        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ ikon('dis_baglanti') }}{{ url | link_label }}</a></div>
-        {% else %}<span class="muted">Bağlantı yok (eski önbellek: ana sayfadan "Tam tara")</span>{% endfor %}
+        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ ikon('dis_baglanti') }}{{ url | link_label }}</a></div>{% endfor %}
       </td>
       <td><button type="button" data-account="{{ page_account }}" data-sender="{{ r.adres }}"
                   data-unsubscribed="{{ 'false' if r.cikis else 'true' }}">{{ 'İşareti kaldır' if r.cikis else 'Çıktım' }}</button></td>
@@ -73,7 +70,7 @@
   <p class="no-match" id="noMatch" hidden>Filtreye uyan abonelik yok.</p>
   </div>
   {% elif page_account %}
-  <p>{% if scanned %}Bu hesapta abonelik başlığı taşıyan gönderen yok.{% else %}Bu hesap yeni sürümle henüz taranmadı: ana sayfada bu hesabı seçip "Tam tara"ya bas.{% endif %}</p>
+  <p>{% if scanned and not without_links %}Bu hesapta çıkış bağlantısı olan gönderen yok.{% elif scanned %}Bağlantılar henüz okunmadı: ana sayfada bu hesabı seçip "Tam tara"ya bas.{% else %}Bu hesap yeni sürümle henüz taranmadı: ana sayfada bu hesabı seçip "Tam tara"ya bas.{% endif %}</p>
   {% else %}
   <p>Önce bir Gmail hesabı ekle.</p>
   {% endif %}
@@ -84,7 +81,7 @@ const $ = id => document.getElementById(id);
 if ($('sort')) {
   setupList({
     rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
-    selects: [{ el: $('fKategori'), attr: 'kategori' }, { el: $('fDurum'), attr: 'durum' }, { el: $('fBaglanti'), attr: 'baglanti' }],
+    selects: [{ el: $('fKategori'), attr: 'kategori' }, { el: $('fDurum'), attr: 'durum' }],
   });
 }
 document.addEventListener('click', async (event) => {

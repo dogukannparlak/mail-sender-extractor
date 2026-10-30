@@ -356,6 +356,8 @@ const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: '
 const DIALOG_LIST_LIMIT = 8;
 const DELETE_LABEL = "Seçilenleri Çöp Kutusu'na taşı";
 const UNSUB_LABEL = 'Seçilenlerin aboneliğinden çık';
+// Abonelikten çıkış yalnız abonelik (List-Unsubscribe) başlığı görülen göndericilerde sunulur.
+const canUnsubscribe = g => g.abonelik === true;
 
 const state = {
   accounts: [],
@@ -668,7 +670,7 @@ function createRow(rowData) {
   }, el('span', { 'aria-hidden': 'true' }, locked ? '🔒 ' : '🔓 '), locked ? 'Korunuyor' : 'Koru');
 
   const unsubResult = el('span', { class: 'unsub-result', 'data-result-for': single ? g.gonderen : null });
-  const unsubBtn = single && el('button', {
+  const unsubBtn = single && canUnsubscribe(g) && el('button', {
     type: 'button', class: 'small-btn danger unsub-btn', 'data-role': 'unsub', disabled: allLocked,
     'aria-label': `${rowData.label} aboneliğinden çık`,
     onclick: () => unsubscribeRow(g.gonderen, unsubResult, unsubBtn),
@@ -778,7 +780,7 @@ function createMemberItem(m, groupPanel) {
     onclick: () => toggleProtected(address, !locked, lockBtn),
   }, el('span', { 'aria-hidden': 'true' }, locked ? '🔒 ' : '🔓 '), locked ? 'Korunuyor' : 'Koru');
   const unsubResult = el('span', { class: 'unsub-result', 'data-result-for': address });
-  const unsubBtn = el('button', {
+  const unsubBtn = canUnsubscribe(m) && el('button', {
     type: 'button', class: 'small-btn danger unsub-btn', disabled: locked,
     'aria-label': `${address} aboneliğinden çık`,
     onclick: () => unsubscribeRow(address, unsubResult, unsubBtn),
@@ -856,7 +858,9 @@ function updateSelection() {
     (picked.length ? `${picked.length} gönderen seçildi (${totalMail} mail)` : 'Seçim yok') +
     (hidden ? ` · ${hidden} tanesi filtre yüzünden görünmüyor` : '');
   $('deleteBtn').disabled = state.busy || picked.length === 0;
-  $('unsubBtn').disabled = state.busy || picked.length === 0;
+  const unsubscribable = picked.filter(canUnsubscribe);
+  $('unsubBtn').disabled = state.busy || unsubscribable.length === 0;
+  $('unsubBtn').title = picked.length && !unsubscribable.length ? 'Seçilenlerin hiçbirinde abonelik bağlantısı yok' : '';
 
   const boxes = visibleCheckboxes();
   const filtered = state.searchText || state.categoryFilter || state.onlyWithUnsubscribe;
@@ -963,10 +967,13 @@ async function unsubscribeRow(sender, resultEl, btn) {
 }
 
 async function unsubscribeSelected() {
-  const senders = getSelected().map(g => g.gonderen);
+  const picked = getSelected();
+  const senders = picked.filter(canUnsubscribe).map(g => g.gonderen);
+  const skipped = picked.length - senders.length;  // abonelik bağlantısı olmayanlar atlanır
   setBusy(true);
   $('unsubBtn').textContent = 'Bakılıyor…';
-  notify(`${senders.length} gönderen için abonelik bilgisi kontrol ediliyor…`);
+  notify(`${senders.length} gönderen için abonelik bilgisi kontrol ediliyor…` +
+    (skipped ? ` (${skipped} gönderende abonelik bağlantısı yok, atlandı)` : ''));
   try {
     const results = await unsubscribeWithConfirmation(senders);
     showUnsubResultsInRows(results);

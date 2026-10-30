@@ -29,8 +29,10 @@ def _newer_count(cache, address, since):
                if e and e[0] == address and len(e) > 4 and e[4] and e[4] > since_ms)
 
 
-def rows(paths, cache):
-    """Abonelik başlığı görülen göndericiler, en çok mail atandan başlayarak."""
+def rows(paths, cache, only_links=False):
+    """Abonelik başlığı görülen göndericiler, en çok mail atandan başlayarak.
+
+    only_links=True: çıkış bağlantısı okunabilmiş olanlar (eski önbellek girdilerinde bağlantı yoktur)."""
     senders = {}
     for entry in cache.values():
         if not entry:
@@ -53,7 +55,7 @@ def rows(paths, cache):
     state = read_json(paths.subscriptions, {}).get('cikilanlar', {})
     result = []
     for info in senders.values():
-        if not info['abone']:
+        if not info['abone'] or (only_links and not info['baglantilar']):
             continue
         exit_info = state.get(info['adres'])
         info['ad'] = info['adlar'].most_common(1)[0][0] if info['adlar'] else ''

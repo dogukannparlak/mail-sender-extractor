@@ -1211,3 +1211,14 @@ class TestScanAll:
         assert by_account[TEST_ACCOUNT]['started'] is True
         assert by_account['is@example.com'] == {'account': 'is@example.com', 'started': False, 'error': 'token bozuk'}
         assert state.snapshot('is@example.com')['running'] is False
+
+
+def test_subscription_rows_can_be_limited_to_senders_with_links(client):
+    from mail_temizleyici import subscriptions
+    cache = {'m1': _entry('a@example.com', 1_000),
+             'm2': ['legacy@example.com', 'Legacy', 'bulten', True]}  # eski önbellek: bağlantı yok
+
+    assert [r['adres'] for r in subscriptions.rows(acct_paths(), cache)] == ['a@example.com', 'legacy@example.com']
+    assert [r['adres'] for r in subscriptions.rows(acct_paths(), cache, only_links=True)] == ['a@example.com']
+    page = client.get('/abonelikler').get_data(as_text=True)
+    assert 'legacy@example.com' not in page
