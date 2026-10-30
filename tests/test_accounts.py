@@ -74,13 +74,13 @@ def test_undo_belongs_to_the_account_that_deleted(client, two_accounts, fake_ser
 def test_scan_of_one_account_does_not_block_another(client, two_accounts, monkeypatch):
     monkeypatch.setitem(state.scans, TEST_ACCOUNT, dict(state.scan_state(TEST_ACCOUNT), running=True))
     monkeypatch.setattr(accounts, 'get_service', lambda account: MagicMock())
-    monkeypatch.setattr(mailbox, 'delete_senders', lambda paths, *a: {'ok': paths.account})
+    monkeypatch.setattr(mailbox, 'delete_senders', lambda paths, *a: {'ok': paths.account, 'total_deleted': 0, 'details': []})
 
     blocked = client.post('/api/delete', json={'account': TEST_ACCOUNT, 'senders': ['a@x.example']})
     allowed = client.post('/api/delete', json={'account': OTHER, 'senders': ['a@x.example']})
 
     assert blocked.status_code == 409
-    assert allowed.get_json() == {'ok': OTHER}
+    assert allowed.get_json() == {'ok': OTHER, 'total_deleted': 0, 'details': []}
 
 
 CLIENT = {'installed': {'client_id': 'id.apps.googleusercontent.com', 'client_secret': 's',

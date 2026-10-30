@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request, render_template
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 
-from . import accounts, mailbox, protected, state
+from . import accounts, activity, mailbox, protected, state
 from .config import settings
 from .gmail import quota
 from .mailbox import extract_email
@@ -27,6 +27,12 @@ DEMO_MODE = False
 app = Flask(__name__)
 # İstekler küçük JSON'lar; en büyüğü yüklenen istemci dosyası (~1 KB).
 app.config['MAX_CONTENT_LENGTH'] = 256 * 1024
+
+
+@app.template_filter('datetimeformat')
+def datetimeformat(timestamp):
+    return time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(timestamp))
+
 
 ALLOWED_HOSTNAMES = {'localhost', '127.0.0.1', '[::1]'}
 
@@ -156,6 +162,7 @@ def _run_sign_in(client_config, expected):
             _signin['url'] = url
     try:
         account = accounts.add_account(client_config, expected, on_url)
+        activity.record(accounts.AccountPaths(account), 'hesap_eklendi')
         with _signin_lock:
             _signin.update(state='done', account=account)
     except ValueError as e:
@@ -206,6 +213,7 @@ def api_accounts_remove():
     paths = _current_paths()
     with state.mutation(paths.account):
         accounts.remove_token(paths)
+    activity.record(paths, 'hesap_cikarildi')
     mailbox.clear_verify_cache(paths.account)
     return jsonify({'removed': paths.account, 'accounts': accounts.list_accounts()})
 
@@ -223,6 +231,8 @@ def _run_scan(service, paths, full=False):
     try:
         scan_ids = {}
         cache = {} if full else read_json(paths.scan_cache, {})
+        known = set(cache)
+        started = time.time()
         senders = extract_senders(
             service, progress=lambda done, total: state.update_scan(account, processed=done, total=total),
             id_index=scan_ids, cache=cache)
@@ -231,13 +241,19 @@ def _run_scan(service, paths, full=False):
         write_json(paths.scan_cache, cache, compact=True)
         mailbox.clear_verify_cache(account)
         state.update_scan(account, error=None)
+        activity.record(paths, 'tarama', tam=full, mail=sum(len(v) for v in scan_ids.values()),
+                        yeni_okunan=len(set(cache) - known), gonderen=len(senders),
+                        sure_sn=round(time.time() - started))
     except HttpError as e:
         state.update_scan(account, error=_http_error_message(e))
+        activity.record(paths, 'tarama', tam=full, hata=_http_error_message(e))
     except RefreshError:
         state.update_scan(account, error=LOGIN_EXPIRED_MESSAGE)
+        activity.record(paths, 'tarama', tam=full, hata=LOGIN_EXPIRED_MESSAGE)
     except Exception:
         app.logger.exception('Tarama hatası')
         state.update_scan(account, error='Tarama sırasında beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.')
+        activity.record(paths, 'tarama', tam=full, hata='beklenmeyen hata')
     finally:
         state.update_scan(account, running=False, finished_at=time.time())
 
@@ -263,6 +279,13 @@ def api_scan():
 @handle_errors
 def api_scan_status():
     return jsonify(state.snapshot(_current_paths().account))
+
+
+# --- İşlem günlüğü -----------------------------------------------------------
+
+@app.route('/gunluk')
+def log_page():
+    return render_template('gunluk.html', events=activity.recent())
 
 
 # --- Korunanlar --------------------------------------------------------------
@@ -308,7 +331,14 @@ def api_delete():
     scope = _validated_scope(body)
     protected.reject_protected(emails)
     with state.mutation(paths.account):
-        return jsonify(mailbox.delete_senders(paths, senders, emails, scope))
+        try:
+            result = mailbox.delete_senders(paths, senders, emails, scope)
+        except Exception as e:
+            activity.record(paths, 'silme', kapsam=scope, gonderenler=emails, hata=str(e) or type(e).__name__)
+            raise
+        activity.record(paths, 'silme', kapsam=scope, toplam=result['total_deleted'],
+                        gonderenler={d['email']: d['deleted'] for d in result['details']})
+        return jsonify(result)
 
 
 @app.route('/api/undo')
@@ -322,7 +352,10 @@ def api_undo_info():
 def api_undo():
     paths = _current_paths()
     with state.mutation(paths.account):
-        return jsonify(mailbox.undo_last(paths))
+        result = mailbox.undo_last(paths)
+        activity.record(paths, 'geri_alma', geri_alinan=result['restored'], bulunamayan=result['missing'],
+                        gonderenler=result['senders'])
+        return jsonify(result)
 
 
 @app.route('/api/preview', methods=['POST'])
@@ -346,6 +379,8 @@ def api_unsubscribe():
     service = accounts.get_service(paths.account)
     results = [{'sender': sender, 'email': email, **find_unsubscribe_info(service, email, confirm_one_click)}
                for sender, email in zip(senders, emails)]
+    activity.record(paths, 'abonelik', onayli=confirm_one_click,
+                    sonuclar={r['email']: r['status'] for r in results})
     return jsonify({'results': results})
 
 

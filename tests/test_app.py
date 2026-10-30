@@ -1051,3 +1051,35 @@ class TestApiScanFull:
         client.post('/api/scan', json={'full': True})
 
         assert seen == [{}, {'m1': ['a@example.com', 'A', 'kisisel', False]}, {}]
+
+
+class TestActivityLog:
+    def test_scan_delete_and_undo_are_logged_and_shown_on_the_page(self, client, monkeypatch, inline_scan,
+                                                                  fake_service_factory):
+        box = LabelledMailbox(fake_service_factory, {'m1': {'INBOX'}})
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: box.service)
+        monkeypatch.setattr(web, 'extract_senders',
+                            lambda service, progress, id_index, cache: {'a@example.com': {'ad': '', 'mail_sayisi': 1}})
+
+        client.post('/api/scan')
+        client.post('/api/delete', json={'senders': ['a@example.com']})
+        client.post('/api/undo')
+
+        events = web.activity.recent()
+        assert [e['islem'] for e in events][::-1] == ['tarama', 'silme', 'geri_alma']
+        assert events[1]['gonderenler'] == {'a@example.com': 1}
+        page = client.get('/gunluk')
+        assert page.status_code == 200
+        body = page.get_data(as_text=True)
+        assert 'a@example.com: 1 mail' in body and 'Geri alma' in body
+
+    def test_failed_delete_is_logged_with_error(self, client, monkeypatch):
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: None)
+        monkeypatch.setattr(mailbox, 'delete_senders', lambda *a: (_ for _ in ()).throw(ValueError('boom')))
+
+        client.post('/api/delete', json={'senders': ['a@example.com']})
+
+        assert web.activity.recent()[0]['hata'] == 'boom'
+
+    def test_empty_log_page(self, client):
+        assert 'Henüz kayıtlı işlem yok' in client.get('/gunluk').get_data(as_text=True)

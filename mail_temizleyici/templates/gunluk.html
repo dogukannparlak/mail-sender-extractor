@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>İşlem günlüğü · Mail Temizleyici</title>
+<style>
+  :root { --bg: #f5f5f7; --card: #fff; --border: #d9d9de; --text: #1d1d1f; --muted: #616166; --err: #b33434; --link: #1d4ed8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1c1e; --card: #2c2c2e; --border: #48484a; --text: #f2f2f7; --muted: #a1a1a6; --err: #ff8a8a; --link: #8ab4ff; }
+  }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.hint, td.time { color: var(--muted); }
+  a { color: var(--link); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); }
+  td.time { white-space: nowrap; }
+  .err { color: var(--err); }
+  .tag { font-weight: 600; white-space: nowrap; }
+  ul { margin: 0; padding-left: 18px; }
+  select { font: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>İşlem günlüğü</h1>
+  <p class="hint"><a href="/">← Uygulamaya dön</a> · Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>hesaplar/&lt;adres&gt;/islem_gunlugu.jsonl</code></p>
+  {% if events %}
+  <table>
+    <thead><tr><th>Zaman</th><th>Hesap</th><th>İşlem</th><th>Ayrıntı</th></tr></thead>
+    <tbody>
+    {% for e in events %}
+    <tr>
+      <td class="time">{{ e.zaman | int | datetimeformat }}</td>
+      <td>{{ e.hesap }}</td>
+      {% if e.islem == 'tarama' %}
+        <td class="tag">{{ 'Tam tarama' if e.tam else 'Tarama' }}</td>
+        <td>{% if e.hata %}<span class="err">Hata: {{ e.hata }}</span>
+            {% else %}{{ e.mail }} mail, {{ e.gonderen }} gönderen · {{ e.yeni_okunan }} yeni mail okundu · {{ e.sure_sn }} sn{% endif %}</td>
+      {% elif e.islem == 'silme' %}
+        <td class="tag">Çöp Kutusu'na taşıma</td>
+        <td>Kapsam: {{ 'tüm mailler' if e.kapsam == 'all' else 'gelen kutusu' }}
+          {% if e.hata %}· <span class="err">Hata: {{ e.hata }}</span>{% else %}· toplam {{ e.toplam }} mail{% endif %}
+          <ul>
+          {% if e.gonderenler is mapping %}{% for addr, n in e.gonderenler.items() %}<li>{{ addr }}: {{ n }} mail</li>{% endfor %}
+          {% else %}{% for addr in e.gonderenler %}<li>{{ addr }}</li>{% endfor %}{% endif %}
+          </ul></td>
+      {% elif e.islem == 'geri_alma' %}
+        <td class="tag">Geri alma</td>
+        <td>{{ e.geri_alinan }} mail geri alındı{% if e.bulunamayan %}, {{ e.bulunamayan }} mail bulunamadı{% endif %}: {{ e.gonderenler | join(', ') }}</td>
+      {% elif e.islem == 'abonelik' %}
+        <td class="tag">Abonelikten çıkma{{ ' (onaylı)' if e.onayli else ' (kontrol)' }}</td>
+        <td><ul>{% for addr, status in e.sonuclar.items() %}<li>{{ addr }}: {{ status }}</li>{% endfor %}</ul></td>
+      {% elif e.islem == 'hesap_eklendi' %}
+        <td class="tag">Hesap eklendi</td><td></td>
+      {% elif e.islem == 'hesap_cikarildi' %}
+        <td class="tag">Hesap çıkarıldı</td><td></td>
+      {% else %}
+        <td class="tag">{{ e.islem }}</td><td></td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Henüz kayıtlı işlem yok.</p>
+  {% endif %}
+</main>
+</body>
+</html>

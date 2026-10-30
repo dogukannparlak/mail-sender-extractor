@@ -34,6 +34,8 @@ class AccountPaths:
         self.scan_ids = os.path.join(self.root, 'taranan_idler.json')
         # Mail başına okunmuş başlıklar; sonraki taramalar yalnız yeni mailleri okur.
         self.scan_cache = os.path.join(self.root, 'tarama_onbellegi.json')
+        # Yapılan işlemlerin günlüğü (tarama, silme, geri alma, abonelik, hesap).
+        self.log = os.path.join(self.root, 'islem_gunlugu.jsonl')
 
 
 def _folder_names():
