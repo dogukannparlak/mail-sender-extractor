@@ -106,8 +106,13 @@ def test_category_and_unsubscribe_filters(ui_page):
     page.select_option('#categorySelect', 'kisisel')
     assert sorted(page.locator('.sender-email').all_inner_texts()) == ['ali@ornek.example', 'ayse@ornek.example']
     page.select_option('#categorySelect', '')
-    page.check('#unsubFilter')
+    page.select_option('#linkFilter', 'with')
     assert page.locator('.sender-row').count() == len(WITH_UNSUBSCRIBE)
+    page.select_option('#linkFilter', 'without')
+    assert page.locator('.sender-row').count() == len(ADDRESSES) - len(WITH_UNSUBSCRIBE)
+    assert all(not row(page, email).locator('.unsub-btn').count() for email in ADDRESSES - WITH_UNSUBSCRIBE)
+    page.select_option('#linkFilter', '')
+    assert page.locator('.sender-row').count() == len(ADDRESSES)
 
 
 def test_locked_sender_cannot_be_selected_and_keeps_focus(ui_page):
