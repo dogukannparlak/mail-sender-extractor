@@ -397,7 +397,7 @@ class TestApiScan:
     def test_scans_in_background_and_persists_csv(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake-service')
 
-        def fake_extract(service, progress, id_index):
+        def fake_extract(service, progress, id_index, cache):
             id_index['a@example.com'] = ['m1', 'm2']
             progress(1, 2)
             progress(2, 2)
@@ -428,7 +428,7 @@ class TestApiScan:
     def test_scan_error_is_reported_in_status(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake-service')
 
-        def failing_extract(service, progress, id_index):
+        def failing_extract(service, progress, id_index, cache):
             raise make_http_error(500, 'backend error')
         monkeypatch.setattr(web, 'extract_senders', failing_extract)
 
@@ -997,7 +997,7 @@ class TestHostCheck:
 
     def test_allows_same_origin_post(self, client, monkeypatch, inline_scan):
         monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake')
-        monkeypatch.setattr(web, 'extract_senders', lambda service, progress, id_index: {})
+        monkeypatch.setattr(web, 'extract_senders', lambda service, progress, id_index, cache: {})
         monkeypatch.setattr(accounts, 'save_to_csv', MagicMock())
 
         resp = client.post('/api/scan', headers={

@@ -32,6 +32,8 @@ class AccountPaths:
         self.undo = os.path.join(self.root, 'son_islem.json')
         # Taramada görülen mail id'leri (gönderen başına); silmede bu maillerin From'unu yeniden okumayız.
         self.scan_ids = os.path.join(self.root, 'taranan_idler.json')
+        # Mail başına okunmuş başlıklar; sonraki taramalar yalnız yeni mailleri okur.
+        self.scan_cache = os.path.join(self.root, 'tarama_onbellegi.json')
 
 
 def _folder_names():

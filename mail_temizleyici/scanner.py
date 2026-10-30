@@ -78,19 +78,30 @@ def list_inbox_ids(service):
 
 
 
-def extract_senders(service, progress=lambda processed, total: None, sleep=time.sleep, id_index=None):
+def extract_senders(service, progress=lambda processed, total: None, sleep=time.sleep, id_index=None, cache=None):
     """Gelen kutusunu tarar; {adres: {'ad', 'mail_sayisi', 'kategori', 'abonelik'}} döner.
 
     id_index verilirse {adres: [mail id]} ile doldurulur; silme sırasında bu mailler için
     From adresini yeniden okumak (her biri 20 kota birimi) gerekmez.
+
+    cache verilirse {mail id: [adres, ad, kategori, abonelik] ya da None (From yok)} tutar: bir mailin
+    başlıkları değişmez, o yüzden önceki taramalarda okunanlar yeniden çekilmez, yalnız yeni mailler
+    okunur. Gelen kutusundan çıkanlar cache'ten silinir. Kategori etiketi sonradan değişirse (ör. mail
+    başka sekmeye taşınırsa) cache temizlenip tam tarama yapılana kadar eski kalır.
     """
     ids = list_inbox_ids(service)
     total = len(ids)
     progress(0, total)
 
-    tally = SenderTally()
-    fetched = fetch_metadata(service, ids, ['From', 'List-Unsubscribe'], sleep)
-    for processed, (msg_id, msg_data) in enumerate(fetched, start=1):
+    cache = {} if cache is None else cache
+    for stale in set(cache) - set(ids):
+        del cache[stale]
+    new_ids = [i for i in ids if i not in cache]
+    processed = total - len(new_ids)
+    progress(processed, total)
+
+    for msg_id, msg_data in fetch_metadata(service, new_ids, ['From', 'List-Unsubscribe'], sleep):
+        processed += 1
         if msg_data is None:  # tarama sırasında silinmiş
             progress(processed, total)
             continue
@@ -98,13 +109,20 @@ def extract_senders(service, progress=lambda processed, total: None, sleep=time.
         if 'from' in headers:
             key, name = sender_key(headers['from'])
             has_unsubscribe = bool(headers.get('list-unsubscribe'))
-            tally.add_counted(key, name, 1,
-                              category=message_category(msg_data.get('labelIds'), has_unsubscribe),
-                              has_unsubscribe=has_unsubscribe)
-            if id_index is not None:
-                id_index.setdefault(key, []).append(msg_id)
+            cache[msg_id] = [key, name, message_category(msg_data.get('labelIds'), has_unsubscribe),
+                             has_unsubscribe]
+        else:
+            cache[msg_id] = None
         progress(processed, total)
 
+    tally = SenderTally()
+    for msg_id in ids:
+        entry = cache.get(msg_id)
+        if entry:
+            key, name, category, has_unsubscribe = entry
+            tally.add_counted(key, name, 1, category=category, has_unsubscribe=has_unsubscribe)
+            if id_index is not None:
+                id_index.setdefault(key, []).append(msg_id)
     return tally.result()
 
 

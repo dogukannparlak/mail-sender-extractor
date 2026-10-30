@@ -14,7 +14,7 @@ from .config import settings
 from .gmail import quota
 from .mailbox import extract_email
 from .scanner import extract_senders
-from .storage import write_json
+from .storage import read_json, write_json
 from .unsubscribe import find_unsubscribe_info
 from . import auth, storage
 
@@ -218,15 +218,17 @@ def api_senders():
 
 # --- Tarama ------------------------------------------------------------------
 
-def _run_scan(service, paths):
+def _run_scan(service, paths, full=False):
     account = paths.account
     try:
         scan_ids = {}
+        cache = {} if full else read_json(paths.scan_cache, {})
         senders = extract_senders(
             service, progress=lambda done, total: state.update_scan(account, processed=done, total=total),
-            id_index=scan_ids)
+            id_index=scan_ids, cache=cache)
         accounts.save_senders(paths, senders)
         write_json(paths.scan_ids, scan_ids)
+        write_json(paths.scan_cache, cache, compact=True)
         mailbox.clear_verify_cache(account)
         state.update_scan(account, error=None)
     except HttpError as e:
@@ -252,7 +254,8 @@ def api_scan():
     except Exception:
         state.update_scan(paths.account, running=False)
         raise
-    threading.Thread(target=_run_scan, args=(service, paths), daemon=True).start()
+    full = _json_body().get('full') is True  # true: önbelleği yok say, bütün mailleri yeniden oku
+    threading.Thread(target=_run_scan, args=(service, paths, full), daemon=True).start()
     return jsonify(state.snapshot(paths.account)), 202
 
 

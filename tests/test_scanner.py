@@ -335,3 +335,35 @@ def test_scan_fills_the_id_index(fake_service_factory):
     extract_senders(service, id_index=index)
 
     assert index == {'a@example.com': ['m1'], 'b@example.com': ['m2']}
+
+
+def test_extract_senders_reads_only_new_messages_when_cache_given(fake_service_factory):
+    responses = {'m1': _metadata_response('Alice <alice@example.com>'),
+                 'm2': _metadata_response('Bob <bob@example.com>')}
+    cache = {}
+    first = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm2'}]}], get_responses=responses)
+    extract_senders(first, cache=cache)
+
+    responses['m3'] = _metadata_response('Alice <alice@example.com>')
+    second = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}, {'id': 'm3'}]}], get_responses=responses)
+    id_index = {}
+    result = extract_senders(second, id_index=id_index, cache=cache)
+
+    assert [c['id'] for c in second.messages_resource.get_calls] == ['m3']
+    assert result['alice@example.com']['mail_sayisi'] == 2
+    assert 'bob@example.com' not in result  # gelen kutusundan çıktı
+    assert id_index == {'alice@example.com': ['m1', 'm3']}
+    assert set(cache) == {'m1', 'm3'}
+
+
+def test_extract_senders_does_not_refetch_messages_without_from(fake_service_factory):
+    responses = {'m1': {'payload': {'headers': [{'name': 'Subject', 'value': 'hi'}]}}}
+    cache = {}
+    extract_senders(fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}], get_responses=responses),
+                    cache=cache)
+    again = fake_service_factory(list_pages=[{'messages': [{'id': 'm1'}]}], get_responses=responses)
+
+    extract_senders(again, cache=cache)
+
+    assert again.messages_resource.get_calls == []
