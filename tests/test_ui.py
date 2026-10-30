@@ -219,7 +219,8 @@ def test_switching_accounts_shows_that_accounts_list(ui_page):
     assert page.inner_text('#selectedInfo') == 'is@ornek.example · Seçim yok'
 
     page.select_option('#accountSelect', 'demo@ornek.example')
-    page.wait_for_selector('.sender-row')
+    # Liste yeniden çizilene kadar eski hesabın satırları ekranda durur; beklemeden saymak yarışa girer.
+    row(page, 'kampanya@ornekmarket.example').wait_for()
     assert row(page, 'kampanya@ornekmarket.example').count() == 1
 
 
