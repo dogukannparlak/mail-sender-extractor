@@ -1,5 +1,5 @@
-from mail_temizleyici import accounts, auth, config, gmail, mailbox, protected, scanner, state, unsubscribe, web
-from mail_temizleyici.demo import DEMO_ACCOUNTS
+from mail_cleaner import accounts, auth, config, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_cleaner.demo import DEMO_ACCOUNTS
 
 
 def test_demo_mode_has_two_accounts_without_credentials(demo_mode, inline_scan):

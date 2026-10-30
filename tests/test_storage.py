@@ -1,6 +1,6 @@
 import json
 
-from mail_temizleyici import storage
+from mail_cleaner import storage
 
 
 def test_readable_format_round_trips_and_keeps_short_lists_on_one_line(tmp_path):

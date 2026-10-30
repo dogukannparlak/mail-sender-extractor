@@ -1,0 +1,21 @@
+{% from '_icons.html' import icon %}
+{% set q = ('?account=' ~ (page_account | urlencode)) if page_account else '' %}
+<header class="topbar">
+  <a href="/" class="back">{{ icon('back') }}{{ t('nav.back') }}</a>
+  <nav class="tabs" aria-label="{{ t('nav.pages') }}">
+    <a href="/subscriptions{{ q }}"{% if current_page == 'subscriptions' %} class="current" aria-current="page"{% endif %}>{{ icon('subscription') }}{{ t('nav.subscriptions') }}</a>
+    <a href="/notifications{{ q }}"{% if current_page == 'notifications' %} class="current" aria-current="page"{% endif %}>{{ icon('notification') }}{{ t('nav.notifications') }}<span class="count-badge" {% if not unread_notifications %}hidden{% endif %}>{{ unread_notifications }}</span></a>
+    <a href="/activity-log{{ q }}"{% if current_page == 'activity-log' %} class="current" aria-current="page"{% endif %}>{{ icon('log') }}{{ t('nav.activity_log') }}</a>
+  </nav>
+  <label class="language-pick" title="{{ t('lang.label') }}">{{ icon('language') }}
+    <select id="languageSelect" aria-label="{{ t('lang.label') }}">{% for code, name in languages.items() %}<option value="{{ code }}"{% if code == lang %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+  </label>
+  {% if account_list %}
+  <label class="account-pick" title="{{ t('account.pick') }}">{{ icon('account') }}
+    <select id="accountPick" aria-label="{{ t('account.pick') }}">
+      {% for name in account_list %}<option value="{{ name }}"{% if name == page_account %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select>
+  </label>
+  <script>document.getElementById('accountPick').addEventListener('change', e => { location.search = '?account=' + encodeURIComponent(e.target.value); });</script>
+  {% endif %}
+</header>

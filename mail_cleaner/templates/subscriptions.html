@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('nav.subscriptions') }} · {{ t('app.name') }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+{% endblock %}
+{% block body %}
+<main>
+  {% from '_icons.html' import icon %}
+  {% set current_page = 'subscriptions' %}{% include '_nav.html' %}
+  <h1>{{ t('nav.subscriptions') }}{% if page_account %} · {{ page_account }}{% endif %}</h1>
+  <p class="hint">{{ t('subs.hint') }}
+    {% if without_links %}<br>{{ tn('subs.without_links', without_links) }}{% endif %}</p>
+  {% if page_account and rows %}
+  <div class="chips">
+    <span class="chip">{{ tn('subs.chip_total', rows | length) }}</span>
+    <span class="chip good">{{ t('subs.chip_unsubscribed', count=rows | selectattr('cikis') | list | length) }}</span>
+    {% set still_mailing = rows | selectattr('yeni_mail') | list | length %}{% if still_mailing %}<span class="chip warn">{{ t('subs.chip_still_mailing', count=still_mailing) }}</span>{% endif %}
+  </div>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="{{ t('search.placeholder') }}" aria-label="{{ t('search.label') }}" autocomplete="off">
+    <label>{{ t('filter.category_short') }}
+      <select id="fCategory"><option value="">{{ t('filter.all') }}</option>
+        {% for k in rows | map(attribute='kategori') | unique | select | sort %}<option value="{{ k }}">{{ t('category.' ~ k) }}</option>{% endfor %}
+      </select></label>
+    <label>{{ t('subs.status') }}
+      <select id="fStatus"><option value="">{{ t('filter.all') }}</option><option value="not_unsubscribed">{{ t('subs.status_not_unsubscribed') }}</option>
+        <option value="unsubscribed">{{ t('subs.status_unsubscribed') }}</option><option value="still_mailing">{{ t('subs.status_still_mailing') }}</option></select></label>
+    <label>{{ t('sort.label_short') }}
+      <select id="sort">
+        <option value="count:desc">{{ t('sort.count_desc') }}</option><option value="count:asc">{{ t('sort.count_asc') }}</option>
+        <option value="last:desc">{{ t('sort.last_desc') }}</option><option value="last:asc">{{ t('sort.last_asc') }}</option>
+        <option value="name:asc">{{ t('sort.name_asc') }}</option><option value="name:desc">{{ t('sort.name_desc') }}</option>
+      </select></label>
+    <span class="result-count" id="count" aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>{{ t('subs.col_sender') }}</th><th>{{ t('subs.col_category') }}</th><th>{{ t('subs.col_mail') }}</th><th>{{ t('subs.col_last') }}</th><th>{{ t('subs.col_status') }}</th><th>{{ t('subs.col_links') }}</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr data-category="{{ r.kategori }}" data-status="{{ 'still_mailing' if r.yeni_mail else ('unsubscribed' if r.cikis else 'not_unsubscribed') }}"
+        data-sort-count="{{ r.sayi }}" data-sort-last="{{ r.son_mail }}"
+        data-sort-name="{{ (r.ad or r.adres) | lower }}">
+      <td>{{ r.ad or r.adres }}{% if r.ad %}<br><span class="muted">{{ r.adres }}</span>{% endif %}</td>
+      <td>{{ t('category.' ~ r.kategori) }}</td>
+      <td>{{ r.sayi }}</td>
+      <td class="time">{% if r.son_mail %}{{ (r.son_mail / 1000) | int | datetimeformat }}{% endif %}</td>
+      <td>
+        {% if r.cikis %}
+          <span class="pill ok">{{ t('subs.pill_unsubscribed') }}</span><br><span class="muted">{{ r.cikis.zaman | int | datetimeformat }} · {{ t('method.' ~ r.cikis.yontem) }}</span>
+          {% if r.yeni_mail %}<br><span class="err">{{ tn('subs.mail_after', r.yeni_mail) }}</span>{% endif %}
+        {% else %}<span class="pill muted">{{ t('subs.pill_not_unsubscribed') }}</span>{% endif %}
+      </td>
+      <td class="links">
+        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ icon('external') }}{{ url | link_label }}</a></div>{% endfor %}
+      </td>
+      <td><button type="button" data-account="{{ page_account }}" data-sender="{{ r.adres }}"
+                  data-unsubscribed="{{ 'false' if r.cikis else 'true' }}">{{ t('subs.unmark') if r.cikis else t('subs.mark') }}</button></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="no-match" id="noMatch" hidden>{{ t('subs.no_match') }}</p>
+  </div>
+  {% elif page_account %}
+  <p>{% if scanned and not without_links %}{{ t('subs.empty') }}{% elif scanned %}{{ t('subs.links_unread') }}{% else %}{{ t('subs.not_scanned') }}{% endif %}</p>
+  {% else %}
+  <p>{{ t('account.required') }}</p>
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/list.js') }}"></script>
+<script>
+const $ = id => document.getElementById(id);
+if ($('sort')) {
+  setupList({
+    rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
+    selects: [{ el: $('fCategory'), attr: 'category' }, { el: $('fStatus'), attr: 'status' }],
+  });
+}
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-sender]');
+  if (!button) return;
+  button.disabled = true;
+  await fetch('/api/subscriptions/mark', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account: button.dataset.account, sender: button.dataset.sender,
+                           unsubscribed: button.dataset.unsubscribed === 'true' }),
+  });
+  location.reload();
+});
+</script>
+{% endblock %}

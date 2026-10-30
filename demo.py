@@ -2,8 +2,8 @@
 import sys
 
 try:
-    from mail_temizleyici import demo, web
-    from mail_temizleyici.config import settings
+    from mail_cleaner import demo, web
+    from mail_cleaner.config import settings
 except ValueError as e:
     sys.exit(f'Ayar hatası: {e}')
 

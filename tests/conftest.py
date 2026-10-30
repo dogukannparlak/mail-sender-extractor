@@ -3,7 +3,9 @@ import sys
 from pathlib import Path
 
 # Testler kullanıcının .env dosyasından etkilenmesin (ör. EXTRA_ACCOUNTS, ACCOUNTS_DIR).
-os.environ['MAIL_TEMIZLEYICI_ENV_FILE'] = ''
+os.environ['MAIL_CLEANER_ENV_FILE'] = ''
+# Testlerin çoğu Türkçe metinleri bekler; dil testleri dili kendisi seçer.
+os.environ['LANGUAGE'] = 'tr'
 for _name in ('PORT', 'DEMO', 'FLASK_DEBUG', 'CREDENTIALS_PATH', 'ACCOUNTS_DIR', 'GMAIL_QUOTA_PER_MINUTE',
               'DEFAULT_SCOPE', 'EXTRA_ACCOUNTS'):
     os.environ.pop(_name, None)
@@ -147,21 +149,21 @@ TEST_ACCOUNT = 'ben@example.com'
 
 
 def acct_paths():
-    from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+    from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
     return accounts.AccountPaths(TEST_ACCOUNT)
 
 
 @pytest.fixture(autouse=True)
 def isolate_data_files(tmp_path, monkeypatch):
-    """Testler gerçek gonderenler.csv / json dosyalarına asla yazmasın."""
-    from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+    """Testler gerçek senders.csv / json dosyalarına asla yazmasın."""
+    from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
     # Tek bir test hesabı: account alanı verilmeyen istekler onu kullanır.
-    accounts_dir = tmp_path / 'hesaplar'
+    accounts_dir = tmp_path / 'accounts'
     (accounts_dir / TEST_ACCOUNT).mkdir(parents=True)
     (accounts_dir / TEST_ACCOUNT / 'token.json').write_text('{}')
     monkeypatch.setattr(accounts, 'ACCOUNTS_DIR', str(accounts_dir))
     monkeypatch.setattr(accounts, 'EXTRA_ACCOUNT_TOKENS', {})
-    monkeypatch.setattr(protected, 'PROTECTED_PATH', str(tmp_path / 'korunanlar.json'))
+    monkeypatch.setattr(protected, 'PROTECTED_PATH', str(tmp_path / 'protected.json'))
     monkeypatch.setattr(accounts, 'LEGACY_TOKEN_PATH', str(tmp_path / 'token.json'))
     # Ortak istemci dosyası: testler gerçek credentials.json'u okumasın ve asla taşımasın.
     monkeypatch.setattr(auth, 'CREDENTIALS_PATH', str(tmp_path / 'credentials.json'))
@@ -169,7 +171,7 @@ def isolate_data_files(tmp_path, monkeypatch):
     monkeypatch.setattr(state, 'mutations', {})
     mailbox.clear_verify_cache()
     # Kota sınırlayıcı testlerde gerçekten beklemesin (kendi testinde ayrıca denetleniyor).
-    from mail_temizleyici import gmail
+    from mail_cleaner import gmail
     monkeypatch.setattr(gmail.quota, 'units_per_minute', 0)
 
 
@@ -185,14 +187,14 @@ class InlineThread:
 
 @pytest.fixture
 def inline_scan(monkeypatch):
-    from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+    from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
     monkeypatch.setattr(web.threading, 'Thread', InlineThread)
 
 
 @pytest.fixture
 def demo_mode(monkeypatch):
     """demo.enable modül özniteliklerini doğrudan değiştirir; monkeypatch test sonunda geri alsın."""
-    from mail_temizleyici import accounts, demo, gmail, protected, unsubscribe, web
+    from mail_cleaner import accounts, demo, gmail, protected, unsubscribe, web
     for module, name in ((accounts, 'get_service'), (accounts, 'ACCOUNTS_DIR'), (accounts, 'EXTRA_ACCOUNT_TOKENS'),
                          (accounts, 'LEGACY_TOKEN_PATH'), (protected, 'PROTECTED_PATH'),
                          (unsubscribe, '_resolve_host'), (web, 'DEMO_MODE')):

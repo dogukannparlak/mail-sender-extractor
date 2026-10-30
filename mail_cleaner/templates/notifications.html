@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('nav.notifications') }} · {{ t('app.name') }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+{% endblock %}
+{% block body %}
+<main>
+  {% set current_page = 'notifications' %}{% include '_nav.html' %}
+  <h1>{{ t('nav.notifications') }}{% if page_account %} · {{ page_account }}{% endif %}</h1>
+  <p class="hint">{{ t('notif.hint') }}</p>
+  {% if notifications %}
+  <div class="chips">
+    <span class="chip">{{ tn('notif.chip_total', notifications | length) }}</span>
+    {% set unread = notifications | rejectattr('okundu') | list | length %}
+    {% if unread %}<span class="chip warn">{{ t('notif.chip_unread', count=unread) }}</span>{% endif %}
+    {% set failed = notifications | selectattr('tur', 'equalto', 'mail_geliyor') | list | length %}
+    {% if failed %}<span class="chip warn">{{ t('notif.chip_failed', count=failed) }}</span>{% endif %}
+  </div>
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="{{ t('search.placeholder') }}" aria-label="{{ t('notif.search_label') }}" autocomplete="off">
+    <label>{{ t('notif.type') }}
+      <select id="fType"><option value="">{{ t('filter.all') }}</option><option value="yeni_abonelik">{{ t('notif.type_new') }}</option>
+        <option value="mail_geliyor">{{ t('notif.type_still_mailing') }}</option></select></label>
+    <label><input type="checkbox" id="fUnread"> {{ t('notif.unread_only') }}</label>
+    <label>{{ t('sort.label_short') }}
+      <select id="sort"><option value="time:desc">{{ t('sort.newest') }}</option><option value="time:asc">{{ t('sort.oldest') }}</option>
+        <option value="count:desc">{{ t('sort.count_desc') }}</option></select></label>
+    <button id="readAll" type="button" {% if not unread %}disabled{% endif %}>{{ t('notif.mark_all_read') }}</button>
+    <span class="result-count" id="count" aria-live="polite"></span>
+  </div>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>{{ t('common.time') }}</th><th>{{ t('notif.col_notification') }}</th></tr></thead>
+    <tbody>
+    {% for n in notifications %}
+    <tr{% if not n.okundu %} class="unread"{% endif %} data-type="{{ n.tur }}" data-unread="{{ '0' if n.okundu else '1' }}"
+        data-sort-time="{{ n.zaman | int }}" data-sort-count="{{ n.sayi }}">
+      <td class="time">{{ n.zaman | int | datetimeformat }}</td>
+      {% if n.tur == 'yeni_abonelik' %}
+        <td><span class="pill">{{ t('notif.type_new') }}</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ tn('unit.mail', n.sayi) }}.
+          {{ t('notif.new_link', link='<a href="/subscriptions?account=' ~ (page_account | urlencode) ~ '">' ~ t('nav.subscriptions') ~ '</a>') | safe }}</td>
+      {% elif n.tur == 'mail_geliyor' %}
+        <td><span class="pill err">{{ t('notif.type_still_mailing') }}</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ tn('notif.after_unsub', n.sayi) }}
+          {{ t('notif.still_mailing_link', link='<a href="/subscriptions?account=' ~ (page_account | urlencode) ~ '">' ~ t('notif.try_manually') ~ '</a>') | safe }}</td>
+      {% else %}
+        <td>{{ n.tur }}: {{ n.gonderen }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="no-match" id="noMatch" hidden>{{ t('notif.no_match') }}</p>
+  </div>
+  {% else %}
+  <p>{{ t('notif.empty') }}</p>
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/list.js') }}"></script>
+<script>
+const $ = id => document.getElementById(id);
+if ($('sort')) {
+  setupList({
+    rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
+    selects: [{ el: $('fType'), attr: 'type' }], checks: [{ el: $('fUnread'), attr: 'unread' }],
+  });
+  $('readAll').addEventListener('click', async () => {
+    await fetch('/api/notifications/read', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: {{ page_account | tojson }} }),
+    });
+    location.reload();
+  });
+}
+</script>
+{% endblock %}

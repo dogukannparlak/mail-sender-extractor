@@ -12,8 +12,8 @@ playwright_sync = pytest.importorskip('playwright.sync_api')
 
 from werkzeug.serving import make_server
 
-from mail_temizleyici import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
-from mail_temizleyici.demo import DEMO_SENDERS
+from mail_cleaner import accounts, auth, gmail, mailbox, protected, scanner, state, unsubscribe, web
+from mail_cleaner.demo import DEMO_SENDERS
 
 ADDRESSES = {address for _, address, *_ in DEMO_SENDERS}
 WITH_UNSUBSCRIBE = {address for _, address, _, _, unsub, _ in DEMO_SENDERS if unsub}
@@ -246,7 +246,7 @@ def test_add_account_is_explained_in_demo(ui_page):
 
 def test_add_account_dialog_offers_file_and_pending_accounts(ui_browser, server_url, demo_mode, monkeypatch):
     import os
-    from mail_temizleyici import web
+    from mail_cleaner import web
     monkeypatch.setattr(web, 'DEMO_MODE', False)  # pencereyi göstermek için; giriş denenmez
     pending = os.path.join(accounts.ACCOUNTS_DIR, 'yeni@ornek.example')
     os.makedirs(pending)
@@ -295,8 +295,8 @@ def test_addresses_inside_a_domain_group_have_their_own_actions(ui_page):
 
 
 def _seed_subscription_data():
-    from mail_temizleyici import subscriptions
-    from mail_temizleyici.storage import write_json
+    from mail_cleaner import subscriptions
+    from mail_cleaner.storage import write_json
     paths = accounts.AccountPaths('demo@ornek.example')
     unsub = '<https://x.example/u>'
     write_json(paths.scan_cache, {
@@ -321,17 +321,17 @@ def _names(page):
 def test_subscriptions_page_sorts_and_filters(ui_page, server_url):
     _seed_subscription_data()
     page = ui_page
-    page.goto(f'{server_url}/abonelikler?account=demo@ornek.example')
+    page.goto(f'{server_url}/subscriptions?account=demo@ornek.example')
 
     assert [n.split('\n')[0] for n in _names(page)] == ['Alfa', 'Beta']  # bağlantısız Gama listede yok
-    page.select_option('#sort', 'son:desc')
+    page.select_option('#sort', 'last:desc')
     assert [n.split('\n')[0] for n in _names(page)] == ['Beta', 'Alfa']
-    page.select_option('#fKategori', 'promosyon')
+    page.select_option('#fCategory', 'promosyon')
     assert len(_names(page)) == 1 and page.locator('#count').inner_text() == '1 / 2 gösteriliyor'
-    page.select_option('#fKategori', '')
-    page.select_option('#fDurum', 'cikildi')
+    page.select_option('#fCategory', '')
+    page.select_option('#fStatus', 'unsubscribed')
     assert [n.split('\n')[0] for n in _names(page)] == ['Beta']
-    page.select_option('#fDurum', '')
+    page.select_option('#fStatus', '')
     page.fill('#q', 'nonexistent')
     assert page.locator('#noMatch').is_visible()
 
@@ -339,16 +339,16 @@ def test_subscriptions_page_sorts_and_filters(ui_page, server_url):
 def test_notifications_page_filters_by_type_and_unread(ui_page, server_url):
     _seed_subscription_data()
     page = ui_page
-    page.goto(f'{server_url}/bildirimler?account=demo@ornek.example')
+    page.goto(f'{server_url}/notifications?account=demo@ornek.example')
 
     assert len(_names(page)) == 2
-    page.select_option('#fTur', 'mail_geliyor')
+    page.select_option('#fType', 'mail_geliyor')
     assert len(_names(page)) == 1
-    page.select_option('#fTur', '')
-    page.check('#fOkunmamis')
+    page.select_option('#fType', '')
+    page.check('#fUnread')
     assert len(_names(page)) == 1 and 'beta@x.example' in page.locator('tbody tr:visible').inner_text()
-    page.uncheck('#fOkunmamis')
-    page.select_option('#sort', 'zaman:asc')
+    page.uncheck('#fUnread')
+    page.select_option('#sort', 'time:asc')
     assert 'alfa@x.example' in page.locator('tbody tr').first.inner_text()
 
 
@@ -379,3 +379,41 @@ def test_unsubscribe_button_only_on_senders_with_an_unsubscribe_link(ui_page):
     with_link = sorted(WITH_UNSUBSCRIBE)[0]
     row(page, with_link).locator('.sender-checkbox').check()
     assert page.locator('#unsubBtn').is_enabled()
+
+
+def test_activity_log_page_filters_by_type_and_errors(ui_page, server_url):
+    from mail_cleaner import activity
+    paths = accounts.AccountPaths('demo@ornek.example')
+    activity.record(paths, 'tarama', tam=False, mail=10, yeni_okunan=2, gonderen=3, sure_sn=1)
+    activity.record(paths, 'silme', kapsam='all', toplam=4, gonderenler={'a@x.example': 4})
+    activity.record(paths, 'tarama', tam=True, hata='boom')
+    page = ui_page
+    page.goto(f'{server_url}/activity-log?account=demo@ornek.example')
+
+    assert len(_names(page)) == 4   # fixture'ın kendi taraması + yukarıdaki üç kayıt
+    page.select_option('#fType', 'silme')
+    assert len(_names(page)) == 1
+    page.select_option('#fType', '')
+    page.check('#fError')
+    assert len(_names(page)) == 1 and 'boom' in page.locator('tbody tr:visible').inner_text()
+    page.uncheck('#fError')
+    page.fill('#q', 'nothing like this')
+    assert page.locator('#noMatch').is_visible()
+
+
+def test_language_picker_switches_the_whole_page_and_is_remembered(ui_page, server_url):
+    page = ui_page
+    assert page.locator('#scanBtn').inner_text() == 'Gelen Kutusunu Tara'
+
+    page.select_option('#languageSelect', 'en')
+    page.wait_for_selector('#scanBtn:has-text("Scan inbox")')
+    page.click('#scanBtn')
+    page.wait_for_selector('#notice >> text=Scan finished')
+    assert page.locator('html').get_attribute('lang') == 'en'
+    assert 'Mail count (high to low)' in page.locator('#sortSelect').inner_text()
+    assert page.locator('.sender-row').first.locator('button', has_text='Preview').count() == 1
+
+    page.goto(f'{server_url}/subscriptions')   # çerez: alt sayfa da İngilizce
+    assert 'Subscriptions' in page.locator('h1').inner_text()
+    page.select_option('#languageSelect', 'tr')
+    page.wait_for_selector('h1:has-text("Abonelikler")')

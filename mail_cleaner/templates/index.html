@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+{% endblock %}
+{% block body %}
+{% from '_icons.html' import icon %}
+<header>
+  <div class="header-row">
+  <h1>{{ t('app.name') }}{% if demo %} <span class="demo-badge" title="{{ t('app.demo_badge_title') }}">DEMO</span>{% endif %}</h1>
+  <div class="account-bar">
+    <label for="accountSelect" id="accountLabel" hidden>{{ t('account.label') }}</label>
+    <select id="accountSelect" hidden></select>
+    <button id="addAccountBtn" type="button" class="small-btn">{{ t('account.add') }}</button>
+    <button id="removeAccountBtn" type="button" class="small-btn" hidden>{{ t('account.remove') }}</button>
+  </div>
+  <span class="summary" id="grandTotal"></span>
+  <label class="language-pick" title="{{ t('lang.label') }}">{{ icon('language') }}<select id="languageSelect" aria-label="{{ t('lang.label') }}">{% for code, name in languages.items() %}<option value="{{ code }}"{% if code == lang %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+  </div>
+  <div class="header-row">
+  <nav class="header-links" aria-label="{{ t('nav.pages') }}">
+  <a href="/subscriptions" target="_blank" rel="noopener" class="log-link" data-page="subscriptions">{{ icon('subscription') }}{{ t('nav.subscriptions') }}</a>
+  <a href="/notifications" target="_blank" rel="noopener" class="log-link" id="notifLink" data-page="notifications">{{ icon('notification') }}{{ t('nav.notifications') }}<span class="count-badge" id="notifCount" hidden></span></a>
+  <a href="/activity-log" target="_blank" rel="noopener" class="log-link" data-page="activity-log">{{ icon('log') }}{{ t('nav.activity_log') }}</a>
+  </nav>
+  <div class="scan-actions">
+  <button id="scanBtn" type="button" disabled>{{ t('scan.start') }}</button>
+  <button id="fullScanBtn" class="secondary-btn" type="button" disabled
+          title="{{ t('scan.full_title') }}">{{ t('scan.full') }}</button>
+  <button id="scanAllBtn" class="secondary-btn" type="button" hidden
+          title="{{ t('scan.all_title') }}">{{ t('scan.all') }}</button>
+  </div>
+  </div>
+</header>
+
+<main>
+  <div id="notice" role="status" aria-live="polite"></div>
+
+  <p class="note">
+    {{ t('note.trash') | safe }}
+  </p>
+
+  <div class="toolbar">
+    <label class="tool"><input type="checkbox" id="selectAll"> <span id="selectAllLabel">{{ t('select.all') }}</span></label>
+    <input type="search" id="searchInput" placeholder="{{ t('search.placeholder') }}" aria-label="{{ t('search.label') }}" autocomplete="off">
+    <span class="tool" id="unsubFilterWrap" hidden>
+      <label for="linkFilter">{{ t('filter.link') }}</label>
+      <select id="linkFilter">
+        <option value="">{{ t('filter.all') }}</option>
+        <option value="with">{{ t('filter.link_with') }}</option>
+        <option value="without">{{ t('filter.link_without') }}</option>
+      </select>
+    </span>
+    <span class="tool" id="categoryFilterWrap" hidden>
+      <label for="categorySelect">{{ t('filter.category') }}</label>
+      <select id="categorySelect">
+        <option value="">{{ t('filter.all') }}</option>
+        <option value="bulten">{{ t('category.bulten') }}</option>
+        <option value="promosyon">{{ t('category.promosyon') }}</option>
+        <option value="bildirim">{{ t('category.bildirim') }}</option>
+        <option value="kisisel">{{ t('category.kisisel') }}</option>
+        <option value="spam">{{ t('category.spam') }}</option>
+      </select>
+    </span>
+    <span class="tool">
+      <label for="viewSelect">{{ t('view.label') }}</label>
+      <select id="viewSelect">
+        <option value="address">{{ t('view.address') }}</option>
+        <option value="domain">{{ t('view.domain') }}</option>
+      </select>
+    </span>
+    <span class="tool">
+      <label for="sortSelect">{{ t('sort.label') }}</label>
+      <select id="sortSelect">
+        <option value="count_desc">{{ t('sort.count_desc') }}</option>
+        <option value="count_asc">{{ t('sort.count_asc') }}</option>
+        <option value="name_asc">{{ t('sort.name_asc') }}</option>
+        <option value="name_desc">{{ t('sort.name_desc') }}</option>
+        <option value="members_desc" data-domain-only hidden disabled>{{ t('sort.members_desc') }}</option>
+        <option value="members_asc" data-domain-only hidden disabled>{{ t('sort.members_asc') }}</option>
+      </select>
+    </span>
+  </div>
+
+  <div id="senders"><p class="empty-state">{{ t('common.loading') }}</p></div>
+</main>
+
+<div class="action-bar">
+  <span id="selectedInfo" aria-live="polite">{{ t('select.none') }}</span>
+  <select id="scopeSelect" aria-label="{{ t('scope.label') }}">
+    <option value="inbox"{% if default_scope == 'inbox' %} selected{% endif %}>{{ t('scope.inbox') }}</option>
+    <option value="all"{% if default_scope == 'all' %} selected{% endif %}>{{ t('scope.all') }}</option>
+  </select>
+  <button id="unsubBtn" type="button" disabled aria-describedby="selectedInfo">{{ t('action.unsubscribe_selected') }}</button>
+  <button id="deleteBtn" type="button" disabled aria-describedby="selectedInfo">{{ t('action.trash_selected') }}</button>
+  <button id="undoBtn" class="secondary-btn" type="button" hidden>{{ t('action.undo') }}</button>
+</div>
+
+<dialog id="addAccountDialog" aria-labelledby="addAccountTitle">
+  <form method="dialog">
+    <div class="dialog-body">
+      <h2 id="addAccountTitle">{{ t('account.dialog_title') }}</h2>
+      <p>{{ t('account.dialog_intro') | safe }}</p>
+      <p><label for="clientFileInput"><strong>{{ t('account.client_file') }}</strong></label>
+        <input type="file" id="clientFileInput" accept=".json,application/json"></p>
+      <div id="pendingAccounts"></div>
+      <p id="sharedClientOption" hidden>
+        <button type="button" class="secondary-btn" id="useSharedClientBtn">{{ t('account.use_shared_client') }}</button>
+      </p>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" class="secondary-btn" id="addAccountCancel">{{ t('common.cancel') }}</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirmDialog" aria-labelledby="confirmTitle">
+  <form method="dialog">
+    <div class="dialog-body">
+      <h2 id="confirmTitle"></h2>
+      <div id="confirmContent"></div>
+    </div>
+    <div class="dialog-actions">
+      <button value="cancel" class="secondary-btn" id="confirmCancel">{{ t('common.cancel') }}</button>
+      <button value="ok" id="confirmOk"></button>
+    </div>
+  </form>
+</dialog>
+
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/state.js') }}"></script>
+<script src="{{ url_for('static', filename='js/util.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ui.js') }}"></script>
+<script src="{{ url_for('static', filename='js/senders.js') }}"></script>
+<script src="{{ url_for('static', filename='js/preview.js') }}"></script>
+<script src="{{ url_for('static', filename='js/selection.js') }}"></script>
+<script src="{{ url_for('static', filename='js/protection.js') }}"></script>
+<script src="{{ url_for('static', filename='js/unsubscribe.js') }}"></script>
+<script src="{{ url_for('static', filename='js/delete.js') }}"></script>
+<script src="{{ url_for('static', filename='js/accounts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/scan.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}
