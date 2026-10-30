@@ -2,36 +2,85 @@
 
 *Diğer diller: [🇹🇷 Türkçe](README.tr.md)*
 
-A local web app that scans your Gmail inbox, groups messages by sender, and lets you bulk-trash
-or unsubscribe from the senders you pick, with an undo for the last delete. It runs only on
-your own machine (`localhost`); nothing is sent anywhere except Gmail's own API.
+A local web app that scans your Gmail (inbox, spam and archive), groups messages by sender, and
+lets you bulk-trash or unsubscribe from the senders you pick, with an undo for the last delete.
+It also lists every newsletter with its unsubscribe link, warns you when a sender keeps mailing
+after you unsubscribed, and keeps a log of what you did. It runs only on your own machine
+(`localhost`); nothing is sent anywhere except Gmail's own API.
 
-![Sender list in demo mode](docs/screenshot.png)
+![Sender list in demo mode](docs/screenshots/main.png)
+
+*The screenshots use the built-in demo mode with fake data. The interface is in Turkish; this
+README gives the English meaning of each label in parentheses.*
 
 ## Features
 
-- **Background scan with progress:** message metadata is fetched with Gmail batch requests in
-  the background, with a progress bar and a time estimate. Gmail allows about 300 message reads
-  per minute per user, so the app paces itself to that quota instead of hitting rate limits
-  (10,000 inbox messages ≈ 35 minutes). Later deletes reuse what the scan saw.
+- **Background scan with progress:** scans the inbox, spam and archive (Trash, Sent and Drafts
+  are skipped). Message metadata is fetched with Gmail batch requests, with a progress bar and a
+  time estimate. Gmail allows about 300 message reads per minute per user, so the app paces itself
+  to that quota instead of hitting rate limits (10,000 messages ≈ 35 minutes the first time).
+  The headers it read are cached per account, so **later scans only read the new messages** and
+  take seconds. **Full scan** (*Tam tara*) ignores the cache and re-reads everything, which also
+  picks up category changes.
+- **Scan all accounts at once:** Gmail counts the quota per account, so *Tüm hesapları tara*
+  (scan all accounts) runs every account in parallel with one progress bar each. Four accounts
+  take as long as the slowest one, not the sum.
 - **One row per sender:** messages are grouped by the actual address; the same address with
   different display names is one row. Switch to a **domain view** to see `shop.com` as a whole.
 - **Categories without a model:** each sender is tagged *newsletter / promotion / notification /
-  personal* from Gmail's own tabs (`CATEGORY_*` labels) and the `List-Unsubscribe` header.
-- **Search and filters:** search by name or address, filter by category or "has an unsubscribe
-  link". "Select all" only selects the rows you can see.
+  personal / spam* from Gmail's own tabs (`CATEGORY_*` labels), the `SPAM` label and the
+  `List-Unsubscribe` header.
+- **Search, filters, sorting:** search by name or address; filter by category or by
+  *subscription link* (all / with a link / without a link); sort by mail count or name, and in the
+  domain view also by the number of addresses per domain. "Select all" only selects the rows you
+  can see.
+- **Per-address actions inside a domain:** open a domain and every address in it has its own
+  select box, *Preview*, *Copy*, *Protect* and *Unsubscribe*.
 - **Protected senders:** lock an address or a whole domain (`@bank.com`, subdomains included).
   Locked senders can't be selected, and the server refuses to trash or unsubscribe them.
-- **Delete with the real count:** choose *inbox only* or *all mail (including archive)*; the
-  confirm dialog shows how many messages will actually move to Trash.
-- **Undo:** the last delete can be undone. Messages come back with their original inbox/unread
-  state, so archived mail doesn't land in the inbox.
-- **Unsubscribe with confirmation:** one-click unsubscribe (RFC 8058) is only sent after you
-  confirm the list of senders; otherwise you get a link or `mailto:` address to open yourself.
+- **Delete with the real count:** choose *inbox only* or *all mail* (archive and spam included);
+  the confirm dialog shows how many messages will actually move to Trash.
+- **Undo:** the last delete can be undone. Messages come back with their original inbox, unread
+  and spam state, so archived mail doesn't land in the inbox.
+- **Unsubscribe only where there is a link:** the *Unsubscribe* button appears only for senders
+  whose unsubscribe link (`List-Unsubscribe`, `https` or `mailto:`) could be read. One-click
+  unsubscribe (RFC 8058) is only sent after you confirm the list of senders; otherwise you get a
+  link or `mailto:` address to open yourself.
+- **Subscriptions page, notifications, activity log:** see [Pages](#pages).
 - **Several Gmail accounts:** add accounts from the header and switch between them. Each account
-  keeps its own sender list, scan and undo; the protected list is shared. Confirm dialogs name
-  the account so you don't trash mail in the wrong one.
+  keeps its own sender list, scan, undo, subscriptions, notifications and log; the protected list
+  is shared. Confirm dialogs name the account so you don't trash mail in the wrong one.
 - **Preview and copy:** see a sender's latest subjects before deleting; copy an address.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Main page](docs/screenshots/main.png) | ![Domain view with per-address actions](docs/screenshots/domains.png) |
+| **Main page:** one row per sender, with category, preview, copy, protect and unsubscribe. | **Domain view:** each address in a domain has its own actions and preview. |
+| ![Scanning several accounts at once](docs/screenshots/scan-all.png) | ![Subscriptions page](docs/screenshots/subscriptions.png) |
+| **Scan all accounts:** one progress bar per account, running in parallel. | **Subscriptions:** only senders with an unsubscribe link, with short link labels, filters and sorting. |
+| ![Notifications page](docs/screenshots/notifications.png) | ![Activity log](docs/screenshots/log.png) |
+| **Notifications:** new subscriptions, and senders that mail you after you unsubscribed. | **Activity log:** scans, deletes, undos and unsubscribes, per account. |
+
+Regenerate them with `python docs/make_screenshots.py` (demo mode, fake data only; needs
+Chromium, see [Tests](#tests)).
+
+## Pages
+
+Besides the main page (`/`), the app has three pages that show **one account at a time**. Use the
+account picker at the top (or `?account=<address>` in the URL). On the main page the links in the
+header open them for the selected account.
+
+| Page | Address | What it shows |
+|---|---|---|
+| Subscriptions (*Abonelikler*) | `/abonelikler` | Senders with a readable unsubscribe link: category, mail count, last mail, status (not unsubscribed / unsubscribed / unsubscribed but still mailing) and short link labels such as `emails.example.com` (the full address is in the tooltip and the link). *Çıktım* (I unsubscribed) marks a sender you unsubscribed from yourself. Search, filter by category and status, sort by mail count, last mail or name. |
+| Notifications (*Bildirimler*) | `/bildirimler` | Created after each scan: a sender seen as a subscription for the first time (not on the very first scan), and a sender you unsubscribed from that **sent new mail after you unsubscribed**. The header shows a red bubble with the unread count. Filter by type, unread only, sort by time or mail count. |
+| Activity log (*İşlem günlüğü*) | `/gunluk` | Scans (with how many new messages were read and how long it took), moves to Trash, undos, unsubscribes and account changes. Filter by type, errors only, sort by time. Stored in `hesaplar/<address>/islem_gunlugu.jsonl`. |
+
+A sender is marked "unsubscribed" automatically after a confirmed one-click unsubscribe, or by
+hand with *Çıktım*. Whether the unsubscribe really worked is only certain when no new mail comes
+afterwards: the app counts mail that arrived after the mark and warns again whenever more has arrived since the last warning.
 
 ## Try it without a Gmail account (demo mode)
 
@@ -106,7 +155,7 @@ closest one.
    - "Google hasn't verified this app" appears because the project is in testing mode and only
      you use it. Click **Continue**.
    - Allow access to Gmail (read and change, so the app can move mail to Trash).
-4. Back in the app you see "<address> added". Click **Scan Inbox**.
+4. Back in the app you see "<address> added". Click **Scan Inbox** (*Gelen Kutusunu Tara*).
 
 The app stores that account's client file and sign-in token in `hesaplar/<address>/` (git
 ignores this folder). Deleted messages go to Gmail's **Trash**, not straight to permanent
@@ -142,9 +191,9 @@ You can manage several Gmail accounts (personal, school, work) from the same pag
 
 | What | Per account or shared? |
 |---|---|
-| Google Cloud client, sign-in token, sender list, scan index, last-trash record | Per account: `hesaplar/<address>/` |
+| Google Cloud client, sign-in token, sender list, scan index and cache, last-trash record, subscriptions, notifications, activity log | Per account: `hesaplar/<address>/` |
 | Protected senders (`korunanlar.json`) | Shared: a bank you lock is protected in every account |
-| Gmail quota (~300 message reads per minute) | Gmail counts it per account; the app paces all accounts together, so two scans at once each run at about half speed |
+| Gmail quota (~300 message reads per minute) | Gmail counts it per account, and so does the app: every account has its own budget, so several accounts can be scanned at the same time (*Scan all accounts*) |
 
 **Upgrading from the single-account version:** on first start an existing `token.json` and its
 data files (`gonderenler.csv`, `taranan_idler.json`, `son_islem.json`) are moved into the folder of
@@ -191,16 +240,18 @@ count) are still read and merged by address.
 ## How it works
 
 ```
-browser (templates/index.html)
+browser (templates/index.html, abonelikler.html, bildirimler.html, gunluk.html)
    │  fetch, same-origin only
    ▼
 Flask app.py ── Host / Origin checks ── Gmail API (google-api-python-client)
-   │                                     ├─ messages.list  (from:"addr" in:inbox)
+   │                                     ├─ messages.list  (scan: -in:trash -in:sent -in:drafts, spam included;
+   │                  delete/preview: from:"addr" in:inbox | -in:trash)
    │                                     ├─ batch messages.get (metadata)
    │                                     ├─ messages.batchModify (TRASH)
    │                                     └─ batch messages.untrash (undo)
    └─ local files: hesaplar/<address>/{token.json, gonderenler.csv, taranan_idler.json,
-                   son_islem.json} · korunanlar.json (shared)
+                   tarama_onbellegi.json, son_islem.json, abonelikler.json, bildirimler.json,
+                   islem_gunlugu.jsonl} · korunanlar.json (shared)
 ```
 
 Entry points in the project folder: `app.py` (web app), `demo.py` (demo mode), `extract_senders.py`
@@ -210,16 +261,19 @@ Entry points in the project folder: `app.py` (web app), `demo.py` (demo mode), `
 |---|---|
 | `config.py` | Reads `.env` and checks the values |
 | `auth.py` | Google sign-in, one token per account (`0600`) |
-| `gmail.py` | Shared Gmail API parts: address parsing, quota limiter, batch requests with retry |
-| `scanner.py` | Inbox scan: count per address, display name, categories; CSV read/write |
+| `gmail.py` | Shared Gmail API parts: address parsing, per-account quota limiter, batch requests with retry |
+| `scanner.py` | Scan of inbox, spam and archive with a per-message cache: count per address, display name, categories; CSV read/write |
 | `accounts.py` | Account folders, account list, moving the old single-account files |
 | `protected.py` | Protected senders (shared by all accounts) |
 | `state.py` | Per-account scan/delete state and locks |
 | `mailbox.py` | Count, move to Trash, undo, preview (with exact sender check) |
 | `unsubscribe.py` | List-Unsubscribe and one-click unsubscribe with SSRF checks |
+| `subscriptions.py` | Subscription list, "unsubscribed" marks, notifications created after a scan |
+| `activity.py` | Per-account activity log (one JSON object per line) |
 | `web.py` | Flask app: page, JSON API, request checks, error mapping |
 | `demo.py` | Fake mailboxes for demo mode |
-| `templates/index.html` | The page (plain JS, no build step) |
+| `templates/` | The main page and the subscriptions, notifications and log pages (plain JS, no build step) |
+| `docs/make_screenshots.py` | Regenerates the README screenshots in demo mode |
 
 ## Security notes
 
@@ -233,7 +287,8 @@ own browser on `localhost`:
 - Everything coming from mail headers is HTML-escaped before it reaches the page.
 - One-click unsubscribe only goes to `https` URLs on public IP addresses, without following
   redirects, and only after you confirm.
-- `credentials.json`, the `hesaplar/` folder (tokens) and the local data files are in `.gitignore`.
+- Unsubscribe links shown on the Subscriptions page are limited to `http`, `https` and `mailto:` and open with `rel="noopener noreferrer"`; anything else (e.g. `javascript:`) is dropped.
+- `credentials.json`, the `hesaplar/` folder (tokens, scan cache, notifications, activity log) and the local data files are in `.gitignore`. The cache and log contain sender addresses and stay on your machine.
 
 Don't expose this app on a network or run it on a shared server.
 
@@ -245,7 +300,7 @@ isn't installed).
 
 ```bash
 pip install -r requirements-dev.txt
-python -m playwright install chromium   # only for the browser tests in tests/test_ui.py
+python -m playwright install chromium   # for the browser tests in tests/test_ui.py and docs/make_screenshots.py
 python -m pytest tests/ -v
 ```
 

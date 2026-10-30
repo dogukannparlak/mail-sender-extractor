@@ -2,38 +2,86 @@
 
 *Other languages: [🇬🇧 English](README.md)*
 
-Gmail gelen kutunu tarayan, mailleri gönderene göre gruplayan ve seçtiğin gönderenlerin
-maillerini toplu olarak çöpe taşımanı ya da abonelikten çıkmanı sağlayan yerel bir web
-uygulaması. Son silme geri alınabilir. Yalnız kendi bilgisayarında (`localhost`) çalışır;
-Gmail'in kendi API'si dışında hiçbir yere veri gitmez.
+Gmail'ini (gelen kutusu, spam ve arşiv) tarayan, mailleri gönderene göre gruplayan ve seçtiğin
+gönderenlerin maillerini toplu olarak çöpe taşımanı ya da abonelikten çıkmanı sağlayan yerel bir
+web uygulaması. Son silme geri alınabilir. Ayrıca bütün bültenleri çıkış linkleriyle listeler,
+abonelikten çıktığın bir gönderen mail atmaya devam ederse uyarır ve yaptığın işlemleri günlüğe
+yazar. Yalnız kendi bilgisayarında (`localhost`) çalışır; Gmail'in kendi API'si dışında hiçbir
+yere veri gitmez.
 
-![Demo modunda gönderen listesi](docs/screenshot.png)
+![Demo modunda gönderen listesi](docs/screenshots/main.png)
+
+*Ekran görüntüleri yerleşik demo modunun sahte verileriyle alındı.*
 
 ## Özellikler
 
-- **Arka planda tarama ve ilerleme çubuğu:** mail bilgileri arka planda Gmail batch
-  istekleriyle alınır; sayfada ilerleme ve kalan süre görünür. Gmail kullanıcı başına dakikada
-  yaklaşık 300 mail okumaya izin veriyor; uygulama hız sınırına çarpmak yerine bu kotaya göre
-  ilerler (10.000 mail ≈ 35 dakika). Sonraki silmeler taramada görüleni yeniden kullanır.
+- **Arka planda tarama ve ilerleme çubuğu:** gelen kutusunu, spam'i ve arşivi tarar (Çöp,
+  Gönderilenler ve Taslaklar atlanır). Mail bilgileri Gmail batch istekleriyle alınır; sayfada
+  ilerleme ve kalan süre görünür. Gmail kullanıcı başına dakikada yaklaşık 300 mail okumaya izin
+  veriyor; uygulama hız sınırına çarpmak yerine bu kotaya göre ilerler (10.000 mail ilk seferde
+  ≈ 35 dakika). Okunan başlıklar hesap başına saklanır; bu yüzden **sonraki taramalar yalnız yeni
+  mailleri okur** ve saniyeler sürer. **Tam tara** önbelleği yok sayıp her şeyi yeniden okur
+  (kategori değişikliklerini de yakalar).
+- **Bütün hesapları aynı anda tara:** Gmail kotayı hesap başına sayar; **Tüm hesapları tara**
+  her hesabı paralel çalıştırır, her biri için ayrı ilerleme çubuğu gösterir. Dört hesap,
+  toplamı kadar değil en yavaş hesap kadar sürer.
 - **Gönderen başına tek satır:** sayım gerçek adrese göre yapılır; aynı adres farklı adlarla
   gelse de tek satırdır. **Alan adı görünümü** ile `magaza.com`'u bütün olarak görebilirsin.
-- **Modelsiz kategori:** her gönderen Gmail'in kendi sekmelerinden (`CATEGORY_*` etiketleri)
-  ve `List-Unsubscribe` başlığından *bülten / promosyon / bildirim / kişisel* olarak etiketlenir.
-- **Arama ve filtre:** ad ya da adresle ara; kategoriye ya da "abonelik linki olanlar"a göre
-  süz. "Tümünü seç" yalnız ekranda görünen satırları seçer.
+- **Modelsiz kategori:** her gönderen Gmail'in kendi sekmelerinden (`CATEGORY_*` etiketleri),
+  `SPAM` etiketinden ve `List-Unsubscribe` başlığından *bülten / promosyon / bildirim / kişisel /
+  spam* olarak etiketlenir.
+- **Arama, filtre, sıralama:** ad ya da adresle ara; kategoriye ya da *abonelik bağlantısına*
+  (tümü / olanlar / olmayanlar) göre süz; mail sayısına ya da isme göre sırala, alan adı
+  görünümünde ayrıca alan adı başına adres sayısına göre. "Tümünü seç" yalnız ekranda görünen
+  satırları seçer.
+- **Alan adının içinde adres başına işlem:** bir alan adını açınca içindeki her adresin kendi
+  seçim kutusu, *Önizle*, *Kopyala*, *Koru* ve *Abonelikten çık* düğmeleri vardır.
 - **Korunan gönderenler:** bir adresi ya da alan adının tamamını kilitle (`@banka.com`, alt
   alan adları dahil). Kilitli gönderenler seçilemez; sunucu da onları silmeyi ve abonelikten
   çıkmayı reddeder.
-- **Gerçek sayıyla silme:** *yalnız gelen kutusu* ya da *tüm mailler (arşiv dahil)* seç; onay
-  penceresi Çöp Kutusu'na gerçekten kaç mail gideceğini gösterir.
-- **Geri al:** son silme geri alınabilir. Mailler eski gelen kutusu/okunmadı durumlarıyla
-  döner; arşivdeki mailler gelen kutusuna düşmez.
-- **Onaylı abonelikten çıkma:** tek tıkla çıkış (RFC 8058) yalnız gönderen listesini onayladıktan
-  sonra gönderilir; aksi halde kendin açacağın bir link ya da `mailto:` adresi verilir.
+- **Gerçek sayıyla silme:** *yalnız gelen kutusu* ya da *tüm mailler* (arşiv ve spam dahil) seç;
+  onay penceresi Çöp Kutusu'na gerçekten kaç mail gideceğini gösterir.
+- **Geri al:** son silme geri alınabilir. Mailler eski gelen kutusu, okunmadı ve spam
+  durumlarıyla döner; arşivdeki mailler gelen kutusuna düşmez.
+- **Abonelikten çıkma yalnız bağlantı varsa:** *Abonelikten çık* düğmesi yalnız çıkış bağlantısı
+  (`List-Unsubscribe`, `https` ya da `mailto:`) okunabilen göndericilerde görünür. Tek tıkla çıkış
+  (RFC 8058) yalnız gönderen listesini onayladıktan sonra gönderilir; aksi halde kendin açacağın
+  bir link ya da `mailto:` adresi verilir.
+- **Abonelikler sayfası, bildirimler, işlem günlüğü:** bkz. [Sayfalar](#sayfalar).
 - **Birden fazla Gmail hesabı:** başlıktan hesap ekle ve hesaplar arasında geçiş yap. Her hesabın
-  gönderen listesi, taraması ve geri alması ayrıdır; korunanlar listesi ortaktır. Onay pencereleri
-  hesabı yazar, yanlış hesapta mail taşınmaz.
+  gönderen listesi, taraması, geri alması, abonelikleri, bildirimleri ve günlüğü ayrıdır; korunanlar
+  listesi ortaktır. Onay pencereleri hesabı yazar, yanlış hesapta mail taşınmaz.
 - **Önizleme ve kopyalama:** silmeden önce gönderenin son konularını gör; adresi kopyala.
+
+## Ekran görüntüleri
+
+| | |
+|---|---|
+| ![Ana sayfa](docs/screenshots/main.png) | ![Adres başına işlemlerle alan adı görünümü](docs/screenshots/domains.png) |
+| **Ana sayfa:** gönderen başına bir satır; kategori, önizleme, kopyalama, koruma ve abonelikten çıkma. | **Alan adı görünümü:** alan adının içindeki her adresin kendi işlemleri ve önizlemesi var. |
+| ![Birkaç hesabı aynı anda tarama](docs/screenshots/scan-all.png) | ![Abonelikler sayfası](docs/screenshots/subscriptions.png) |
+| **Tüm hesapları tara:** hesap başına bir ilerleme çubuğu, paralel çalışır. | **Abonelikler:** yalnız çıkış bağlantısı olan göndericiler; kısa bağlantı etiketleri, filtre ve sıralama. |
+| ![Bildirimler sayfası](docs/screenshots/notifications.png) | ![İşlem günlüğü](docs/screenshots/log.png) |
+| **Bildirimler:** yeni abonelikler ve abonelikten çıktıktan sonra mail atan göndericiler. | **İşlem günlüğü:** tarama, silme, geri alma ve abonelikten çıkma kayıtları, hesap başına. |
+
+Yeniden üretmek için: `python docs/make_screenshots.py` (demo modu, yalnız sahte veri; Chromium
+gerekir, bkz. [Testler](#testler)).
+
+## Sayfalar
+
+Ana sayfanın (`/`) yanında **her seferinde tek hesabı** gösteren üç sayfa vardır. Üstteki hesap
+seçiciyi (ya da adreste `?account=<adres>`) kullan. Ana sayfada başlıktaki bağlantılar seçili
+hesap için açar.
+
+| Sayfa | Adres | Ne gösterir |
+|---|---|---|
+| Abonelikler | `/abonelikler` | Okunabilir çıkış bağlantısı olan göndericiler: kategori, mail sayısı, son mail, durum (çıkılmadı / çıkıldı / çıkıldı ama hâlâ mail atıyor) ve `emails.ornek.com` gibi kısa bağlantı etiketleri (tam adres ipucunda ve linkte). *Çıktım* kendin çıktığın göndericiyi işaretler. Arama, kategori ve duruma göre filtre, mail sayısı / son mail / isme göre sıralama. |
+| Bildirimler | `/bildirimler` | Her taramadan sonra üretilir: taramada ilk kez görülen abonelikler (ilk taramada değil) ve abonelikten çıktığın ama **çıkıştan sonra yeni mail gönderen** göndericiler. Başlıkta okunmamış sayısı kırmızı baloncukla görünür. Türe göre, yalnız okunmamışlara göre filtre; zamana ya da mail sayısına göre sıralama. |
+| İşlem günlüğü | `/gunluk` | Taramalar (kaç yeni mail okundu, ne kadar sürdü), Çöp Kutusu'na taşıma, geri alma, abonelikten çıkma ve hesap değişiklikleri. Türe göre, yalnız hatalılara göre filtre; zamana göre sıralama. `hesaplar/<adres>/islem_gunlugu.jsonl` dosyasında durur. |
+
+Bir gönderen onaylı tek tıkla çıkıştan sonra kendiliğinden, ya da *Çıktım* ile elle "çıkıldı"
+olarak işaretlenir. Çıkışın gerçekten işe yaradığı ancak sonrasında mail gelmeyince kesinleşir:
+uygulama işaretten sonra gelen mailleri sayar ve son uyarıdan sonra daha fazla mail gelirse yeniden uyarır.
 
 ## Gmail hesabı olmadan dene (demo modu)
 
@@ -145,9 +193,9 @@ Birden çok Gmail hesabını (kişisel, okul, iş) aynı sayfadan yönetebilirsi
 
 | Ne                                                                      | Hesap başına mı, ortak mı?                                                                                                       |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Google Cloud istemcisi, giriş anahtarı, gönderen listesi, tarama dizini, son taşıma kaydı | Hesap başına: `hesaplar/<adres>/`                                                                                                |
+| Google Cloud istemcisi, giriş anahtarı, gönderen listesi, tarama dizini ve önbelleği, son taşıma kaydı, abonelikler, bildirimler, işlem günlüğü | Hesap başına: `hesaplar/<adres>/`                                                                                                |
 | Korunan gönderenler (`korunanlar.json`)                              | Ortak: kilitlediğin banka her hesapta korunur                                                                                       |
-| Gmail kotası (dakikada ~300 mail okuma)                                | Gmail hesap başına sayar; uygulama bütün hesapları birlikte yavaşlatır, iki tarama aynı anda yaklaşık yarı hızda ilerler |
+| Gmail kotası (dakikada ~300 mail okuma)                                | Gmail hesap başına sayar, uygulama da öyle: her hesabın kendi bütçesi var, bu yüzden birkaç hesap aynı anda taranabilir (*Tüm hesapları tara*) |
 
 **Tek hesaplı sürümden geçiş:** ilk açılışta mevcut `token.json` ve veri dosyaları (`gonderenler.csv`,
 `taranan_idler.json`, `son_islem.json`) ait oldukları hesabın klasörüne taşınır; o token onunla oluşturulduysa `credentials.json` da taşınır. Sayfa hangi hesaba
@@ -192,16 +240,18 @@ sayı) hâlâ okunur ve adrese göre birleştirilir.
 ## Nasıl çalışır
 
 ```
-tarayıcı (templates/index.html)
+tarayıcı (templates/index.html, abonelikler.html, bildirimler.html, gunluk.html)
    │  fetch, yalnız aynı kaynaktan
    ▼
 Flask app.py ── Host / Origin kontrolü ── Gmail API (google-api-python-client)
-   │                                       ├─ messages.list  (from:"adres" in:inbox)
+   │                                       ├─ messages.list  (tarama: -in:trash -in:sent -in:drafts, spam dahil;
+   │                                       │                  silme/önizleme: from:"adres" in:inbox | -in:trash)
    │                                       ├─ batch messages.get (metadata)
    │                                       ├─ messages.batchModify (TRASH)
    │                                       └─ batch messages.untrash (geri al)
    └─ yerel dosyalar: hesaplar/<adres>/{token.json, gonderenler.csv, taranan_idler.json,
-                     son_islem.json} · korunanlar.json (ortak)
+                     tarama_onbellegi.json, son_islem.json, abonelikler.json, bildirimler.json,
+                     islem_gunlugu.jsonl} · korunanlar.json (ortak)
 ```
 
 Proje klasöründeki giriş dosyaları: `app.py` (web uygulaması), `demo.py` (demo modu),
@@ -211,16 +261,19 @@ Proje klasöründeki giriş dosyaları: `app.py` (web uygulaması), `demo.py` (d
 | ------------------------ | ---------------------------------------------------------------------------------------------- |
 | `config.py`            | `.env`'i okur, değerleri denetler                                                           |
 | `auth.py`              | Google girişi, hesap başına bir token (`0600`)                                            |
-| `gmail.py`             | Gmail API ortak parçaları: adres ayrıştırma, kota sınırlayıcı, yeniden denemeli batch |
-| `scanner.py`           | Gelen kutusu taraması: adres başına sayım, görünen ad, kategori; CSV okuma/yazma         |
+| `gmail.py`             | Gmail API ortak parçaları: adres ayrıştırma, hesap başına kota sınırlayıcı, yeniden denemeli batch |
+| `scanner.py`           | Gelen kutusu, spam ve arşiv taraması (mail başına önbellekli): adres başına sayım, görünen ad, kategori; CSV okuma/yazma |
 | `accounts.py`          | Hesap klasörleri, hesap listesi, eski tek hesaplı dosyaların taşınması                   |
 | `protected.py`         | Korunan gönderenler (bütün hesaplarda ortak)                                                |
 | `state.py`             | Hesap başına tarama/taşıma durumu ve kilitler                                              |
 | `mailbox.py`           | Sayma, Çöp Kutusu'na taşıma, geri alma, önizleme (gönderen birebir kontrolüyle)         |
 | `unsubscribe.py`       | List-Unsubscribe ve SSRF korumalı tek tıkla çıkış                                        |
+| `subscriptions.py`     | Abonelik listesi, "çıkıldı" işaretleri, taramadan sonra üretilen bildirimler              |
+| `activity.py`          | Hesap başına işlem günlüğü (satır başına bir JSON)                                        |
 | `web.py`               | Flask uygulaması: sayfa, JSON API, istek denetimi, hata eşleme                               |
 | `demo.py`              | Demo modu için sahte posta kutuları                                                          |
-| `templates/index.html` | Sayfa (düz JS, derleme adımı yok)                                                           |
+| `templates/`           | Ana sayfa ile abonelikler, bildirimler ve günlük sayfaları (düz JS, derleme adımı yok)     |
+| `docs/make_screenshots.py` | README ekran görüntülerini demo modunda yeniden üretir                                  |
 
 ## Güvenlik notları
 
@@ -234,7 +287,8 @@ Uygulama maillerini değiştirebilen bir token tutar; bu yüzden yalnız kendi t
 - Mail başlıklarından gelen her şey sayfaya girmeden önce HTML olarak kaçırılır.
 - Tek tıkla çıkış yalnız genel IP'deki `https` adreslerine, yönlendirme izlenmeden ve yalnız
   sen onayladıktan sonra gönderilir.
-- `credentials.json`, `hesaplar/` klasörü (token'lar) ve yerel veri dosyaları `.gitignore`'da.
+- Abonelikler sayfasında gösterilen çıkış bağlantıları `http`, `https` ve `mailto:` ile sınırlıdır ve `rel="noopener noreferrer"` ile açılır; başka her şey (ör. `javascript:`) atılır.
+- `credentials.json`, `hesaplar/` klasörü (token'lar, tarama önbelleği, bildirimler, işlem günlüğü) ve yerel veri dosyaları `.gitignore`'da. Önbellek ve günlük gönderen adresleri içerir, bilgisayarında kalır.
 
 Uygulamayı bir ağa açma ya da ortak bir sunucuda çalıştırma.
 
@@ -246,7 +300,7 @@ değilse atlanır).
 
 ```bash
 pip install -r requirements-dev.txt
-python -m playwright install chromium   # yalnız tests/test_ui.py tarayıcı testleri için
+python -m playwright install chromium   # tests/test_ui.py tarayıcı testleri ve docs/make_screenshots.py için
 python -m pytest tests/ -v
 ```
 
