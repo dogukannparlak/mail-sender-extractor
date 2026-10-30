@@ -249,7 +249,13 @@ def api_accounts_remove():
 @app.route('/api/senders')
 @handle_errors
 def api_senders():
-    return jsonify(_senders_payload(accounts.load_saved_senders(_current_paths())))
+    paths = _current_paths()
+    payload = _senders_payload(accounts.load_saved_senders(paths))
+    # Çıkış bağlantısı okunabilen göndericiler: arayüz "Abonelikten çık"ı yalnız onlarda sunar.
+    linked = {r['adres'] for r in subscriptions.rows(paths, read_json(paths.scan_cache, {}), only_links=True)}
+    for sender in payload['gonderenler']:
+        sender['baglanti'] = sender['gonderen'] in linked
+    return jsonify(payload)
 
 
 # --- Tarama ------------------------------------------------------------------

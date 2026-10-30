@@ -370,8 +370,8 @@ class TestApiSenders:
         assert resp.get_json() == {
             'toplam_mail_sayisi': 5,
             'gonderenler': [
-                {'gonderen': 'a@example.com', 'ad': '', 'mail_sayisi': 3},
-                {'gonderen': 'b@example.com', 'ad': '', 'mail_sayisi': 2},
+                {'gonderen': 'a@example.com', 'ad': '', 'baglanti': False, 'mail_sayisi': 3},
+                {'gonderen': 'b@example.com', 'ad': '', 'baglanti': False, 'mail_sayisi': 2},
             ],
         }
 
@@ -384,7 +384,7 @@ class TestApiSenders:
             writer.writerow(['"Ayşe (Classroom)" <No-Reply@classroom.google.com>', '2'])
 
         assert client.get('/api/senders').get_json()['gonderenler'] == [
-            {'gonderen': 'no-reply@classroom.google.com', 'ad': 'Ali (Classroom)', 'mail_sayisi': 7},
+            {'gonderen': 'no-reply@classroom.google.com', 'ad': 'Ali (Classroom)', 'baglanti': False, 'mail_sayisi': 7},
         ]
 
     def test_missing_csv_returns_empty_payload(self, client, monkeypatch, tmp_path):
@@ -414,7 +414,7 @@ class TestApiScan:
         assert (status['processed'], status['total']) == (2, 2)
         assert client.get('/api/senders').get_json() == {
             'toplam_mail_sayisi': 2,
-            'gonderenler': [{'gonderen': 'a@example.com', 'ad': '', 'mail_sayisi': 2}],
+            'gonderenler': [{'gonderen': 'a@example.com', 'ad': '', 'baglanti': False, 'mail_sayisi': 2}],
         }
 
     def test_second_scan_while_running_is_rejected(self, client, monkeypatch, inline_scan):
@@ -493,7 +493,7 @@ class TestApiDelete:
         assert resp.status_code == 200
         assert client.get('/api/senders').get_json() == {
             'toplam_mail_sayisi': 2,
-            'gonderenler': [{'gonderen': 'bob@example.com', 'ad': 'Bob', 'mail_sayisi': 2}],
+            'gonderenler': [{'gonderen': 'bob@example.com', 'ad': 'Bob', 'baglanti': False, 'mail_sayisi': 2}],
         }
 
     def test_delete_without_saved_csv_does_not_create_one(self, client, monkeypatch, fake_service_factory, tmp_path):
@@ -1222,3 +1222,18 @@ def test_subscription_rows_can_be_limited_to_senders_with_links(client):
     assert [r['adres'] for r in subscriptions.rows(acct_paths(), cache, only_links=True)] == ['a@example.com']
     page = client.get('/abonelikler').get_data(as_text=True)
     assert 'legacy@example.com' not in page
+
+
+def test_senders_payload_marks_only_senders_with_a_readable_unsubscribe_link(client):
+    from mail_temizleyici.scanner import save_to_csv
+    save_to_csv({'a@example.com': {'ad': 'A', 'mail_sayisi': 2, 'abonelik': True},
+                 'b@example.com': {'ad': 'B', 'mail_sayisi': 1, 'abonelik': True}}, filename=acct_paths().csv)
+    web.write_json(acct_paths().scan_cache, {
+        'm1': _entry('a@example.com', 1_000),
+        'm2': _entry('b@example.com', 2_000, unsub='<javascript:alert(1)>'),  # bağlantı var ama güvenli değil
+    })
+
+    senders = {s['gonderen']: s for s in client.get('/api/senders').get_json()['gonderenler']}
+
+    assert senders['a@example.com']['baglanti'] is True
+    assert senders['b@example.com']['baglanti'] is False

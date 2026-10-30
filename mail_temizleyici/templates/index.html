@@ -356,8 +356,8 @@ const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: '
 const DIALOG_LIST_LIMIT = 8;
 const DELETE_LABEL = "Seçilenleri Çöp Kutusu'na taşı";
 const UNSUB_LABEL = 'Seçilenlerin aboneliğinden çık';
-// Abonelikten çıkış yalnız abonelik (List-Unsubscribe) başlığı görülen göndericilerde sunulur.
-const canUnsubscribe = g => g.abonelik === true;
+// Abonelikten çıkış yalnız çıkış bağlantısı (List-Unsubscribe) okunabilen göndericilerde sunulur.
+const canUnsubscribe = g => g.baglanti === true;
 
 const state = {
   accounts: [],
@@ -518,7 +518,7 @@ function confirmDialog({ title, lines = [], items = [], warning = '', confirmLab
 
 function passesFilters(g) {
   if (state.categoryFilter && g.kategori !== state.categoryFilter) return false;
-  if (state.onlyWithUnsubscribe && !g.abonelik) return false;
+  if (state.onlyWithUnsubscribe && !g.baglanti) return false;
   if (state.searchText) {
     const haystack = `${g.ad} ${g.gonderen}`.toLocaleLowerCase('tr');
     if (!haystack.includes(state.searchText)) return false;
@@ -603,7 +603,7 @@ function render() {
   $('grandTotal').textContent = `Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen`;
   // Kategori ve abonelik bilgisi yalnız yeni taramada toplanır; eski kayıtta filtreleri gösterme.
   $('categoryFilterWrap').hidden = !data.gonderenler.some(g => g.kategori);
-  $('unsubFilterWrap').hidden = !data.gonderenler.some(g => 'abonelik' in g);
+  $('unsubFilterWrap').hidden = !data.gonderenler.some(g => 'baglanti' in g);
 
   const container = $('senders');
   if (!data.gonderenler.length) {
