@@ -21,6 +21,7 @@
     --badge-promosyon: #b45309;
     --badge-bildirim: #6d28d9;
     --badge-kisisel: #15803d;
+    --badge-spam: #b91c1c;
     --focus: #2563eb;
     --bar-height: 72px;
   }
@@ -39,6 +40,7 @@
       --badge-promosyon: #ffb070;
       --badge-bildirim: #c4a8ff;
       --badge-kisisel: #6fd48f;
+      --badge-spam: #ff8a8a;
       --focus: #8ab4ff;
     }
   }
@@ -127,6 +129,7 @@
   .badge-promosyon { color: var(--badge-promosyon); }
   .badge-bildirim { color: var(--badge-bildirim); }
   .badge-kisisel { color: var(--badge-kisisel); }
+  .badge-spam { color: var(--badge-spam); }
   .badge-protected { color: var(--ok); }
   .sender-row.protected .sender-name { color: var(--muted); }
 
@@ -244,6 +247,7 @@
         <option value="promosyon">Promosyon</option>
         <option value="bildirim">Bildirim</option>
         <option value="kisisel">Kişisel</option>
+        <option value="spam">Spam</option>
       </select>
     </span>
     <span class="tool">
@@ -271,7 +275,7 @@
   <span id="selectedInfo" aria-live="polite">Seçim yok</span>
   <select id="scopeSelect" aria-label="İşlem kapsamı">
     <option value="inbox"{% if default_scope == 'inbox' %} selected{% endif %}>Yalnız gelen kutusu</option>
-    <option value="all"{% if default_scope == 'all' %} selected{% endif %}>Tüm mailler (arşiv dahil)</option>
+    <option value="all"{% if default_scope == 'all' %} selected{% endif %}>Tüm mailler (arşiv ve spam dahil)</option>
   </select>
   <button id="unsubBtn" type="button" disabled aria-describedby="selectedInfo">Seçilenlerin aboneliğinden çık</button>
   <button id="deleteBtn" type="button" disabled aria-describedby="selectedInfo">Seçilenleri Çöp Kutusu'na taşı</button>
@@ -312,7 +316,7 @@
 </dialog>
 
 <script>
-const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: 'Bildirim', kisisel: 'Kişisel' };
+const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: 'Bildirim', kisisel: 'Kişisel', spam: 'Spam' };
 const DIALOG_LIST_LIMIT = 8;
 const DELETE_LABEL = "Seçilenleri Çöp Kutusu'na taşı";
 const UNSUB_LABEL = 'Seçilenlerin aboneliğinden çık';
@@ -882,11 +886,11 @@ async function deleteSelected() {
   const hidden = picked.filter(g => !passesFilters(g)).length;
   setBusy(true);
   try {
-    // Taramadaki sayı yalnız gelen kutusunu sayar; onayda seçilen kapsamın gerçek sayısı görünsün.
+    // Taramadaki sayı gelen kutusu, arşiv ve spam'i sayar; onayda seçilen kapsamın gerçek sayısı görünsün.
     $('deleteBtn').textContent = 'Sayılıyor…';
     const count = await api('/api/count', { senders, scope: state.scope });
     const skipped = count.details.reduce((sum, d) => sum + (d.skipped || 0), 0);
-    const scopeText = state.scope === 'all' ? 'tüm maillerde (arşiv dahil)' : 'gelen kutusunda';
+    const scopeText = state.scope === 'all' ? 'tüm maillerde (arşiv ve spam dahil)' : 'gelen kutusunda';
 
     const ok = await confirmDialog({
       title: `${count.total} mail Çöp Kutusu'na taşınsın mı?`,
@@ -1115,7 +1119,7 @@ function showScanProgress(scan) {
   }
   progress.max = scan.total || 1;
   progress.value = scan.processed;
-  let text = 'Gelen kutusundaki mailler listeleniyor…';
+  let text = 'Gelen kutusu, spam ve arşivdeki mailler listeleniyor…';
   if (scan.total) {
     text = `${scan.processed} / ${scan.total} mail tarandı (%${pct}).`;
     const elapsed = scan.started_at ? Date.now() / 1000 - scan.started_at : 0;

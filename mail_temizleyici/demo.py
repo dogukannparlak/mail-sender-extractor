@@ -118,7 +118,7 @@ class DemoMailbox:
     def new_batch_http_request(self, callback=None):
         return _Batch(callback)
 
-    def _matches(self, msg, q, label_ids):
+    def _matches(self, msg, q, label_ids, include_spam=False):
         if 'TRASH' in msg['labels']:
             return False
         if label_ids and not set(label_ids) <= msg['labels']:
@@ -133,11 +133,15 @@ class DemoMailbox:
                 return False
             if 'is:unread' in q and 'UNREAD' not in msg['labels']:
                 return False
+            if 'in:spam' in q and 'SPAM' not in msg['labels']:
+                return False
+            if 'SPAM' in msg['labels'] and not include_spam:
+                return False
         return True
 
-    def list(self, userId='me', q=None, labelIds=None, maxResults=100, pageToken=None):
+    def list(self, userId='me', q=None, labelIds=None, maxResults=100, pageToken=None, includeSpamTrash=False):
         def run():
-            ids = sorted((i for i, m in self.store.items() if self._matches(m, q, labelIds)),
+            ids = sorted((i for i, m in self.store.items() if self._matches(m, q, labelIds, includeSpamTrash)),
                          key=lambda i: -self.store[i]['date'])
             start = int(pageToken or 0)
             page = ids[start:start + maxResults]

@@ -1,4 +1,4 @@
-"""Gelen kutusu taraması: gönderen başına sayım, ad, modelsiz kategori; CSV okuma/yazma."""
+"""Gelen kutusu, spam ve arşiv taraması: gönderen başına sayım, ad, modelsiz kategori; CSV okuma/yazma."""
 from collections import Counter
 import csv
 import os
@@ -13,11 +13,13 @@ LEGACY_CSV_HEADER = ['İsim/Adres', 'Mail Sayısı']
 
 # Modelsiz kategori: Gmail'in kendi sekme etiketleri + List-Unsubscribe başlığı.
 # Sıra önemli: sosyal ağ bildirimleri de çoğu zaman List-Unsubscribe taşır.
-CATEGORIES = ('bulten', 'promosyon', 'bildirim', 'kisisel')
+CATEGORIES = ('bulten', 'promosyon', 'bildirim', 'kisisel', 'spam')
 
 
 def message_category(label_ids, has_unsubscribe):
     labels = set(label_ids or [])
+    if 'SPAM' in labels:
+        return 'spam'
     if 'CATEGORY_PROMOTIONS' in labels:
         return 'promosyon'
     if labels & {'CATEGORY_SOCIAL', 'CATEGORY_FORUMS'}:
@@ -62,12 +64,17 @@ class SenderTally:
         return senders
 
 
-def list_inbox_ids(service):
+# Taranan yerler: gelen kutusu, spam ve arşiv. Çöp, gönderilenler ve taslaklar hariç
+# (gönderilenlerde From kullanıcının kendisi olurdu).
+SCAN_QUERY = '-in:trash -in:sent -in:drafts'
+
+
+def list_scan_ids(service):
     ids = []
     next_page_token = None
     while True:
         results = gmail_execute(service.users().messages().list(
-            userId='me', labelIds=['INBOX'], maxResults=500,
+            userId='me', q=SCAN_QUERY, includeSpamTrash=True, maxResults=500,
             pageToken=next_page_token
         ), 'list')
         ids.extend(m['id'] for m in results.get('messages', []))
@@ -79,17 +86,17 @@ def list_inbox_ids(service):
 
 
 def extract_senders(service, progress=lambda processed, total: None, sleep=time.sleep, id_index=None, cache=None):
-    """Gelen kutusunu tarar; {adres: {'ad', 'mail_sayisi', 'kategori', 'abonelik'}} döner.
+    """Gelen kutusu, spam ve arşivi tarar; {adres: {'ad', 'mail_sayisi', 'kategori', 'abonelik'}} döner.
 
     id_index verilirse {adres: [mail id]} ile doldurulur; silme sırasında bu mailler için
     From adresini yeniden okumak (her biri 20 kota birimi) gerekmez.
 
     cache verilirse {mail id: [adres, ad, kategori, abonelik] ya da None (From yok)} tutar: bir mailin
     başlıkları değişmez, o yüzden önceki taramalarda okunanlar yeniden çekilmez, yalnız yeni mailler
-    okunur. Gelen kutusundan çıkanlar cache'ten silinir. Kategori etiketi sonradan değişirse (ör. mail
+    okunur. Taranan yerlerden çıkanlar (ör. çöpe gidenler) cache'ten silinir. Kategori etiketi sonradan değişirse (ör. mail
     başka sekmeye taşınırsa) cache temizlenip tam tarama yapılana kadar eski kalır.
     """
-    ids = list_inbox_ids(service)
+    ids = list_scan_ids(service)
     total = len(ids)
     progress(0, total)
 

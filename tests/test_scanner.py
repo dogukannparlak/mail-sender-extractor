@@ -367,3 +367,17 @@ def test_extract_senders_does_not_refetch_messages_without_from(fake_service_fac
     extract_senders(again, cache=cache)
 
     assert again.messages_resource.get_calls == []
+
+
+def test_extract_senders_scans_spam_and_archive_but_not_trash(fake_service_factory):
+    service = fake_service_factory(
+        list_pages=[{'messages': [{'id': 'm1'}]}],
+        get_responses={'m1': {'labelIds': ['SPAM'], 'payload': {'headers': [
+            {'name': 'From', 'value': 'Spammer <s@example.com>'}]}}},
+    )
+
+    result = extract_senders(service)
+
+    call = service.messages_resource.list_calls[0]
+    assert call['includeSpamTrash'] is True and call['q'] == '-in:trash -in:sent -in:drafts'
+    assert result['s@example.com']['kategori'] == 'spam'

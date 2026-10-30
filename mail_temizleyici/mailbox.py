@@ -9,9 +9,13 @@ from .gmail import EMAIL_RE, fetch_metadata, from_address, gmail_execute, messag
 from .protected import is_protected, load_protected
 from .storage import read_json, write_json
 
-# Tarama yalnız gelen kutusunu sayar; "all" arşivdeki mailleri de kapsar.
-# Gmail'in from: araması çöp ve spam kutusunu zaten dışarıda bırakır.
-SCOPE_QUERIES = {'inbox': ' in:inbox', 'all': ''}
+# "inbox" yalnız gelen kutusu; "all" arşiv ve spam dahil, çöp hariç (tarama kapsamıyla aynı).
+# Gmail araması spam'i varsayılan olarak dışarıda bırakır; "all" için includeSpamTrash gerekir.
+SCOPE_QUERIES = {'inbox': ' in:inbox', 'all': ' -in:trash'}
+
+
+def _list_kwargs(scope):
+    return {'includeSpamTrash': True} if scope == 'all' else {}
 PREVIEW_LIMIT = 5
 
 
@@ -24,17 +28,18 @@ def extract_email(sender):
     return email
 
 
-def from_query(email, scope='all', unread_only=False):
-    return f'from:"{email}"' + SCOPE_QUERIES[scope] + (' is:unread' if unread_only else '')
+def from_query(email, scope='all', unread_only=False, spam_only=False):
+    return (f'from:"{email}"' + SCOPE_QUERIES[scope] + (' is:unread' if unread_only else '')
+            + (' in:spam' if spam_only else ''))
 
 
-def find_message_ids(service, email, scope='all', unread_only=False):
+def find_message_ids(service, email, scope='all', unread_only=False, spam_only=False):
     ids = []
     next_page_token = None
     while True:
         resp = gmail_execute(service.users().messages().list(
-            userId='me', q=from_query(email, scope, unread_only), maxResults=500,
-            pageToken=next_page_token
+            userId='me', q=from_query(email, scope, unread_only, spam_only), maxResults=500,
+            pageToken=next_page_token, **_list_kwargs(scope)
         ), 'list')
         ids.extend(m['id'] for m in resp.get('messages', []))
         next_page_token = resp.get('nextPageToken')
@@ -126,12 +131,16 @@ def _trash_sender(service, paths, email, scope, undo, scan_ids):
     inbox_ids = message_ids if scope == 'inbox' else [
         i for i in find_message_ids(service, email, 'inbox') if i in in_scope]
     unread_ids = [i for i in find_message_ids(service, email, scope, unread_only=True) if i in in_scope]
+    # Spam'dekiler çöpe giderken SPAM etiketini kaybeder; geri alınca yeniden konur.
+    spam_ids = [] if scope == 'inbox' else [
+        i for i in find_message_ids(service, email, 'all', spam_only=True) if i in in_scope]
     undo['ids'] += message_ids
+    undo['spam'] += spam_ids
     undo['inbox'] += inbox_ids
     undo['unread'] += unread_ids
     # Çöpe taşımadan önce yaz: işlem yarıda kesilirse taşınanlar yine geri alınabilsin.
     write_json(paths.undo, undo)
-    batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD'])
+    batch_modify(service, message_ids, add=['TRASH'], remove=['INBOX', 'UNREAD', 'SPAM'])
     return len(message_ids), skipped
 
 
@@ -139,7 +148,7 @@ def delete_senders(paths, senders, emails, scope):
     service = accounts.get_service(paths.account)
     saved = accounts.load_saved_senders(paths)
     scan_ids = load_scan_ids(paths)
-    undo = {'zaman': time.time(), 'scope': scope, 'ids': [], 'inbox': [], 'unread': [], 'gonderenler': {}}
+    undo = {'zaman': time.time(), 'scope': scope, 'ids': [], 'inbox': [], 'unread': [], 'spam': [], 'gonderenler': {}}
     results = []
     finished = []
     try:
@@ -182,6 +191,7 @@ def undo_last(paths):
         if resp is not None}
     batch_modify(service, [i for i in undo['inbox'] if i in restored], add=['INBOX'])
     batch_modify(service, [i for i in undo['unread'] if i in restored], add=['UNREAD'])
+    batch_modify(service, [i for i in undo.get('spam', []) if i in restored], add=['SPAM'])
 
     accounts.restore_senders(paths, undo['gonderenler'])
     os.remove(paths.undo)
@@ -193,7 +203,7 @@ def undo_last(paths):
 def preview(paths, sender, email, scope):
     service = accounts.get_service(paths.account)
     resp = gmail_execute(service.users().messages().list(
-        userId='me', q=from_query(email, scope), maxResults=PREVIEW_LIMIT
+        userId='me', q=from_query(email, scope), maxResults=PREVIEW_LIMIT, **_list_kwargs(scope)
     ), 'list')
     ids = [m['id'] for m in resp.get('messages', [])]
     fetched = dict(fetch_metadata(service, ids, ['From', 'Subject']))

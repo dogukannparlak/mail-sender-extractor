@@ -58,7 +58,7 @@ class TestExtractEmail:
 
 class TestFromQuery:
     def test_quotes_address(self):
-        assert from_query('a@b.com') == 'from:"a@b.com"'
+        assert from_query('a@b.com') == 'from:"a@b.com" -in:trash'
 
 
 class TestSendersPayload:
@@ -107,7 +107,8 @@ class TestFindMessageIds:
         ids = find_message_ids(service, 'someone@example.com')
 
         assert ids == ['m1', 'm2', 'm3']
-        assert service.messages_resource.list_calls[0]['q'] == 'from:"someone@example.com"'
+        assert service.messages_resource.list_calls[0]['q'] == 'from:"someone@example.com" -in:trash'
+        assert service.messages_resource.list_calls[0]['includeSpamTrash'] is True
         assert service.messages_resource.list_calls[1]['pageToken'] == 'p2'
 
     def test_returns_empty_list_when_no_messages(self, fake_service_factory):
@@ -473,7 +474,7 @@ class TestApiDelete:
         assert [len(c['body']['ids']) for c in calls] == [1000, 500]
         for c in calls:
             assert c['body']['addLabelIds'] == ['TRASH']
-            assert c['body']['removeLabelIds'] == ['INBOX', 'UNREAD']
+            assert c['body']['removeLabelIds'] == ['INBOX', 'UNREAD', 'SPAM']
 
 
     def test_deleted_senders_are_removed_from_saved_csv(self, client, monkeypatch, fake_service_factory, tmp_path):
@@ -643,7 +644,8 @@ class LabelledMailbox:
         q = kwargs['q']
         ids = [i for i, l in self.labels.items() if 'TRASH' not in l
                and ('in:inbox' not in q or 'INBOX' in l)
-               and ('is:unread' not in q or 'UNREAD' in l)]
+               and ('is:unread' not in q or 'UNREAD' in l)
+               and ('in:spam' not in q or 'SPAM' in l)]
         return {'messages': [{'id': i} for i in ids]}
 
     def _batch_modify(self, userId, body):
@@ -660,6 +662,7 @@ class TestUndo:
         'inbox_read': {'INBOX'},
         'archived_unread': {'UNREAD'},
         'archived_read': set(),
+        'spam_read': {'SPAM'},
     }
 
     @pytest.mark.parametrize('scope', ['inbox', 'all'])
@@ -672,7 +675,7 @@ class TestUndo:
         trashed = {i for i, l in box.labels.items() if 'TRASH' in l}
         undone = client.post('/api/undo')
 
-        assert deleted['total_deleted'] == (2 if scope == 'inbox' else 4)
+        assert deleted['total_deleted'] == (2 if scope == 'inbox' else 5)
         assert trashed == ({'inbox_unread', 'inbox_read'} if scope == 'inbox' else set(self.LABELS))
         assert undone.status_code == 200
         assert box.labels == before
