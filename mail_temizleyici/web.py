@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request, render_template
 from google.auth.exceptions import RefreshError
 from googleapiclient.errors import HttpError
 
-from . import accounts, activity, mailbox, protected, state
+from . import accounts, activity, mailbox, protected, state, subscriptions
 from .config import settings
 from .gmail import quota
 from .mailbox import extract_email
@@ -27,6 +27,11 @@ DEMO_MODE = False
 app = Flask(__name__)
 # İstekler küçük JSON'lar; en büyüğü yüklenen istemci dosyası (~1 KB).
 app.config['MAX_CONTENT_LENGTH'] = 256 * 1024
+
+
+@app.context_processor
+def inject_unread():
+    return {'unread_notifications': subscriptions.unread_count()}
 
 
 @app.template_filter('datetimeformat')
@@ -241,6 +246,10 @@ def _run_scan(service, paths, full=False):
         write_json(paths.scan_cache, cache, compact=True)
         mailbox.clear_verify_cache(account)
         state.update_scan(account, error=None)
+        try:
+            subscriptions.after_scan(paths, cache)
+        except Exception:  # bildirim üretilemese de tarama sonucu kaydedilmiş kalsın
+            app.logger.exception('Tarama sonrası abonelik kontrolü hatası')
         activity.record(paths, 'tarama', tam=full, mail=sum(len(v) for v in scan_ids.values()),
                         yeni_okunan=len(set(cache) - known), gonderen=len(senders),
                         sure_sn=round(time.time() - started))
@@ -286,6 +295,43 @@ def api_scan_status():
 @app.route('/gunluk')
 def log_page():
     return render_template('gunluk.html', events=activity.recent())
+
+
+# --- Abonelikler ve bildirimler ----------------------------------------------
+
+@app.route('/abonelikler')
+def subscriptions_page():
+    sections = []
+    for name in accounts.list_accounts():
+        paths = accounts.AccountPaths(name)
+        sections.append({'hesap': name, 'satirlar': subscriptions.rows(paths, read_json(paths.scan_cache, {}))})
+    return render_template('abonelikler.html', sections=sections)
+
+
+@app.route('/bildirimler')
+def notifications_page():
+    return render_template('bildirimler.html', notifications=subscriptions.all_notifications())
+
+
+@app.route('/api/notifications/unread')
+def api_notifications_unread():
+    return jsonify({'unread': subscriptions.unread_count()})
+
+
+@app.route('/api/notifications/read', methods=['POST'])
+def api_notifications_read():
+    subscriptions.mark_all_read()
+    return jsonify({'unread': 0})
+
+
+@app.route('/api/subscriptions/mark', methods=['POST'])
+@handle_errors
+def api_subscriptions_mark():
+    body = _json_body()
+    paths = _current_paths(body)
+    address = extract_email(str(body.get('sender', '')))
+    subscriptions.mark(paths, address.lower(), body.get('unsubscribed') is True)
+    return jsonify({'sender': address.lower(), 'unsubscribed': body.get('unsubscribed') is True})
 
 
 # --- Korunanlar --------------------------------------------------------------
@@ -379,6 +425,10 @@ def api_unsubscribe():
     service = accounts.get_service(paths.account)
     results = [{'sender': sender, 'email': email, **find_unsubscribe_info(service, email, confirm_one_click)}
                for sender, email in zip(senders, emails)]
+    if confirm_one_click:
+        for r in results:
+            if r['status'] == 'done':
+                subscriptions.mark(paths, r['email'], True, how='otomatik')
     activity.record(paths, 'abonelik', onayli=confirm_one_click,
                     sonuclar={r['email']: r['status'] for r in results})
     return jsonify({'results': results})

@@ -1,0 +1,6 @@
+<nav>
+  <a href="/">← Uygulama</a>
+  <a href="/abonelikler"{% if sayfa == 'abonelikler' %} class="current"{% endif %}>Abonelikler</a>
+  <a href="/bildirimler"{% if sayfa == 'bildirimler' %} class="current"{% endif %}>Bildirimler{% if unread_notifications %} ({{ unread_notifications }}){% endif %}</a>
+  <a href="/gunluk"{% if sayfa == 'gunluk' %} class="current"{% endif %}>İşlem günlüğü</a>
+</nav>

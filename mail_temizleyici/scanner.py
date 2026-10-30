@@ -91,7 +91,7 @@ def extract_senders(service, progress=lambda processed, total: None, sleep=time.
     id_index verilirse {adres: [mail id]} ile doldurulur; silme sırasında bu mailler için
     From adresini yeniden okumak (her biri 20 kota birimi) gerekmez.
 
-    cache verilirse {mail id: [adres, ad, kategori, abonelik] ya da None (From yok)} tutar: bir mailin
+    cache verilirse {mail id: [adres, ad, kategori, abonelik, tarih_ms, List-Unsubscribe] ya da None (From yok)} tutar: bir mailin
     başlıkları değişmez, o yüzden önceki taramalarda okunanlar yeniden çekilmez, yalnız yeni mailler
     okunur. Taranan yerlerden çıkanlar (ör. çöpe gidenler) cache'ten silinir. Kategori etiketi sonradan değişirse (ör. mail
     başka sekmeye taşınırsa) cache temizlenip tam tarama yapılana kadar eski kalır.
@@ -117,7 +117,8 @@ def extract_senders(service, progress=lambda processed, total: None, sleep=time.
             key, name = sender_key(headers['from'])
             has_unsubscribe = bool(headers.get('list-unsubscribe'))
             cache[msg_id] = [key, name, message_category(msg_data.get('labelIds'), has_unsubscribe),
-                             has_unsubscribe]
+                             has_unsubscribe, int(msg_data.get('internalDate') or 0),
+                             headers.get('list-unsubscribe', '')]
         else:
             cache[msg_id] = None
         progress(processed, total)
@@ -126,7 +127,7 @@ def extract_senders(service, progress=lambda processed, total: None, sleep=time.
     for msg_id in ids:
         entry = cache.get(msg_id)
         if entry:
-            key, name, category, has_unsubscribe = entry
+            key, name, category, has_unsubscribe = entry[:4]
             tally.add_counted(key, name, 1, category=category, has_unsubscribe=has_unsubscribe)
             if id_index is not None:
                 id_index.setdefault(key, []).append(msg_id)

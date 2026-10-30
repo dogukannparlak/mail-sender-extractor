@@ -1,4 +1,5 @@
 import csv
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -1083,3 +1084,87 @@ class TestActivityLog:
 
     def test_empty_log_page(self, client):
         assert 'Henüz kayıtlı işlem yok' in client.get('/gunluk').get_data(as_text=True)
+
+
+def _entry(address, date_ms, unsub='<https://a.example/u>, <mailto:u@a.example>', unsubscribe=True):
+    return [address, address.split('@')[0].title(), 'bulten', unsubscribe, date_ms, unsub]
+
+
+class TestSubscriptions:
+    def test_first_scan_gives_no_new_subscription_notifications_then_new_senders_do(self, client):
+        from mail_temizleyici import subscriptions
+        paths = acct_paths()
+        cache = {'m1': _entry('a@example.com', 1_000)}
+
+        assert subscriptions.after_scan(paths, cache) == []
+        cache['m2'] = _entry('b@example.com', 2_000)
+        notes = subscriptions.after_scan(paths, cache)
+
+        assert [(n['tur'], n['gonderen']) for n in notes] == [('yeni_abonelik', 'b@example.com')]
+        assert subscriptions.after_scan(paths, cache) == []  # aynı sender ikinci kez bildirilmez
+        assert subscriptions.unread_count() == 1
+
+    def test_mail_after_unsubscribing_is_reported_once_per_new_mail(self, client):
+        from mail_temizleyici import subscriptions
+        paths = acct_paths()
+        cache = {'m1': _entry('a@example.com', 1_000)}
+        subscriptions.after_scan(paths, cache)
+        subscriptions.mark(paths, 'a@example.com', True, how='otomatik')
+        since_ms = int(time.time() * 1000)
+
+        assert subscriptions.after_scan(paths, cache) == []  # eski mail çıkıştan önce
+        cache['m2'] = _entry('a@example.com', since_ms + 5_000)
+        first = subscriptions.after_scan(paths, cache)
+        again = subscriptions.after_scan(paths, cache)
+        cache['m3'] = _entry('a@example.com', since_ms + 9_000, unsub='', unsubscribe=False)
+        second = subscriptions.after_scan(paths, cache)
+
+        assert [(n['tur'], n['sayi']) for n in first] == [('mail_geliyor', 1)]
+        assert again == []
+        assert [n['sayi'] for n in second] == [2]
+
+    def test_rows_only_list_subscription_senders_with_safe_links(self, client):
+        from mail_temizleyici import subscriptions
+        cache = {
+            'm1': _entry('a@example.com', 1_000, unsub='<javascript:alert(1)>, <https://a.example/old>'),
+            'm2': _entry('a@example.com', 2_000, unsub='<https://a.example/new>, <javascript:alert(1)>, <mailto:u@a.example>'),
+            'm3': _entry('plain@example.com', 3_000, unsub='', unsubscribe=False),
+            'm4': ['legacy@example.com', 'Legacy', 'bulten', True],  # eski önbellek girdisi
+        }
+
+        rows = subscriptions.rows(acct_paths(), cache)
+
+        assert [r['adres'] for r in rows] == ['a@example.com', 'legacy@example.com']
+        assert rows[0]['baglantilar'] == ['https://a.example/new', 'mailto:u@a.example']
+        assert rows[0]['sayi'] == 2 and rows[1]['baglantilar'] == []
+
+    def test_successful_one_click_unsubscribe_marks_sender_and_pages_render(self, client, monkeypatch):
+        from mail_temizleyici import subscriptions
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: object())
+        monkeypatch.setattr(web, 'find_unsubscribe_info', lambda service, email, confirm: {'status': 'done', 'url': 'x'})
+        write = web.write_json
+        write(acct_paths().scan_cache, {'m1': _entry('a@example.com', 1_000)})
+
+        client.post('/api/unsubscribe', json={'senders': ['a@example.com'], 'confirm_one_click': True})
+
+        rows = subscriptions.rows(acct_paths(), web.read_json(acct_paths().scan_cache, {}))
+        assert rows[0]['cikis']['yontem'] == 'otomatik'
+        page = client.get('/abonelikler').get_data(as_text=True)
+        assert 'https://a.example/u' in page and 'Çıkıldı' in page
+        assert client.get('/bildirimler').status_code == 200
+
+    def test_mark_endpoint_and_read_all(self, client):
+        from mail_temizleyici import subscriptions
+        paths = acct_paths()
+        web.write_json(paths.scan_cache, {'m1': _entry('a@example.com', 1_000)})
+
+        client.post('/api/subscriptions/mark', json={'sender': 'a@example.com', 'unsubscribed': True})
+        assert subscriptions.rows(paths, web.read_json(paths.scan_cache, {}))[0]['cikis']['yontem'] == 'elle'
+        client.post('/api/subscriptions/mark', json={'sender': 'a@example.com', 'unsubscribed': False})
+        assert subscriptions.rows(paths, web.read_json(paths.scan_cache, {}))[0]['cikis'] is None
+
+        subscriptions._add_notifications(paths, [{'zaman': 1, 'tur': 'yeni_abonelik', 'gonderen': 'x@y.com',
+                                                  'ad': '', 'sayi': 1, 'okundu': False}])
+        assert client.get('/api/notifications/unread').get_json() == {'unread': 1}
+        client.post('/api/notifications/read')
+        assert client.get('/api/notifications/unread').get_json() == {'unread': 0}

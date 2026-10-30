@@ -5,29 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>İşlem günlüğü · Mail Temizleyici</title>
 <style>
-  :root { --bg: #f5f5f7; --card: #fff; --border: #d9d9de; --text: #1d1d1f; --muted: #616166; --err: #b33434; --link: #1d4ed8; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #1c1c1e; --card: #2c2c2e; --border: #48484a; --text: #f2f2f7; --muted: #a1a1a6; --err: #ff8a8a; --link: #8ab4ff; }
-  }
-  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, system-ui, sans-serif; }
-  main { max-width: 1000px; margin: 0 auto; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  p.hint, td.time { color: var(--muted); }
-  a { color: var(--link); }
-  table { width: 100%; border-collapse: collapse; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
-  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  th { font-size: 12px; color: var(--muted); }
-  td.time { white-space: nowrap; }
-  .err { color: var(--err); }
-  .tag { font-weight: 600; white-space: nowrap; }
-  ul { margin: 0; padding-left: 18px; }
-  select { font: inherit; }
+{% include '_sayfa_css.html' %}
 </style>
 </head>
 <body>
 <main>
+  {% set sayfa = 'gunluk' %}{% include '_gezinme.html' %}
   <h1>İşlem günlüğü</h1>
-  <p class="hint"><a href="/">← Uygulamaya dön</a> · Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>hesaplar/&lt;adres&gt;/islem_gunlugu.jsonl</code></p>
+  <p class="hint">Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>hesaplar/&lt;adres&gt;/islem_gunlugu.jsonl</code></p>
   {% if events %}
   <table>
     <thead><tr><th>Zaman</th><th>Hesap</th><th>İşlem</th><th>Ayrıntı</th></tr></thead>

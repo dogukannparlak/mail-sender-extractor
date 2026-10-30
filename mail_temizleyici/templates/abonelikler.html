@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abonelikler · Mail Temizleyici</title>
+<style>
+{% include '_sayfa_css.html' %}
+</style>
+</head>
+<body>
+<main>
+  {% set sayfa = 'abonelikler' %}{% include '_gezinme.html' %}
+  <h1>Abonelikler</h1>
+  <p class="hint">Yalnızca abonelik (List-Unsubscribe) başlığı taşıyan göndericiler. Bağlantıyı kendin açıp çıktıysan "Çıktım" ile işaretle;
+    sonraki taramalarda o göndericiden yeni mail gelirse Bildirimler'de uyarı çıkar.</p>
+  {% for section in sections %}
+  <h2>{{ section.hesap }} · {{ section.satirlar | length }} abonelik</h2>
+  {% if section.satirlar %}
+  <table>
+    <thead><tr><th>Gönderen</th><th>Kategori</th><th>Mail</th><th>Son mail</th><th>Durum</th><th>Çıkış bağlantıları</th><th></th></tr></thead>
+    <tbody>
+    {% for r in section.satirlar %}
+    <tr>
+      <td>{{ r.ad or r.adres }}{% if r.ad %}<br><span class="muted">{{ r.adres }}</span>{% endif %}</td>
+      <td>{{ r.kategori }}</td>
+      <td>{{ r.sayi }}</td>
+      <td class="time">{% if r.son_mail %}{{ (r.son_mail / 1000) | int | datetimeformat }}{% endif %}</td>
+      <td>
+        {% if r.cikis %}
+          <span class="ok">Çıkıldı</span> <span class="muted">({{ r.cikis.zaman | int | datetimeformat }}, {{ r.cikis.yontem }})</span>
+          {% if r.yeni_mail %}<br><span class="err">Çıkıştan sonra {{ r.yeni_mail }} yeni mail geldi</span>{% endif %}
+        {% else %}Çıkılmadı{% endif %}
+      </td>
+      <td class="links">
+        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></div>
+        {% else %}<span class="muted">Bağlantı yok (eski önbellek: ana sayfadan "Tam tara")</span>{% endfor %}
+      </td>
+      <td><button type="button" data-account="{{ section.hesap }}" data-sender="{{ r.adres }}"
+                  data-unsubscribed="{{ 'false' if r.cikis else 'true' }}">{{ 'İşareti kaldır' if r.cikis else 'Çıktım' }}</button></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Bu hesapta abonelik başlığı taşıyan gönderen yok. Önce ana sayfadan bir tarama yap.</p>
+  {% endif %}
+  {% else %}
+  <p>Önce bir Gmail hesabı ekle.</p>
+  {% endfor %}
+</main>
+<script>
+document.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-sender]');
+  if (!button) return;
+  button.disabled = true;
+  await fetch('/api/subscriptions/mark', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account: button.dataset.account, sender: button.dataset.sender,
+                           unsubscribed: button.dataset.unsubscribed === 'true' }),
+  });
+  location.reload();
+});
+</script>
+</body>
+</html>

@@ -36,6 +36,9 @@ class AccountPaths:
         self.scan_cache = os.path.join(self.root, 'tarama_onbellegi.json')
         # Yapılan işlemlerin günlüğü (tarama, silme, geri alma, abonelik, hesap).
         self.log = os.path.join(self.root, 'islem_gunlugu.jsonl')
+        # Abonelik çıkış durumu (abonelikler.json) ve bildirimler (bildirimler.json).
+        self.subscriptions = os.path.join(self.root, 'abonelikler.json')
+        self.notifications = os.path.join(self.root, 'bildirimler.json')
 
 
 def _folder_names():

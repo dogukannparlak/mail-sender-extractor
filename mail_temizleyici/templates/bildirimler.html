@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bildirimler · Mail Temizleyici</title>
+<style>
+{% include '_sayfa_css.html' %}
+</style>
+</head>
+<body>
+<main>
+  {% set sayfa = 'bildirimler' %}{% include '_gezinme.html' %}
+  <h1>Bildirimler</h1>
+  <p class="hint">Her taramadan sonra üretilir: taramada ilk kez görülen abonelikler ve aboneliğinden çıktığın göndericilerden gelen yeni mailler.
+    <button id="readAll" type="button">Hepsini okundu yap</button></p>
+  {% if notifications %}
+  <table>
+    <thead><tr><th>Zaman</th><th>Hesap</th><th>Bildirim</th></tr></thead>
+    <tbody>
+    {% for n in notifications %}
+    <tr{% if not n.okundu %} class="unread"{% endif %}>
+      <td class="time">{{ n.zaman | int | datetimeformat }}</td>
+      <td>{{ n.hesap }}</td>
+      {% if n.tur == 'yeni_abonelik' %}
+        <td><span class="tag">Yeni abonelik:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ n.sayi }} mail. <a href="/abonelikler">Abonelikler</a> sayfasında çıkış bağlantısı var.</td>
+      {% elif n.tur == 'mail_geliyor' %}
+        <td><span class="tag err">Çıktığın halde mail geliyor:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · çıkıştan sonra {{ n.sayi }} yeni mail. Çıkış işe yaramamış olabilir; <a href="/abonelikler">bağlantıyı elle dene</a> ya da göndericiyi sil.</td>
+      {% else %}
+        <td>{{ n.tur }}: {{ n.gonderen }}</td>
+      {% endif %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Henüz bildirim yok. Bir tarama bittikten sonra burada görünür (ilk taramada yeni abonelik bildirimi üretilmez).</p>
+  {% endif %}
+</main>
+<script>
+document.getElementById('readAll').addEventListener('click', async () => {
+  await fetch('/api/notifications/read', { method: 'POST' });
+  location.reload();
+});
+</script>
+</body>
+</html>

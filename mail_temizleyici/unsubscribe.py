@@ -29,6 +29,14 @@ def _first_unsubscribe_headers(service, email, ids):
     return None, ''
 
 
+def unsubscribe_links(header):
+    """List-Unsubscribe başlığındaki adresler (<...> içinde ya da düz, virgülle ayrılmış)."""
+    urls = re.findall(r'<([^>]+)>', header or '')
+    if not urls:  # bazı gönderenler <> kullanmadan düz adres yazar
+        urls = [u.strip() for u in (header or '').split(',') if u.strip()]
+    return urls
+
+
 def _resolve_host(hostname):
     return {info[4][0] for info in socket.getaddrinfo(hostname, 443)}
 
@@ -79,9 +87,7 @@ def find_unsubscribe_info(service, email, confirm_one_click=False):
     if not list_unsub:
         return {'status': 'none'}
 
-    urls = re.findall(r'<([^>]+)>', list_unsub)
-    if not urls:  # bazı gönderenler <> kullanmadan düz adres yazar
-        urls = [u.strip() for u in list_unsub.split(',') if u.strip()]
+    urls = unsubscribe_links(list_unsub)
     http_url = next((u for u in urls if u.startswith('http')), None)
     mailto_url = next((u for u in urls if u.startswith('mailto:')), None)
 
