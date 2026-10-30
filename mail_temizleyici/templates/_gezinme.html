@@ -1,6 +1,7 @@
+{% from '_ikonlar.html' import ikon %}
 <nav>
-  <a href="/">← Uygulama</a>
-  <a href="/abonelikler"{% if sayfa == 'abonelikler' %} class="current"{% endif %}>Abonelikler</a>
-  <a href="/bildirimler"{% if sayfa == 'bildirimler' %} class="current"{% endif %}>Bildirimler{% if unread_notifications %} ({{ unread_notifications }}){% endif %}</a>
-  <a href="/gunluk"{% if sayfa == 'gunluk' %} class="current"{% endif %}>İşlem günlüğü</a>
+  <a href="/">{{ ikon('geri') }}Uygulama</a>
+  <a href="/abonelikler"{% if sayfa == 'abonelikler' %} class="current"{% endif %}>{{ ikon('abonelik') }}Abonelikler</a>
+  <a href="/bildirimler"{% if sayfa == 'bildirimler' %} class="current"{% endif %}>{{ ikon('bildirim') }}Bildirimler<span class="count-badge" {% if not unread_notifications %}hidden{% endif %}>{{ unread_notifications }}</span></a>
+  <a href="/gunluk"{% if sayfa == 'gunluk' %} class="current"{% endif %}>{{ ikon('gunluk') }}İşlem günlüğü</a>
 </nav>

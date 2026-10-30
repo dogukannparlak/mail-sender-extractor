@@ -34,6 +34,15 @@ def inject_unread():
     return {'unread_notifications': subscriptions.unread_count()}
 
 
+@app.template_filter('link_label')
+def link_label(url):
+    """Uzun çıkış adresi yerine kısa etiket: https için alan adı, mailto için "e-posta · alan adı"."""
+    if url.lower().startswith('mailto:'):
+        address = url[7:].split('?')[0]
+        return 'E-posta ile çık · ' + (address.rsplit('@', 1)[-1] if '@' in address else address)
+    return urlparse(url).hostname or url
+
+
 @app.template_filter('datetimeformat')
 def datetimeformat(timestamp):
     return time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(timestamp))

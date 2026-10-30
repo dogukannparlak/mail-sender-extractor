@@ -33,7 +33,8 @@
         {% else %}Çıkılmadı{% endif %}
       </td>
       <td class="links">
-        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer">{{ url }}</a></div>
+        {% from '_ikonlar.html' import ikon %}
+        {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ ikon('dis_baglanti') }}{{ url | link_label }}</a></div>
         {% else %}<span class="muted">Bağlantı yok (eski önbellek: ana sayfadan "Tam tara")</span>{% endfor %}
       </td>
       <td><button type="button" data-account="{{ section.hesap }}" data-sender="{{ r.adres }}"

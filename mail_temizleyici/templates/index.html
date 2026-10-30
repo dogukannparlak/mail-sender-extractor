@@ -163,7 +163,12 @@
   .small-btn.danger { color: var(--accent-text); border-color: currentColor; }
   .copy-btn { min-width: 76px; }
   .lock-btn[aria-pressed="true"] { color: var(--ok); border-color: currentColor; }
-  .log-link { font-size: 13px; color: var(--link); }
+  .log-link { font-size: 13px; color: var(--link); display: inline-flex; align-items: center; text-decoration: none; }
+  .log-link:hover { text-decoration: underline; }
+  .ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; margin-right: 5px; flex: none; }
+  .count-badge { display: inline-block; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; margin-left: 6px; border-radius: 9px;
+                 background: #d93025; color: #fff; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
+  .count-badge[hidden] { display: none; }
   #scanBtn, #fullScanBtn { padding: 8px 16px; font-size: 13px; }
 
   .action-bar {
@@ -223,9 +228,10 @@
     <button id="removeAccountBtn" type="button" class="small-btn" hidden>Hesabı çıkar</button>
   </div>
   <span class="summary" id="grandTotal"></span>
-  <a href="/abonelikler" target="_blank" rel="noopener" class="log-link">Abonelikler</a>
-  <a href="/bildirimler" target="_blank" rel="noopener" class="log-link" id="notifLink">Bildirimler{% if unread_notifications %} ({{ unread_notifications }}){% endif %}</a>
-  <a href="/gunluk" target="_blank" rel="noopener" class="log-link">İşlem günlüğü</a>
+  {% from '_ikonlar.html' import ikon %}
+  <a href="/abonelikler" target="_blank" rel="noopener" class="log-link">{{ ikon('abonelik') }}Abonelikler</a>
+  <a href="/bildirimler" target="_blank" rel="noopener" class="log-link" id="notifLink">{{ ikon('bildirim') }}Bildirimler<span class="count-badge" id="notifCount" {% if not unread_notifications %}hidden{% endif %}>{{ unread_notifications }}</span></a>
+  <a href="/gunluk" target="_blank" rel="noopener" class="log-link">{{ ikon('gunluk') }}İşlem günlüğü</a>
   <button id="scanBtn" type="button" disabled>Gelen Kutusunu Tara</button>
   <button id="fullScanBtn" class="secondary-btn" type="button" disabled
           title="Önbelleği yok sayar, bütün mailleri yeniden okur (kategori değişikliklerini yakalar; yavaştır)">Tam tara</button>
@@ -1163,7 +1169,8 @@ async function pollScan() {
 async function refreshNotificationBadge() {
   try {
     const { unread } = await api('/api/notifications/unread');
-    $('notifLink').textContent = unread ? `Bildirimler (${unread})` : 'Bildirimler';
+    $('notifCount').textContent = unread;
+    $('notifCount').hidden = !unread;
   } catch (err) { /* rozet yenilenemezse sayfa yenilenince güncellenir */ }
 }
 

@@ -1168,3 +1168,11 @@ class TestSubscriptions:
         assert client.get('/api/notifications/unread').get_json() == {'unread': 1}
         client.post('/api/notifications/read')
         assert client.get('/api/notifications/unread').get_json() == {'unread': 0}
+
+
+class TestLinkLabel:
+    def test_long_links_become_short_labels(self):
+        from mail_temizleyici.web import link_label
+        assert link_label('https://emails.wix.com/pub/optout/Unsubscribe?YES=true&_ri_=' + 'X' * 300) == 'emails.wix.com'
+        assert link_label('mailto:unsubscribe-AQjk@imh.rsys121.origin.responsys.ocs.oraclecloud.com?subject=List-Unsubscribe') \
+            == 'E-posta ile çık · imh.rsys121.origin.responsys.ocs.oraclecloud.com'
