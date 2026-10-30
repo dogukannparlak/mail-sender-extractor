@@ -1,14 +1,9 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Abonelikler · Mail Temizleyici</title>
-<style>
-{% include '_page_css.html' %}
-</style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% block title %}Abonelikler · Mail Temizleyici{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+{% endblock %}
+{% block body %}
 <main>
   {% from '_icons.html' import icon %}
   {% set current_page = 'subscriptions' %}{% include '_nav.html' %}
@@ -75,7 +70,9 @@
   <p>Önce bir Gmail hesabı ekle.</p>
   {% endif %}
 </main>
-{% include '_list_js.html' %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/list.js') }}"></script>
 <script>
 const $ = id => document.getElementById(id);
 if ($('sort')) {
@@ -97,5 +94,4 @@ document.addEventListener('click', async (event) => {
   location.reload();
 });
 </script>
-</body>
-</html>
+{% endblock %}

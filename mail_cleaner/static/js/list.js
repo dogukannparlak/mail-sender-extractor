@@ -1,4 +1,3 @@
-<script>
 // Tablo satırlarını arama, filtre ve sıralamayla yönetir. Satırlar sunucuda çizilir; burada yalnız gizlenir/yeniden dizilir.
 // Satır öznitelikleri: data-<filtre adı> (filtre), data-sort-<anahtar> (sıralama; sayı ya da metin).
 function setupList({ rows, search, selects = [], checks = [], sort, count, noMatch }) {
@@ -34,4 +33,3 @@ function setupList({ rows, search, selects = [], checks = [], sort, count, noMat
   reorder();
   apply();
 }
-</script>

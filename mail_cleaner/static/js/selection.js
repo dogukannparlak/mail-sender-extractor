@@ -1,0 +1,47 @@
+// --- Seçim -------------------------------------------------------------------
+
+function getSelected() {
+  return state.data ? state.data.gonderenler.filter(g => state.selected.has(g.gonderen)) : [];
+}
+
+function visibleCheckboxes() {
+  return [...document.querySelectorAll('.sender-checkbox:not(:disabled)')];
+}
+
+function updateSelection() {
+  const picked = getSelected();
+  const totalMail = picked.reduce((sum, g) => sum + g.mail_sayisi, 0);
+  // Filtre değişince önceki seçimler gizli kalabilir; işleme girdiklerini açıkça göster.
+  const hidden = picked.filter(g => !passesFilters(g)).length;
+  // Birden fazla hesap varsa işlem çubuğu hangi hesapta olduğunu da söyler (başlık telefonda yukarıda kalır).
+  $('selectedInfo').textContent =
+    (state.accounts.length > 1 && state.account ? `${state.account} · ` : '') +
+    (picked.length ? `${picked.length} gönderen seçildi (${totalMail} mail)` : 'Seçim yok') +
+    (hidden ? ` · ${hidden} tanesi filtre yüzünden görünmüyor` : '');
+  $('deleteBtn').disabled = state.busy || picked.length === 0;
+  const unsubscribable = picked.filter(canUnsubscribe);
+  $('unsubBtn').disabled = state.busy || unsubscribable.length === 0;
+  $('unsubBtn').title = picked.length && !unsubscribable.length ? 'Seçilenlerin hiçbirinde abonelik bağlantısı yok' : '';
+
+  const boxes = visibleCheckboxes();
+  const filtered = state.searchText || state.categoryFilter || state.linkFilter;
+  $('selectAllLabel').textContent = `${filtered ? 'Görünenleri seç' : 'Tümünü seç'} (${boxes.length})`;
+  $('selectAll').checked = boxes.length > 0 && boxes.every(b => b.checked);
+  $('selectAll').indeterminate = boxes.some(b => b.checked || b.indeterminate) && !$('selectAll').checked;
+  // Açık alan adı listelerindeki adres kutuları gruptaki/üstteki seçimle eşit kalsın.
+  document.querySelectorAll('.member-checkbox').forEach(c => { c.checked = state.selected.has(c.dataset.address); });
+}
+
+function setBusy(busy) {
+  state.busy = busy;
+  $('undoBtn').disabled = busy;
+  $('scanBtn').disabled = busy || !state.account;
+  $('fullScanBtn').disabled = busy || !state.account;
+  $('scanAllBtn').disabled = busy;
+  // İşlem sürerken hesap değiştirilemez: sonuç yanlış hesabın ekranına yazılmasın.
+  $('accountSelect').disabled = busy;
+  $('addAccountBtn').disabled = busy;
+  $('removeAccountBtn').disabled = busy;
+  updateSelection();
+}
+

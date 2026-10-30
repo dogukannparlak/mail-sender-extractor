@@ -1,14 +1,9 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bildirimler · Mail Temizleyici</title>
-<style>
-{% include '_page_css.html' %}
-</style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% block title %}Bildirimler · Mail Temizleyici{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+{% endblock %}
+{% block body %}
 <main>
   {% set current_page = 'notifications' %}{% include '_nav.html' %}
   <h1>Bildirimler{% if page_account %} · {{ page_account }}{% endif %}</h1>
@@ -61,7 +56,9 @@
   <p>Henüz bildirim yok. Bir tarama bittikten sonra burada görünür.</p>
   {% endif %}
 </main>
-{% include '_list_js.html' %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/list.js') }}"></script>
 <script>
 const $ = id => document.getElementById(id);
 if ($('sort')) {
@@ -79,5 +76,4 @@ if ($('sort')) {
   });
 }
 </script>
-</body>
-</html>
+{% endblock %}

@@ -1,14 +1,9 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>İşlem günlüğü · Mail Temizleyici</title>
-<style>
-{% include '_page_css.html' %}
-</style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% block title %}İşlem günlüğü · Mail Temizleyici{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+{% endblock %}
+{% block body %}
 <main>
   {% set current_page = 'activity-log' %}{% include '_nav.html' %}
   <h1>İşlem günlüğü{% if page_account %} · {{ page_account }}{% endif %}</h1>
@@ -71,7 +66,9 @@
   <p>Henüz kayıtlı işlem yok.</p>
   {% endif %}
 </main>
-{% include '_list_js.html' %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/list.js') }}"></script>
 <script>
 const $ = id => document.getElementById(id);
 if ($('sort')) {
@@ -81,5 +78,4 @@ if ($('sort')) {
   });
 }
 </script>
-</body>
-</html>
+{% endblock %}
