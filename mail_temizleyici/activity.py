@@ -1,12 +1,10 @@
 """Yapılan işlemlerin basit günlüğü: hesap klasöründe satır başına bir JSON (islem_gunlugu.jsonl).
 
-Günlük yazılamazsa asıl işlem bozulmasın diye hatalar yutulur. /gunluk sayfası bütün hesapları birleştirir.
+Günlük yazılamazsa asıl işlem bozulmasın diye hatalar yutulur. Her hesabın günlüğü ayrıdır.
 """
 import json
 import threading
 import time
-
-from . import accounts
 
 _lock = threading.Lock()
 
@@ -36,8 +34,8 @@ def _read(paths):
     return events
 
 
-def recent(limit=500):
-    """Bütün hesapların son olayları, en yenisi önce."""
-    events = [e for name in accounts.list_accounts() for e in _read(accounts.AccountPaths(name))]
+def recent(paths, limit=500):
+    """Bu hesabın son olayları, en yenisi önce."""
+    events = _read(paths)
     events.sort(key=lambda e: e.get('zaman', 0), reverse=True)
     return events[:limit]

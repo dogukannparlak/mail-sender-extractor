@@ -7,7 +7,6 @@ import threading
 import time
 from collections import Counter
 
-from . import accounts
 from .storage import read_json, write_json
 from .unsubscribe import unsubscribe_links
 
@@ -114,22 +113,18 @@ def after_scan(paths, cache):
     return notes
 
 
-def all_notifications(limit=200):
-    items = []
-    for name in accounts.list_accounts():
-        items += [{**n, 'hesap': name} for n in read_json(accounts.AccountPaths(name).notifications, [])]
+def all_notifications(paths, limit=200):
+    items = read_json(paths.notifications, [])
     items.sort(key=lambda n: n.get('zaman', 0), reverse=True)
     return items[:limit]
 
 
-def unread_count():
-    return sum(1 for n in all_notifications() if not n.get('okundu'))
+def unread_count(paths):
+    return sum(1 for n in read_json(paths.notifications, []) if not n.get('okundu'))
 
 
-def mark_all_read():
+def mark_all_read(paths):
     with _lock:
-        for name in accounts.list_accounts():
-            paths = accounts.AccountPaths(name)
-            notes = read_json(paths.notifications, [])
-            if any(not n.get('okundu') for n in notes):
-                write_json(paths.notifications, [{**n, 'okundu': True} for n in notes])
+        notes = read_json(paths.notifications, [])
+        if any(not n.get('okundu') for n in notes):
+            write_json(paths.notifications, [{**n, 'okundu': True} for n in notes])

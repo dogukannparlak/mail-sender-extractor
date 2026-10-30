@@ -14,13 +14,13 @@
   <h1>Abonelikler</h1>
   <p class="hint">Yalnızca abonelik (List-Unsubscribe) başlığı taşıyan göndericiler. Bağlantıyı kendin açıp çıktıysan "Çıktım" ile işaretle;
     sonraki taramalarda o göndericiden yeni mail gelirse Bildirimler'de uyarı çıkar.</p>
-  {% for section in sections %}
-  <h2>{{ section.hesap }} · {{ section.satirlar | length }} abonelik</h2>
-  {% if section.satirlar %}
+  {% if page_account %}
+  <h2>{{ page_account }} · {{ rows | length }} abonelik</h2>
+  {% if rows %}
   <table>
     <thead><tr><th>Gönderen</th><th>Kategori</th><th>Mail</th><th>Son mail</th><th>Durum</th><th>Çıkış bağlantıları</th><th></th></tr></thead>
     <tbody>
-    {% for r in section.satirlar %}
+    {% for r in rows %}
     <tr>
       <td>{{ r.ad or r.adres }}{% if r.ad %}<br><span class="muted">{{ r.adres }}</span>{% endif %}</td>
       <td>{{ r.kategori }}</td>
@@ -37,18 +37,18 @@
         {% for url in r.baglantilar %}<div><a href="{{ url }}" target="_blank" rel="noopener noreferrer" title="{{ url }}">{{ ikon('dis_baglanti') }}{{ url | link_label }}</a></div>
         {% else %}<span class="muted">Bağlantı yok (eski önbellek: ana sayfadan "Tam tara")</span>{% endfor %}
       </td>
-      <td><button type="button" data-account="{{ section.hesap }}" data-sender="{{ r.adres }}"
+      <td><button type="button" data-account="{{ page_account }}" data-sender="{{ r.adres }}"
                   data-unsubscribed="{{ 'false' if r.cikis else 'true' }}">{{ 'İşareti kaldır' if r.cikis else 'Çıktım' }}</button></td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
   {% else %}
-  <p>Bu hesapta abonelik başlığı taşıyan gönderen yok. Önce ana sayfadan bir tarama yap.</p>
+  <p>{% if scanned %}Bu hesapta abonelik başlığı taşıyan gönderen yok.{% else %}Bu hesap yeni sürümle henüz taranmadı: ana sayfada bu hesabı seçip "Tam tara"ya bas.{% endif %}</p>
   {% endif %}
   {% else %}
   <p>Önce bir Gmail hesabı ekle.</p>
-  {% endfor %}
+  {% endif %}
 </main>
 <script>
 document.addEventListener('click', async (event) => {

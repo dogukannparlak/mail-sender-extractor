@@ -262,3 +262,27 @@ def test_sign_in_explains_disabled_gmail_api(client, monkeypatch, inline_scan, i
     client.post('/api/accounts/add', json={'client': CLIENT})
 
     assert 'Gmail API açık değil' in client.get('/api/accounts/add/status').get_json()['error']
+
+
+def test_subscriptions_notifications_and_log_pages_show_only_the_chosen_account(client, two_accounts):
+    from mail_temizleyici import activity, subscriptions
+    mine = accounts.AccountPaths(TEST_ACCOUNT)
+    web.write_json(mine.scan_cache, {'m1': ['a@mine.example', 'Mine', 'bulten', True, 1000, '<https://mine.example/u>']})
+    web.write_json(two_accounts.scan_cache, {'m1': ['b@other.example', 'Other', 'bulten', True, 1000, '<https://other.example/u>']})
+    subscriptions._add_notifications(two_accounts, [{'zaman': 1, 'tur': 'yeni_abonelik', 'gonderen': 'b@other.example',
+                                                     'ad': '', 'sayi': 1, 'okundu': False}])
+    activity.record(mine, 'hesap_eklendi')
+
+    mine_page = client.get(f'/abonelikler?account={TEST_ACCOUNT}').get_data(as_text=True)
+    other_page = client.get(f'/abonelikler?account={OTHER}').get_data(as_text=True)
+
+    assert 'a@mine.example' in mine_page and 'b@other.example' not in mine_page
+    assert 'b@other.example' in other_page and 'a@mine.example' not in other_page
+    assert 'b@other.example' not in client.get(f'/bildirimler?account={TEST_ACCOUNT}').get_data(as_text=True)
+    assert 'b@other.example' in client.get(f'/bildirimler?account={OTHER}').get_data(as_text=True)
+    assert 'Hesap eklendi' in client.get(f'/gunluk?account={TEST_ACCOUNT}').get_data(as_text=True)
+    assert 'Hesap eklendi' not in client.get(f'/gunluk?account={OTHER}').get_data(as_text=True)
+    assert client.get(f'/api/notifications/unread?account={TEST_ACCOUNT}').get_json() == {'unread': 0}
+    assert client.get(f'/api/notifications/unread?account={OTHER}').get_json() == {'unread': 1}
+    client.post('/api/notifications/read', json={'account': TEST_ACCOUNT})
+    assert client.get(f'/api/notifications/unread?account={OTHER}').get_json() == {'unread': 1}

@@ -11,16 +11,15 @@
 <body>
 <main>
   {% set sayfa = 'gunluk' %}{% include '_gezinme.html' %}
-  <h1>İşlem günlüğü</h1>
-  <p class="hint">Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>hesaplar/&lt;adres&gt;/islem_gunlugu.jsonl</code></p>
+  <h1>İşlem günlüğü{% if page_account %} · {{ page_account }}{% endif %}</h1>
+  <p class="hint">Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>hesaplar/{{ page_account }}/islem_gunlugu.jsonl</code></p>
   {% if events %}
   <table>
-    <thead><tr><th>Zaman</th><th>Hesap</th><th>İşlem</th><th>Ayrıntı</th></tr></thead>
+    <thead><tr><th>Zaman</th><th>İşlem</th><th>Ayrıntı</th></tr></thead>
     <tbody>
     {% for e in events %}
     <tr>
       <td class="time">{{ e.zaman | int | datetimeformat }}</td>
-      <td>{{ e.hesap }}</td>
       {% if e.islem == 'tarama' %}
         <td class="tag">{{ 'Tam tarama' if e.tam else 'Tarama' }}</td>
         <td>{% if e.hata %}<span class="err">Hata: {{ e.hata }}</span>

@@ -229,9 +229,9 @@
   </div>
   <span class="summary" id="grandTotal"></span>
   {% from '_ikonlar.html' import ikon %}
-  <a href="/abonelikler" target="_blank" rel="noopener" class="log-link">{{ ikon('abonelik') }}Abonelikler</a>
-  <a href="/bildirimler" target="_blank" rel="noopener" class="log-link" id="notifLink">{{ ikon('bildirim') }}Bildirimler<span class="count-badge" id="notifCount" {% if not unread_notifications %}hidden{% endif %}>{{ unread_notifications }}</span></a>
-  <a href="/gunluk" target="_blank" rel="noopener" class="log-link">{{ ikon('gunluk') }}İşlem günlüğü</a>
+  <a href="/abonelikler" target="_blank" rel="noopener" class="log-link" data-page="abonelikler">{{ ikon('abonelik') }}Abonelikler</a>
+  <a href="/bildirimler" target="_blank" rel="noopener" class="log-link" id="notifLink" data-page="bildirimler">{{ ikon('bildirim') }}Bildirimler<span class="count-badge" id="notifCount" hidden></span></a>
+  <a href="/gunluk" target="_blank" rel="noopener" class="log-link" data-page="gunluk">{{ ikon('gunluk') }}İşlem günlüğü</a>
   <button id="scanBtn" type="button" disabled>Gelen Kutusunu Tara</button>
   <button id="fullScanBtn" class="secondary-btn" type="button" disabled
           title="Önbelleği yok sayar, bütün mailleri yeniden okur (kategori değişikliklerini yakalar; yavaştır)">Tam tara</button>
@@ -990,6 +990,11 @@ function renderAccounts() {
   $('removeAccountBtn').hidden = state.accounts.length === 0;
   $('scanBtn').disabled = state.busy || !state.account;
   $('fullScanBtn').disabled = state.busy || !state.account;
+  // Abonelikler, Bildirimler ve Günlük sayfaları seçili hesabın verisini gösterir.
+  for (const link of document.querySelectorAll('.log-link[data-page]')) {
+    link.href = `/${link.dataset.page}` + (state.account ? '?account=' + encodeURIComponent(state.account) : '');
+  }
+  if (state.account) refreshNotificationBadge();
 }
 
 async function loadAccounts(preferred = null) {

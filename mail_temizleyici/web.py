@@ -1,4 +1,5 @@
 """Flask uygulaması: sayfa ve JSON API. İş mantığı diğer modüllerde; burada istek doğrulama ve hata eşleme var."""
+import os
 import re
 import threading
 import time
@@ -29,9 +30,22 @@ app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 256 * 1024
 
 
+def _page_paths():
+    """Sayfaların hesabı: ?account=; yoksa ya da bilinmiyorsa ilk hesap. Hesap yoksa None."""
+    names = accounts.list_accounts()
+    wanted = (request.args.get('account') or '').strip().lower()
+    name = wanted if wanted in names else (names[0] if names else None)
+    return accounts.AccountPaths(name) if name else None
+
+
 @app.context_processor
-def inject_unread():
-    return {'unread_notifications': subscriptions.unread_count()}
+def inject_page_account():
+    """Menüde gösterilen hesap, hesap listesi ve o hesabın okunmamış bildirim sayısı."""
+    if request.endpoint not in ('subscriptions_page', 'notifications_page', 'log_page'):
+        return {}
+    paths = _page_paths()
+    return {'page_account': paths.account if paths else None, 'account_list': accounts.list_accounts(),
+            'unread_notifications': subscriptions.unread_count(paths) if paths else 0}
 
 
 @app.template_filter('link_label')
@@ -303,33 +317,35 @@ def api_scan_status():
 
 @app.route('/gunluk')
 def log_page():
-    return render_template('gunluk.html', events=activity.recent())
+    paths = _page_paths()
+    return render_template('gunluk.html', events=activity.recent(paths) if paths else [])
 
 
 # --- Abonelikler ve bildirimler ----------------------------------------------
 
 @app.route('/abonelikler')
 def subscriptions_page():
-    sections = []
-    for name in accounts.list_accounts():
-        paths = accounts.AccountPaths(name)
-        sections.append({'hesap': name, 'satirlar': subscriptions.rows(paths, read_json(paths.scan_cache, {}))})
-    return render_template('abonelikler.html', sections=sections)
+    paths = _page_paths()
+    rows = subscriptions.rows(paths, read_json(paths.scan_cache, {})) if paths else []
+    return render_template('abonelikler.html', rows=rows, scanned=bool(paths and os.path.exists(paths.scan_cache)))
 
 
 @app.route('/bildirimler')
 def notifications_page():
-    return render_template('bildirimler.html', notifications=subscriptions.all_notifications())
+    paths = _page_paths()
+    return render_template('bildirimler.html', notifications=subscriptions.all_notifications(paths) if paths else [])
 
 
 @app.route('/api/notifications/unread')
+@handle_errors
 def api_notifications_unread():
-    return jsonify({'unread': subscriptions.unread_count()})
+    return jsonify({'unread': subscriptions.unread_count(_current_paths())})
 
 
 @app.route('/api/notifications/read', methods=['POST'])
+@handle_errors
 def api_notifications_read():
-    subscriptions.mark_all_read()
+    subscriptions.mark_all_read(_current_paths())
     return jsonify({'unread': 0})
 
 

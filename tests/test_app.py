@@ -1066,13 +1066,14 @@ class TestActivityLog:
         client.post('/api/delete', json={'senders': ['a@example.com']})
         client.post('/api/undo')
 
-        events = web.activity.recent()
+        events = web.activity.recent(acct_paths())
         assert [e['islem'] for e in events][::-1] == ['tarama', 'silme', 'geri_alma']
         assert events[1]['gonderenler'] == {'a@example.com': 1}
         page = client.get('/gunluk')
         assert page.status_code == 200
         body = page.get_data(as_text=True)
         assert 'a@example.com: 1 mail' in body and 'Geri alma' in body
+        assert TEST_ACCOUNT in body
 
     def test_failed_delete_is_logged_with_error(self, client, monkeypatch):
         monkeypatch.setattr(accounts, 'get_service', lambda *_: None)
@@ -1080,7 +1081,7 @@ class TestActivityLog:
 
         client.post('/api/delete', json={'senders': ['a@example.com']})
 
-        assert web.activity.recent()[0]['hata'] == 'boom'
+        assert web.activity.recent(acct_paths())[0]['hata'] == 'boom'
 
     def test_empty_log_page(self, client):
         assert 'Henüz kayıtlı işlem yok' in client.get('/gunluk').get_data(as_text=True)
@@ -1102,7 +1103,7 @@ class TestSubscriptions:
 
         assert [(n['tur'], n['gonderen']) for n in notes] == [('yeni_abonelik', 'b@example.com')]
         assert subscriptions.after_scan(paths, cache) == []  # aynı sender ikinci kez bildirilmez
-        assert subscriptions.unread_count() == 1
+        assert subscriptions.unread_count(paths) == 1
 
     def test_mail_after_unsubscribing_is_reported_once_per_new_mail(self, client):
         from mail_temizleyici import subscriptions

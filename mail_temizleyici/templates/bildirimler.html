@@ -11,21 +11,20 @@
 <body>
 <main>
   {% set sayfa = 'bildirimler' %}{% include '_gezinme.html' %}
-  <h1>Bildirimler</h1>
+  <h1>Bildirimler{% if page_account %} · {{ page_account }}{% endif %}</h1>
   <p class="hint">Her taramadan sonra üretilir: taramada ilk kez görülen abonelikler ve aboneliğinden çıktığın göndericilerden gelen yeni mailler.
     <button id="readAll" type="button">Hepsini okundu yap</button></p>
   {% if notifications %}
   <table>
-    <thead><tr><th>Zaman</th><th>Hesap</th><th>Bildirim</th></tr></thead>
+    <thead><tr><th>Zaman</th><th>Bildirim</th></tr></thead>
     <tbody>
     {% for n in notifications %}
     <tr{% if not n.okundu %} class="unread"{% endif %}>
       <td class="time">{{ n.zaman | int | datetimeformat }}</td>
-      <td>{{ n.hesap }}</td>
       {% if n.tur == 'yeni_abonelik' %}
-        <td><span class="tag">Yeni abonelik:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ n.sayi }} mail. <a href="/abonelikler">Abonelikler</a> sayfasında çıkış bağlantısı var.</td>
+        <td><span class="tag">Yeni abonelik:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ n.sayi }} mail. <a href="/abonelikler?account={{ page_account | urlencode }}">Abonelikler</a> sayfasında çıkış bağlantısı var.</td>
       {% elif n.tur == 'mail_geliyor' %}
-        <td><span class="tag err">Çıktığın halde mail geliyor:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · çıkıştan sonra {{ n.sayi }} yeni mail. Çıkış işe yaramamış olabilir; <a href="/abonelikler">bağlantıyı elle dene</a> ya da göndericiyi sil.</td>
+        <td><span class="tag err">Çıktığın halde mail geliyor:</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · çıkıştan sonra {{ n.sayi }} yeni mail. Çıkış işe yaramamış olabilir; <a href="/abonelikler?account={{ page_account | urlencode }}">bağlantıyı elle dene</a> ya da göndericiyi sil.</td>
       {% else %}
         <td>{{ n.tur }}: {{ n.gonderen }}</td>
       {% endif %}
@@ -39,7 +38,11 @@
 </main>
 <script>
 document.getElementById('readAll').addEventListener('click', async () => {
-  await fetch('/api/notifications/read', { method: 'POST' });
+  await fetch('/api/notifications/read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account: {{ page_account | tojson }} }),
+  });
   location.reload();
 });
 </script>
