@@ -290,21 +290,50 @@ def _run_scan(service, paths, full=False):
         state.update_scan(account, running=False, finished_at=time.time())
 
 
-@app.route('/api/scan', methods=['POST'])
-@handle_errors
-def api_scan():
-    paths = _current_paths()
+def _start_scan(paths, full):
+    """Hesabın taramasını arka planda başlatır; başlatılamazsa (hata metni, durum) döner, başlarsa (None, durum)."""
     error, scan = state.start_scan(paths.account, time.time())
     if error:
-        return jsonify({'error': error, **scan}), 409
+        return error, scan
     try:
         service = accounts.get_service(paths.account)  # giriş/kimlik hataları isteğin kendisinde dönsün
     except Exception:
         state.update_scan(paths.account, running=False)
         raise
-    full = _json_body().get('full') is True  # true: önbelleği yok say, bütün mailleri yeniden oku
     threading.Thread(target=_run_scan, args=(service, paths, full), daemon=True).start()
-    return jsonify(state.snapshot(paths.account)), 202
+    return None, state.snapshot(paths.account)
+
+
+@app.route('/api/scan', methods=['POST'])
+@handle_errors
+def api_scan():
+    paths = _current_paths()
+    full = _json_body().get('full') is True  # true: önbelleği yok say, bütün mailleri yeniden oku
+    error, scan = _start_scan(paths, full)
+    if error:
+        return jsonify({'error': error, **scan}), 409
+    return jsonify(scan), 202
+
+
+@app.route('/api/scan/all', methods=['POST'])
+@handle_errors
+def api_scan_all():
+    """Bütün hesapları aynı anda tarar. Gmail kotası hesap başına olduğundan toplam süre en yavaş hesabınki kadardır."""
+    full = _json_body().get('full') is True
+    results = []
+    for name in accounts.list_accounts():
+        try:
+            error, scan = _start_scan(accounts.AccountPaths(name), full)
+        except Exception as e:  # bir hesabın girişi bozuksa diğerleri yine taransın
+            error, scan = (LOGIN_EXPIRED_MESSAGE if isinstance(e, RefreshError) else str(e) or type(e).__name__), {}
+        results.append({'account': name, 'started': error is None, 'error': error})
+    return jsonify({'accounts': results}), 202
+
+
+@app.route('/api/scan/status/all')
+@handle_errors
+def api_scan_status_all():
+    return jsonify({'accounts': [{'account': name, **state.snapshot(name)} for name in accounts.list_accounts()]})
 
 
 @app.route('/api/scan/status')

@@ -4,7 +4,7 @@ import os
 import shutil
 import threading
 
-from . import auth
+from . import auth, gmail
 from .config import BASE_DIR, settings
 from .gmail import EMAIL_RE
 from .scanner import load_csv, save_to_csv
@@ -80,7 +80,9 @@ def resolve(account):
 def get_service(account):
     paths = AccountPaths(account)
     os.makedirs(paths.root, mode=0o700, exist_ok=True)  # .env'deki hesabın veri klasörü henüz olmayabilir
-    return auth.get_service(paths.token)
+    service = auth.get_service(paths.token)
+    service.quota_limiter = gmail.account_limiter(account)  # kota hesap başınadır
+    return service
 
 
 def sign_in_plan(client_config=None, pending=None):

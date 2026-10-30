@@ -40,7 +40,7 @@ def find_message_ids(service, email, scope='all', unread_only=False, spam_only=F
         resp = gmail_execute(service.users().messages().list(
             userId='me', q=from_query(email, scope, unread_only, spam_only), maxResults=500,
             pageToken=next_page_token, **_list_kwargs(scope)
-        ), 'list')
+        ), 'list', service)
         ids.extend(m['id'] for m in resp.get('messages', []))
         next_page_token = resp.get('nextPageToken')
         if not next_page_token:
@@ -117,7 +117,7 @@ def batch_modify(service, ids, add=(), remove=()):
         gmail_execute(service.users().messages().batchModify(
             userId='me',
             body={'ids': ids[i:i + 1000], 'addLabelIds': list(add), 'removeLabelIds': list(remove)}
-        ), 'batchModify')
+        ), 'batchModify', service)
 
 
 def _trash_sender(service, paths, email, scope, undo, scan_ids):
@@ -204,7 +204,7 @@ def preview(paths, sender, email, scope):
     service = accounts.get_service(paths.account)
     resp = gmail_execute(service.users().messages().list(
         userId='me', q=from_query(email, scope), maxResults=PREVIEW_LIMIT, **_list_kwargs(scope)
-    ), 'list')
+    ), 'list', service)
     ids = [m['id'] for m in resp.get('messages', [])]
     fetched = dict(fetch_metadata(service, ids, ['From', 'Subject']))
 

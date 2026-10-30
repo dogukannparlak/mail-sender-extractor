@@ -71,9 +71,37 @@ class QuotaLimiter:
 quota = QuotaLimiter()
 
 
-def gmail_execute(request, method):
+class AccountQuota(QuotaLimiter):
+    """Bir hesabın kendi harcama geçmişi. Gmail kotası kullanıcı başınadır; hesaplar birbirinin kotasını
+    yemez, o yüzden paralel taranabilir. Dakikalık sınır `quota` ile aynı ayardan gelir."""
+
+    @property
+    def units_per_minute(self):
+        return quota.units_per_minute
+
+    @units_per_minute.setter
+    def units_per_minute(self, value):
+        pass
+
+
+_account_limiters = {}
+_account_limiters_lock = threading.Lock()
+
+
+def account_limiter(account):
+    with _account_limiters_lock:
+        return _account_limiters.setdefault(account, AccountQuota())
+
+
+def limiter_for(service):
+    """Servisin hesabına ait sınırlayıcı (accounts.get_service takar); yoksa ortak `quota`."""
+    limiter = getattr(service, 'quota_limiter', None)
+    return limiter if isinstance(limiter, QuotaLimiter) else quota
+
+
+def gmail_execute(request, method, service=None):
     """Tekil Gmail çağrısı: kotayı say, 429/5xx'te googleapiclient'ın kendi geri çekilmesiyle yeniden dene."""
-    quota.spend(QUOTA_UNITS[method])
+    limiter_for(service).spend(QUOTA_UNITS[method])
     return request.execute(num_retries=3)
 
 
@@ -120,7 +148,7 @@ def run_batched(service, ids, make_request, sleep=time.sleep, method='get'):
                 else:
                     raise exception
 
-            quota.spend(QUOTA_UNITS[method] * len(chunk))  # batch kotayı azaltmaz: her çağrı ayrı sayılır
+            limiter_for(service).spend(QUOTA_UNITS[method] * len(chunk))  # batch kotayı azaltmaz: her çağrı ayrı sayılır
             batch = service.new_batch_http_request(callback=callback)
             for msg_id in chunk:
                 batch.add(make_request(msg_id), request_id=msg_id)

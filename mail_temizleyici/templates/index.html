@@ -169,7 +169,10 @@
   .count-badge { display: inline-block; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; margin-left: 6px; border-radius: 9px;
                  background: #d93025; color: #fff; font-size: 11px; font-weight: 600; line-height: 18px; text-align: center; }
   .count-badge[hidden] { display: none; }
-  #scanBtn, #fullScanBtn { padding: 8px 16px; font-size: 13px; }
+  .all-scan-row { display: flex; align-items: center; gap: 12px; margin: 4px 0; }
+  .all-scan-row .all-scan-text { flex: 0 0 320px; font-size: 13px; overflow-wrap: anywhere; }
+  .all-scan-row progress { margin-top: 0; }
+  #scanBtn, #fullScanBtn, #scanAllBtn { padding: 8px 16px; font-size: 13px; }
 
   .action-bar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
@@ -235,6 +238,8 @@
   <button id="scanBtn" type="button" disabled>Gelen Kutusunu Tara</button>
   <button id="fullScanBtn" class="secondary-btn" type="button" disabled
           title="Önbelleği yok sayar, bütün mailleri yeniden okur (kategori değişikliklerini yakalar; yavaştır)">Tam tara</button>
+  <button id="scanAllBtn" class="secondary-btn" type="button" hidden
+          title="Bütün hesapları aynı anda tarar; Gmail kotası hesap başına olduğu için toplam süre en yavaş hesap kadar sürer">Tüm hesapları tara</button>
 </header>
 
 <main>
@@ -386,7 +391,7 @@ class ApiError extends Error {
 // Bütün sunucu çağrıları buradan geçer: JSON olmayan hata sayfası ya da kapalı sunucu
 // da okunur bir mesaja dönüşür.
 // Her istek seçili hesabı taşır; sunucu hangi hesabın dosyalarına ve Gmail'ine gideceğini buradan bilir.
-const ACCOUNT_FREE_URLS = ['/api/accounts', '/api/accounts/add'];
+const ACCOUNT_FREE_URLS = ['/api/accounts', '/api/accounts/add', '/api/scan/all', '/api/scan/status/all'];
 
 async function api(url, payload) {
   const withAccount = state.account && !ACCOUNT_FREE_URLS.includes(url);
@@ -778,6 +783,7 @@ function setBusy(busy) {
   $('undoBtn').disabled = busy;
   $('scanBtn').disabled = busy || !state.account;
   $('fullScanBtn').disabled = busy || !state.account;
+  $('scanAllBtn').disabled = busy;
   // İşlem sürerken hesap değiştirilemez: sonuç yanlış hesabın ekranına yazılmasın.
   $('accountSelect').disabled = busy;
   $('addAccountBtn').disabled = busy;
@@ -990,6 +996,8 @@ function renderAccounts() {
   $('removeAccountBtn').hidden = state.accounts.length === 0;
   $('scanBtn').disabled = state.busy || !state.account;
   $('fullScanBtn').disabled = state.busy || !state.account;
+  $('scanAllBtn').hidden = state.accounts.length < 2;
+  $('scanAllBtn').disabled = state.busy;
   // Abonelikler, Bildirimler ve Günlük sayfaları seçili hesabın verisini gösterir.
   for (const link of document.querySelectorAll('.log-link[data-page]')) {
     link.href = `/${link.dataset.page}` + (state.account ? '?account=' + encodeURIComponent(state.account) : '');
@@ -1192,9 +1200,81 @@ async function scanInbox(full = false) {
   await pollScan();
 }
 
+// Bütün hesapların taramasını izler; hesap başına bir ilerleme çubuğu. seen: izlenecek hesaplar.
+function showAllScanProgress(list) {
+  const box = $('notice');
+  box.classList.remove('error');
+  let wrap = box.querySelector('.all-scan');
+  if (!wrap) {
+    wrap = el('div', { class: 'all-scan' });
+    box.replaceChildren(wrap);
+  }
+  for (const s of list) {
+    let row = [...wrap.children].find(r => r.dataset.account === s.account);
+    if (!row) {
+      row = el('div', { class: 'all-scan-row', 'data-account': s.account },
+        el('span', { class: 'all-scan-text' }),
+        el('progress', { max: '1', value: '0', 'aria-label': `${s.account} tarama ilerlemesi` }));
+      wrap.append(row);
+    }
+    const pct = s.total ? Math.floor(s.processed / s.total * 100) : 0;
+    const progress = row.querySelector('progress');
+    progress.max = s.total || 1;
+    progress.value = s.processed;
+    row.querySelector('.all-scan-text').textContent = s.error ? `${s.account}: hata` :
+      s.running ? `${s.account}: ${s.processed} / ${s.total || '…'} (%${pct})` : `${s.account}: tamamlandı`;
+  }
+}
+
+async function pollAllScans(seen) {
+  setBusy(true);
+  $('scanAllBtn').textContent = 'Taranıyor…';
+  try {
+    for (;;) {
+      const { accounts } = await api('/api/scan/status/all');
+      for (const a of accounts) if (a.running) seen.add(a.account);
+      const mine = accounts.filter(a => seen.has(a.account));
+      showAllScanProgress(mine);
+      if (!mine.some(a => a.running)) {
+        const failed = mine.filter(a => a.error);
+        await load();
+        refreshNotificationBadge();
+        if (failed.length) {
+          notify(`Tarama bitti, ${failed.length} hesapta hata var.`, {
+            error: true, details: failed.map(a => `${a.account}: ${a.error}`) });
+        } else {
+          notify(`${mine.length} hesabın taraması tamamlandı.`);
+        }
+        return;
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  } catch (err) {
+    notifyError('Tarama sırasında hata oluştu', err);
+  } finally {
+    $('scanAllBtn').textContent = 'Tüm hesapları tara';
+    setBusy(false);
+  }
+}
+
+async function scanAllAccounts() {
+  try {
+    const { accounts } = await api('/api/scan/all', {});
+    const errors = accounts.filter(a => !a.started && !/zaten sürüyor/.test(a.error || ''));
+    if (errors.length === accounts.length) {
+      notify('Hiçbir hesabın taraması başlatılamadı.', { error: true, details: errors.map(a => `${a.account}: ${a.error}`) });
+      return;
+    }
+    await pollAllScans(new Set(accounts.filter(a => a.started).map(a => a.account)));
+  } catch (err) {
+    notifyError('Taramalar başlatılamadı', err);
+  }
+}
+
 async function resumeScanIfRunning() {
   try {
-    if ((await api('/api/scan/status')).running) pollScan();
+    const { accounts } = await api('/api/scan/status/all');
+    if (accounts.some(a => a.running)) pollAllScans(new Set());
   } catch (err) { /* durum alınamazsa sayfa normal açılır */ }
 }
 
@@ -1202,6 +1282,7 @@ async function resumeScanIfRunning() {
 
 $('scanBtn').addEventListener('click', () => scanInbox());
 $('fullScanBtn').addEventListener('click', () => scanInbox(true));
+$('scanAllBtn').addEventListener('click', scanAllAccounts);
 $('deleteBtn').addEventListener('click', deleteSelected);
 $('unsubBtn').addEventListener('click', unsubscribeSelected);
 $('undoBtn').addEventListener('click', undoLastDelete);

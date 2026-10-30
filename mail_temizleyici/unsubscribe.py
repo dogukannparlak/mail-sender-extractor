@@ -78,7 +78,7 @@ def find_unsubscribe_info(service, email, confirm_one_click=False):
     """
     resp = gmail_execute(service.users().messages().list(
         userId='me', q=from_query(email), maxResults=UNSUBSCRIBE_SCAN_LIMIT
-    ), 'list')
+    ), 'list', service)
     messages = resp.get('messages', [])
     if not messages:
         return {'status': 'not_found'}

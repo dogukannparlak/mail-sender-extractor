@@ -76,7 +76,7 @@ def list_scan_ids(service):
         results = gmail_execute(service.users().messages().list(
             userId='me', q=SCAN_QUERY, includeSpamTrash=True, maxResults=500,
             pageToken=next_page_token
-        ), 'list')
+        ), 'list', service)
         ids.extend(m['id'] for m in results.get('messages', []))
         next_page_token = results.get('nextPageToken')
         if not next_page_token:

@@ -1177,3 +1177,37 @@ class TestLinkLabel:
         assert link_label('https://emails.wix.com/pub/optout/Unsubscribe?YES=true&_ri_=' + 'X' * 300) == 'emails.wix.com'
         assert link_label('mailto:unsubscribe-AQjk@imh.rsys121.origin.responsys.ocs.oraclecloud.com?subject=List-Unsubscribe') \
             == 'E-posta ile çık · imh.rsys121.origin.responsys.ocs.oraclecloud.com'
+
+
+class TestScanAll:
+    def test_starts_every_account_and_reports_status(self, client, monkeypatch, inline_scan):
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake-service')
+        monkeypatch.setattr(web, 'extract_senders',
+                            lambda service, progress, id_index, cache: {'a@example.com': {'ad': '', 'mail_sayisi': 1}})
+
+        resp = client.post('/api/scan/all')
+        status = client.get('/api/scan/status/all').get_json()
+
+        assert resp.status_code == 202
+        assert resp.get_json() == {'accounts': [{'account': TEST_ACCOUNT, 'started': True, 'error': None}]}
+        assert [(a['account'], a['running'], a['error']) for a in status['accounts']] == [(TEST_ACCOUNT, False, None)]
+
+    def test_one_broken_account_does_not_stop_the_others(self, client, monkeypatch, inline_scan):
+        import os
+        other = accounts.AccountPaths('is@example.com')
+        os.makedirs(other.root)
+        open(other.token, 'w').close()
+
+        def fake_get_service(account):
+            if account == 'is@example.com':
+                raise ValueError('token bozuk')
+            return 'fake-service'
+        monkeypatch.setattr(accounts, 'get_service', fake_get_service)
+        monkeypatch.setattr(web, 'extract_senders', lambda service, progress, id_index, cache: {})
+
+        body = client.post('/api/scan/all').get_json()
+
+        by_account = {a['account']: a for a in body['accounts']}
+        assert by_account[TEST_ACCOUNT]['started'] is True
+        assert by_account['is@example.com'] == {'account': 'is@example.com', 'started': False, 'error': 'token bozuk'}
+        assert state.snapshot('is@example.com')['running'] is False

@@ -381,3 +381,22 @@ def test_extract_senders_scans_spam_and_archive_but_not_trash(fake_service_facto
     call = service.messages_resource.list_calls[0]
     assert call['includeSpamTrash'] is True and call['q'] == '-in:trash -in:sent -in:drafts'
     assert result['s@example.com']['kategori'] == 'spam'
+
+
+def test_accounts_have_separate_quota_budgets():
+    from mail_temizleyici import gmail
+    now = [0.0]
+    sleeps = []
+    a, b = gmail.AccountQuota(), gmail.AccountQuota()
+    for limiter in (a, b):
+        limiter._clock, limiter._sleep = (lambda: now[0]), (lambda s: (sleeps.append(s), now.__setitem__(0, now[0] + s)))
+    old = gmail.quota.units_per_minute
+    gmail.quota.units_per_minute = 100
+    try:
+        a.spend(100)
+        b.spend(100)   # başka hesap: beklemeden geçer
+        assert sleeps == []
+        a.spend(50)    # aynı hesap: dakika dolana kadar bekler
+        assert sleeps
+    finally:
+        gmail.quota.units_per_minute = old
