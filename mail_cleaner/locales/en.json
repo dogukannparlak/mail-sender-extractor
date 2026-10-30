@@ -75,7 +75,7 @@
   "note.trash": "Messages from the senders you pick are <strong>not permanently deleted</strong>; they move to Gmail's Trash. Gmail empties the Trash after 30 days, so you can undo until then.",
   "select.all": "Select all",
   "select.none": "No selection",
-  "search.placeholder": "Search by name or address…",
+  "search.placeholder": "Search name or address…",
   "search.label": "Search senders",
   "filter.all": "All",
   "filter.link": "Subscription link:",

@@ -9,50 +9,13 @@ import random
 import re
 import tempfile
 import time
+
+from .demo_data import DATASETS
 from .i18n import t
 
-# (görünen ad, adres, mail sayısı, Gmail sekmesi, List-Unsubscribe var mı, one-click mi)
-DEMO_SENDERS = [
-    ('Örnek Market', 'kampanya@ornekmarket.example', 64, 'CATEGORY_PROMOTIONS', True, True),
-    ('Örnek Market Sipariş', 'siparis@ornekmarket.example', 12, 'CATEGORY_UPDATES', False, False),
-    ('Kitap Kulübü Bülteni', 'bulten@kitapkulubu.example', 41, 'CATEGORY_UPDATES', True, True),
-    ('Teknoloji Haftası', 'haber@teknohafta.example', 37, 'CATEGORY_UPDATES', True, False),
-    ('Seyahat Fırsatları', 'firsat@seyahat.example', 29, 'CATEGORY_PROMOTIONS', True, True),
-    ('Sosyal Ağ', 'bildirim@sosyalag.example', 33, 'CATEGORY_SOCIAL', True, False),
-    ('Kod Forumu', 'noreply@kodforumu.example', 18, 'CATEGORY_FORUMS', True, False),
-    ('Örnek Banka', 'bilgi@ornekbanka.example', 15, 'CATEGORY_UPDATES', False, False),
-    ('Örnek Banka Kart', 'kart@kart.ornekbanka.example', 9, 'CATEGORY_UPDATES', False, False),
-    ('Kargo Takip', 'takip@kargo.example', 22, 'CATEGORY_UPDATES', False, False),
-    ('Ali "Usta" Yılmaz', 'ali@ornek.example', 7, 'CATEGORY_PERSONAL', False, False),
-    ('Ayşe Demir', 'ayse@ornek.example', 5, 'CATEGORY_PERSONAL', False, False),
-    ('Ders Duyuruları (Prof. A)', 'no-reply@okul.example', 14, 'CATEGORY_UPDATES', False, False),
-    ('Ders Duyuruları (Prof. B)', 'no-reply@okul.example', 11, 'CATEGORY_UPDATES', False, False),
-    ('Müzik Servisi', 'merhaba@muzik.example', 19, 'CATEGORY_PROMOTIONS', True, False),
-    ('Yemek Siparişi', 'indirim@yemek.example', 26, 'CATEGORY_PROMOTIONS', True, True),
-]
-
-# İkinci demo hesabı (iş/okul): farklı gönderenler, hesap geçişi görünsün.
-DEMO_WORK_SENDERS = [
-    ('Proje Yönetim Aracı', 'bildirim@proje.example', 45, 'CATEGORY_UPDATES', True, True),
-    ('Kod Deposu', 'noreply@kod.example', 38, 'CATEGORY_UPDATES', True, False),
-    ('Takvim', 'takvim@ofis.example', 21, 'CATEGORY_UPDATES', False, False),
-    ('Etkinlik Duyuruları', 'etkinlik@konferans.example', 17, 'CATEGORY_PROMOTIONS', True, True),
-    ('Ekip Lideri', 'lider@ofis.example', 9, 'CATEGORY_PERSONAL', False, False),
-    ('Örnek Banka', 'bilgi@ornekbanka.example', 6, 'CATEGORY_UPDATES', False, False),
-]
-
-DEMO_ACCOUNTS = {
-    'demo@ornek.example': (DEMO_SENDERS, 7),
-    'is@ornek.example': (DEMO_WORK_SENDERS, 11),
-}
-
-SUBJECTS = {
-    'CATEGORY_PROMOTIONS': ['%50 indirim bugün bitiyor', 'Sana özel kampanya', 'Sepetinde ürün kaldı'],
-    'CATEGORY_UPDATES': ['Haftalık özet', 'Hesap hareketin', 'Yeni duyuru yayınlandı'],
-    'CATEGORY_SOCIAL': ['Bir arkadaşın seni etiketledi', '3 yeni bildirimin var'],
-    'CATEGORY_FORUMS': ['Konuna yeni yanıt', 'Haftanın popüler başlıkları'],
-    'CATEGORY_PERSONAL': ['Hafta sonu planı', 'Notları gönderiyorum'],
-}
+# Eski adlar (testler Türkçe takımı kullanır).
+DEMO_ACCOUNTS = DATASETS['tr']['accounts']
+DEMO_SENDERS = DEMO_ACCOUNTS['demo@ornek.example'][0]
 
 
 class _Call:
@@ -79,7 +42,8 @@ class _Batch:
 class DemoMailbox:
     """googleapiclient'ın uygulamada kullanılan kısmını taklit eder: list, get, batchModify, batch."""
 
-    def __init__(self, senders=DEMO_SENDERS, seed=7):
+    def __init__(self, senders=DEMO_SENDERS, seed=7, dataset=None):
+        dataset = dataset or DATASETS['tr']
         rng = random.Random(seed)
         now_ms = int(time.time() * 1000)
         self.store = {}
@@ -94,19 +58,19 @@ class DemoMailbox:
                     labels.add('UNREAD')
                 headers = [
                     {'name': 'From', 'value': f'"{name.replace(chr(34), chr(92) + chr(34))}" <{address}>'},
-                    {'name': 'Subject', 'value': rng.choice(SUBJECTS[tab])},
+                    {'name': 'Subject', 'value': rng.choice(dataset['subjects'][tab])},
                 ]
                 if unsubscribe:
                     domain = address.split('@')[1]
                     headers.append({'name': 'List-Unsubscribe',
-                                    'value': f'<https://{domain}/abonelik/cik>, <mailto:cik@{domain}>'})
+                                    'value': f"<https://{domain}/{dataset['unsubscribe_path']}>, <mailto:{dataset['unsubscribe_mailbox']}@{domain}>"})
                     if one_click:
                         headers.append({'name': 'List-Unsubscribe-Post', 'value': 'List-Unsubscribe=One-Click'})
                 self.store[f'demo{n:04d}'] = {
                     'labels': labels,
                     'headers': headers,
                     'date': now_ms - rng.randint(0, 400) * 86_400_000,
-                    'snippet': 'Bu bir demo mailidir; gerçek bir hesaptan gelmiyor.',
+                    'snippet': dataset['snippet'],
                 }
 
     # --- googleapiclient yüzeyi ---
@@ -185,12 +149,14 @@ class _DemoResponse:
     is_redirect = False
 
 
-def enable():
+def enable(language=None):
     """Uygulamayı sahte posta kutularına ve geçici bir veri klasörüne bağlar (gerçek dosyalara dokunmaz)."""
     from . import accounts, gmail, protected, unsubscribe, web
 
-    mailboxes = {account: DemoMailbox(senders, seed) for account, (senders, seed) in DEMO_ACCOUNTS.items()}
-    data_dir = tempfile.mkdtemp(prefix='mail-temizleyici-demo-')
+    from .config import settings
+    dataset = DATASETS[language or settings.language or 'en']  # LANGUAGE boşsa İngilizce
+    mailboxes = {account: DemoMailbox(senders, seed, dataset) for account, (senders, seed) in dataset['accounts'].items()}
+    data_dir = tempfile.mkdtemp(prefix='mail-cleaner-demo-')
     accounts.ACCOUNTS_DIR = os.path.join(data_dir, 'accounts')
     accounts.EXTRA_ACCOUNT_TOKENS = {}  # .env'deki gerçek hesaplar demo'ya karışmasın
     accounts.LEGACY_TOKEN_PATH = os.path.join(data_dir, 'token.json')

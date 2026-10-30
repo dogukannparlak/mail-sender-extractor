@@ -13,9 +13,11 @@
   .tabs a { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 9px; color: var(--muted); text-decoration: none; }
   .tabs a:hover { color: var(--text); background: var(--tab-hover); }
   .tabs a.current { color: var(--text); background: var(--tab-active); font-weight: 600; }
-  .account-pick { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding: 3px 4px 3px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted); }
-  .account-pick .ico { margin-right: 0; }
-  .account-pick select { border: none; background: transparent; font: inherit; color: var(--text); padding: 4px 6px; max-width: 260px; cursor: pointer; }
+  .language-pick { margin-left: auto; }
+  .language-pick + .account-pick { margin-left: 0; }
+  .language-pick, .account-pick { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--card); color: var(--muted); }
+  .language-pick .ico, .account-pick .ico { margin-right: 0; }
+  .language-pick select, .account-pick select { border: none; background: transparent; font: inherit; color: var(--text); padding: 4px 6px; max-width: 260px; cursor: pointer; }
   .account-pick select:focus-visible, .tabs a:focus-visible, .topbar .back:focus-visible { outline: 2px solid var(--link); outline-offset: 1px; }
   .ico { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; margin-right: 5px; flex: none; }
   .count-badge { display: inline-block; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; margin-left: 6px; border-radius: 9px;
@@ -38,6 +40,7 @@
   tbody tr:last-child td { border-bottom: none; }
   tbody tr:hover td { background: rgba(128, 128, 128, 0.08); }
   tr[hidden] { display: none; }
+  td button { white-space: nowrap; }
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 12px 0; }
   .toolbar label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
   .toolbar input[type=search], .toolbar select { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); }
