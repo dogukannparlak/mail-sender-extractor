@@ -1030,3 +1030,21 @@ class TestHostCheck:
 
         assert resp.status_code == 403
         scan_mock.assert_not_called()
+
+
+class TestApiScanFull:
+    def test_full_flag_ignores_the_saved_cache(self, client, monkeypatch, inline_scan):
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: 'fake-service')
+        seen = []
+
+        def fake_extract(service, progress, id_index, cache):
+            seen.append(dict(cache))
+            cache['m1'] = ['a@example.com', 'A', 'kisisel', False]
+            return {}
+        monkeypatch.setattr(web, 'extract_senders', fake_extract)
+
+        client.post('/api/scan')
+        client.post('/api/scan')
+        client.post('/api/scan', json={'full': True})
+
+        assert seen == [{}, {'m1': ['a@example.com', 'A', 'kisisel', False]}, {}]
