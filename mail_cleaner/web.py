@@ -425,15 +425,16 @@ def api_subscriptions_mark():
 @app.route('/api/protected')
 @handle_errors
 def api_protected():
-    return jsonify(protected.load_protected())
+    return jsonify(protected.load_protected(_current_paths()))
 
 
 @app.route('/api/protected', methods=['POST'])
 @handle_errors
 def api_protected_update():
     body = _json_body()
-    result = protected.set_protected(body.get('value'), body.get('protected', True))
-    mailbox.clear_verify_cache()
+    paths = _current_paths(body)
+    result = protected.set_protected(paths, body.get('value'), body.get('protected', True))
+    mailbox.clear_verify_cache(paths.account)
     return jsonify(result)
 
 
@@ -461,7 +462,7 @@ def api_count():
 def api_delete():
     body, paths, senders, emails = _senders_request()
     scope = _validated_scope(body)
-    protected.reject_protected(emails)
+    protected.reject_protected(paths, emails)
     with state.mutation(paths.account):
         try:
             result = mailbox.delete_senders(paths, senders, emails, scope)
@@ -507,7 +508,7 @@ def api_preview():
 def api_unsubscribe():
     body, paths, senders, emails = _senders_request()
     confirm_one_click = body.get('confirm_one_click') is True
-    protected.reject_protected(emails)
+    protected.reject_protected(paths, emails)
     service = accounts.get_service(paths.account)
     results = [{'sender': sender, 'email': email, **find_unsubscribe_info(service, email, confirm_one_click)}
                for sender, email in zip(senders, emails)]

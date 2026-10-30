@@ -87,7 +87,7 @@ def verified_message_ids(service, paths, email, scope, scan_ids=None):
         known_good = set((scan_ids if scan_ids is not None else load_scan_ids(paths)).get(wanted, []))
         known_bad = set()
 
-    protected = load_protected()
+    protected = load_protected(paths)
     unknown = [i for i in candidates if i not in known_good and i not in known_bad]
     for msg_id, msg in fetch_metadata(service, unknown, ['From']):
         address = from_address(msg)

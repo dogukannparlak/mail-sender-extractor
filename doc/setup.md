@@ -112,8 +112,8 @@ You can manage several Gmail accounts (personal, school, work) from the same pag
 
 | What | Per account or shared? |
 |---|---|
-| Google Cloud client, sign-in token, sender list, scan index and cache, last-trash record, subscriptions, notifications, activity log | Per account: `accounts/<address>/` |
-| Protected senders (`protected.json`) | Shared: a bank you lock is protected in every account |
+| Google Cloud client, sign-in token, sender list, scan index and cache, last-trash record, subscriptions, notifications, activity log, protected senders | Per account: `accounts/<address>/` |
+| Protected senders (`protected.json`) | Per account too: a bank you lock in one account is not protected in the others |
 | Gmail quota (~300 message reads per minute) | Gmail counts it per account, and so does the app: every account has its own budget, so several accounts can be scanned at the same time (*Scan all accounts*) |
 
 **Upgrading from the single-account version:** on first start an existing `token.json` and its

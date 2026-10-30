@@ -20,3 +20,5 @@ hesaplar/
 tokens/*
 !tokens/README.md
 tokenlar/*
+protected.json.migrated
+korunanlar.json.migrated

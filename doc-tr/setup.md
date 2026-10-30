@@ -114,7 +114,7 @@ Birden çok Gmail hesabını (kişisel, okul, iş) aynı sayfadan yönetebilirsi
 | Ne                                                                      | Hesap başına mı, ortak mı?                                                                                                       |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Google Cloud istemcisi, giriş anahtarı, gönderen listesi, tarama dizini ve önbelleği, son taşıma kaydı, abonelikler, bildirimler, işlem günlüğü | Hesap başına: `accounts/<adres>/`                                                                                                |
-| Korunan gönderenler (`protected.json`)                              | Ortak: kilitlediğin banka her hesapta korunur                                                                                       |
+| Korunan gönderenler (`protected.json`) | O da hesap başına: bir hesapta kilitlediğin banka diğer hesaplarda korunmaz |
 | Gmail kotası (dakikada ~300 mail okuma)                                | Gmail hesap başına sayar, uygulama da öyle: her hesabın kendi bütçesi var, bu yüzden birkaç hesap aynı anda taranabilir (*Tüm hesapları tara*) |
 
 **Tek hesaplı sürümden geçiş:** ilk açılışta mevcut `token.json` ve veri dosyaları (`senders.csv`,

@@ -42,6 +42,8 @@ class AccountPaths:
         # Abonelik çıkış durumu (subscriptions.json) ve bildirimler (notifications.json).
         self.subscriptions = os.path.join(self.root, 'subscriptions.json')
         self.notifications = os.path.join(self.root, 'notifications.json')
+        # Korunan gönderenler: her hesapta ayrı.
+        self.protected = os.path.join(self.root, 'protected.json')
 
 
 def _folder_names():

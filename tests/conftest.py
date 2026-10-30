@@ -163,7 +163,6 @@ def isolate_data_files(tmp_path, monkeypatch):
     (accounts_dir / TEST_ACCOUNT / 'token.json').write_text('{}')
     monkeypatch.setattr(accounts, 'ACCOUNTS_DIR', str(accounts_dir))
     monkeypatch.setattr(accounts, 'EXTRA_ACCOUNT_TOKENS', {})
-    monkeypatch.setattr(protected, 'PROTECTED_PATH', str(tmp_path / 'protected.json'))
     monkeypatch.setattr(accounts, 'LEGACY_TOKEN_PATH', str(tmp_path / 'token.json'))
     # Ortak istemci dosyası: testler gerçek credentials.json'u okumasın ve asla taşımasın.
     monkeypatch.setattr(auth, 'CREDENTIALS_PATH', str(tmp_path / 'credentials.json'))
@@ -196,7 +195,7 @@ def demo_mode(monkeypatch):
     """demo.enable modül özniteliklerini doğrudan değiştirir; monkeypatch test sonunda geri alsın."""
     from mail_cleaner import accounts, demo, gmail, protected, unsubscribe, web
     for module, name in ((accounts, 'get_service'), (accounts, 'ACCOUNTS_DIR'), (accounts, 'EXTRA_ACCOUNT_TOKENS'),
-                         (accounts, 'LEGACY_TOKEN_PATH'), (protected, 'PROTECTED_PATH'),
+                         (accounts, 'LEGACY_TOKEN_PATH'),
                          (unsubscribe, '_resolve_host'), (web, 'DEMO_MODE')):
         monkeypatch.setattr(module, name, getattr(module, name))
     monkeypatch.setattr(unsubscribe.requests, 'post', unsubscribe.requests.post)

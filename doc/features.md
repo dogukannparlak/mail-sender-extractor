@@ -27,7 +27,7 @@
   senders; otherwise you get a link or `mailto:` address to open yourself.
 - **Subscriptions, notifications, activity log:** see [Pages](#pages).
 - **Several Gmail accounts:** add accounts from the header and switch between them. Each account keeps its own sender list, scan, undo,
-  subscriptions, notifications and log; the protected list is shared. Confirm dialogs name the account so you don't trash mail in
+  subscriptions, notifications and log; the protected list is separate for each account too. Confirm dialogs name the account so you don't trash mail in
   the wrong one.
 - **English and Turkish interface:** pick the language in the header; see [Language](configuration.md#language).
 - **Preview and copy:** see a sender's latest subjects before deleting; copy an address.

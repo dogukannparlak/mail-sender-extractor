@@ -151,7 +151,7 @@ class _DemoResponse:
 
 def enable(language=None):
     """Uygulamayı sahte posta kutularına ve geçici bir veri klasörüne bağlar (gerçek dosyalara dokunmaz)."""
-    from . import accounts, gmail, protected, unsubscribe, web
+    from . import accounts, gmail, unsubscribe, web
 
     from .config import settings
     dataset = DATASETS[language or settings.language or 'en']  # LANGUAGE boşsa İngilizce
@@ -166,7 +166,6 @@ def enable(language=None):
         with open(os.path.join(accounts.ACCOUNTS_DIR, account, 'token.json'), 'w') as f:
             f.write('{}')
     accounts.get_service = lambda account: mailboxes[account]
-    protected.PROTECTED_PATH = os.path.join(data_dir, 'protected.json')
     gmail.quota.units_per_minute = 0  # sahte kutuda Gmail kotası yok
     # .example alan adları çözülmez; one-click kontrolü genel IP görsün, istek dışarı gitmesin.
     unsubscribe._resolve_host = lambda hostname: {'93.184.215.14'}

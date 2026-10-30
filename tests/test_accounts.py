@@ -286,3 +286,17 @@ def test_subscriptions_notifications_and_log_pages_show_only_the_chosen_account(
     assert client.get(f'/api/notifications/unread?account={OTHER}').get_json() == {'unread': 1}
     client.post('/api/notifications/read', json={'account': TEST_ACCOUNT})
     assert client.get(f'/api/notifications/unread?account={OTHER}').get_json() == {'unread': 1}
+
+
+def test_protected_lists_are_separate_per_account(client, two_accounts):
+    client.post('/api/protected', json={'account': TEST_ACCOUNT, 'value': '@bank.example', 'protected': True})
+
+    mine = client.get(f'/api/protected?account={TEST_ACCOUNT}').get_json()
+    other = client.get(f'/api/protected?account={OTHER}').get_json()
+    blocked = client.post('/api/delete', json={'account': TEST_ACCOUNT, 'senders': ['x@bank.example']})
+    allowed_check = client.post('/api/unsubscribe', json={'account': OTHER, 'senders': ['x@bank.example']})
+
+    assert mine['alanlar'] == ['@bank.example'] and other == {'adresler': [], 'alanlar': []}
+    assert blocked.status_code == 400 and 'x@bank.example' in blocked.get_json()['error']   # bu hesapta korunuyor
+    assert 'x@bank.example' not in (allowed_check.get_json() or {}).get('error', '')   # diğer hesapta korunmuyor (korunan hatası yok)
+    assert accounts.AccountPaths(TEST_ACCOUNT).protected.endswith(f'{TEST_ACCOUNT}/protected.json')

@@ -27,7 +27,7 @@
   halde kendin açacağın bir link ya da `mailto:` adresi verilir.
 - **Abonelikler sayfası, bildirimler, işlem günlüğü:** bkz. [Sayfalar](#sayfalar).
 - **Birden fazla Gmail hesabı:** başlıktan hesap ekle ve hesaplar arasında geçiş yap. Her hesabın gönderen listesi, taraması, geri alması,
-  abonelikleri, bildirimleri ve günlüğü ayrıdır; korunanlar listesi ortaktır. Onay pencereleri hesabı yazar, yanlış hesapta mail taşınmaz.
+  abonelikleri, bildirimleri ve günlüğü ayrıdır; korunanlar listesi de hesap başınadır. Onay pencereleri hesabı yazar, yanlış hesapta mail taşınmaz.
 - **İngilizce ve Türkçe arayüz:** dili sayfa başlığından seç; bkz. [Dil](configuration.md#dil).
 - **Önizleme ve kopyalama:** silmeden önce gönderenin son konularını gör; adresi kopyala.
 

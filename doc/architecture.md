@@ -14,7 +14,7 @@ Flask mail_cleaner/web.py ── Host / Origin checks ── Gmail API (google-a
    │                                     └─ batch messages.untrash (undo)
    └─ local files: accounts/<address>/{token.json, credentials.json, senders.csv, scan_ids.json,
                    scan_cache.json, last_action.json, subscriptions.json, notifications.json,
-                   activity_log.jsonl} · protected.json (shared)
+                   activity_log.jsonl, protected.json}
 ```
 
 Gmail's quota is per user, so every account has its own quota limiter and several accounts can be scanned at the same time.
@@ -39,7 +39,7 @@ mail_cleaner/           the application package
   ├─ unsubscribe.py     List-Unsubscribe, one-click       ├─ i18n.py     language selection and t() / tn()
   ├─ subscriptions.py   subscription list, notifications  ├─ migrate.py  renames files of older versions
   ├─ activity.py        per-account activity log          ├─ demo.py, demo_data.py  fake mailboxes (en, tr)
-  ├─ protected.py       protected senders (shared)        ├─ storage.py  readable JSON files
+  ├─ protected.py       protected senders (per account)  ├─ storage.py  readable JSON files
   ├─ state.py           scan/delete state and locks       └─ web.py      Flask app: pages, JSON API, error mapping
 ```
 

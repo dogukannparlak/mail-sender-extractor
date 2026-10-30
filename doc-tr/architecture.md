@@ -14,7 +14,7 @@ Flask mail_cleaner/web.py ── Host / Origin kontrolü ── Gmail API (googl
    │                                     └─ batch messages.untrash (geri al)
    └─ yerel dosyalar: accounts/<adres>/{token.json, credentials.json, senders.csv, scan_ids.json,
                      scan_cache.json, last_action.json, subscriptions.json, notifications.json,
-                     activity_log.jsonl} · protected.json (ortak)
+                     activity_log.jsonl, protected.json}
 ```
 
 Gmail kotası kullanıcı başınadır; bu yüzden her hesabın kendi kota sınırlayıcısı vardır ve birkaç hesap aynı anda taranabilir. İlk
@@ -39,7 +39,7 @@ mail_cleaner/           uygulama paketi
   ├─ unsubscribe.py     List-Unsubscribe, tek tıkla çıkış ├─ i18n.py     dil seçimi ve t() / tn()
   ├─ subscriptions.py   abonelik listesi, bildirimler     ├─ migrate.py  eski sürümlerin dosyalarını yeniden adlandırır
   ├─ activity.py        hesap başına işlem günlüğü        ├─ demo.py, demo_data.py  sahte posta kutuları (en, tr)
-  ├─ protected.py       korunan gönderenler (ortak)       ├─ storage.py  okunaklı JSON dosyaları
+  ├─ protected.py       korunan gönderenler (hesap başına)├─ storage.py  okunaklı JSON dosyaları
   ├─ state.py           tarama/taşıma durumu ve kilitler  └─ web.py      Flask uygulaması: sayfalar, JSON API, hata eşleme
 ```
 
