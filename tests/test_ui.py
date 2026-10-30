@@ -257,3 +257,32 @@ def test_add_account_dialog_offers_file_and_pending_accounts(ui_browser, server_
     assert page.get_by_role('button', name='yeni@ornek.example için giriş yap').is_visible()
     page.locator('#addAccountCancel').click()
     context.close()
+
+
+def test_addresses_inside_a_domain_group_have_their_own_actions(ui_page):
+    page = ui_page
+    page.select_option('#viewSelect', 'domain')
+    group = page.locator('.sender-item', has=page.locator('.sender-name', has_text='ornekmarket.example'))
+    group.get_by_role('button', name='Adresler').click()
+    member = group.locator('.member-item', has_text='kampanya@ornekmarket.example')
+
+    # Önizle: yalnız bu adresin mailleri
+    member.get_by_role('button', name='Önizle').click()
+    member.locator('.member-preview .preview-item').first.wait_for()
+    assert member.locator('.member-preview.open').count() == 1
+
+    # Seç: grup kutusu kısmi seçili görünür, seçim sayacı güncellenir
+    member.locator('.member-checkbox').check()
+    assert group.locator('.sender-row .sender-checkbox').evaluate('c => c.indeterminate')
+    assert '1 gönderen seçildi' in page.locator('#selectedInfo').inner_text()
+
+    # Abonelikten çık: sonuç bu adresin satırına yazılır
+    member.get_by_role('button', name='aboneliğinden çık').click()
+    page.locator('#confirmOk').click()
+    member = group.locator('.member-item', has_text='kampanya@ornekmarket.example')
+    member.locator('.unsub-result', has_text='Otomatik olarak çıkıldı').wait_for()
+
+    # Koru: yalnız bu adres korunur, grup açık kalır
+    member.get_by_role('button', name='Koru').click()
+    group.locator('.member-item', has_text='kampanya@ornekmarket.example').get_by_role('button', name='Korunuyor').wait_for()
+    assert 'kampanya@ornekmarket.example' in page.evaluate('state.protectedList.adresler')
