@@ -12,6 +12,7 @@ from googleapiclient.errors import HttpError
 
 from . import accounts, activity, mailbox, migrate, protected, state, subscriptions
 from .config import settings
+from .i18n import COOKIE_NAME, LANGUAGES, current_language, messages_for, t, tn, use_language
 from .gmail import quota
 from .mailbox import extract_email
 from .scanner import extract_senders
@@ -39,13 +40,24 @@ def _page_paths():
 
 
 @app.context_processor
-def inject_page_account():
-    """Menüde gösterilen hesap, hesap listesi ve o hesabın okunmamış bildirim sayısı."""
-    if request.endpoint not in ('subscriptions_page', 'notifications_page', 'log_page'):
-        return {}
-    paths = _page_paths()
-    return {'page_account': paths.account if paths else None, 'account_list': accounts.list_accounts(),
-            'unread_notifications': subscriptions.unread_count(paths) if paths else 0}
+def inject_context():
+    """Her şablonda: çeviri işlevi ve dil. Alt sayfalarda ayrıca: menüdeki hesap, hesap listesi, okunmamış bildirim sayısı."""
+    language = current_language()
+    context = {'t': t, 'tn': tn, 'lang': language, 'languages': LANGUAGES, 'messages': messages_for(language)}
+    if request.endpoint in ('subscriptions_page', 'notifications_page', 'log_page'):
+        paths = _page_paths()
+        context.update(page_account=paths.account if paths else None, account_list=accounts.list_accounts(),
+                       unread_notifications=subscriptions.unread_count(paths) if paths else 0)
+    return context
+
+
+@app.after_request
+def remember_language(response):
+    """?lang=tr gibi bir istekle seçilen dil çerezde kalır (bağlantı paylaşılınca da, sayfa yenilenince de)."""
+    chosen = request.args.get('lang')
+    if chosen in LANGUAGES:
+        response.set_cookie(COOKIE_NAME, chosen, max_age=365 * 24 * 3600, samesite='Lax')
+    return response
 
 
 @app.template_filter('link_label')
@@ -53,13 +65,13 @@ def link_label(url):
     """Uzun çıkış adresi yerine kısa etiket: https için alan adı, mailto için "e-posta · alan adı"."""
     if url.lower().startswith('mailto:'):
         address = url[7:].split('?')[0]
-        return 'E-posta ile çık · ' + (address.rsplit('@', 1)[-1] if '@' in address else address)
+        return t('link.email_unsubscribe') + ' · ' + (address.rsplit('@', 1)[-1] if '@' in address else address)
     return urlparse(url).hostname or url
 
 
 @app.template_filter('datetimeformat')
 def datetimeformat(timestamp):
-    return time.strftime('%d.%m.%Y %H:%M:%S', time.localtime(timestamp))
+    return time.strftime(t('date.format'), time.localtime(timestamp))
 
 
 ALLOWED_HOSTNAMES = {'localhost', '127.0.0.1', '[::1]'}
@@ -74,28 +86,28 @@ def reject_foreign_host():
     """
     hostname = re.sub(r':\d+$', '', request.host or '')
     if hostname not in ALLOWED_HOSTNAMES:
-        return jsonify({'error': 'Bu uygulamaya yalnız localhost üzerinden erişilebilir.'}), 403
+        return jsonify({'error': t('err.foreign_host')}), 403
     # Host doğru olsa da başka bir site no-cors POST atabilir (ör. /api/scan).
     if request.method == 'POST':
         if request.headers.get('Sec-Fetch-Site', 'same-origin') not in ('same-origin', 'none'):
-            return jsonify({'error': 'Başka sitelerden gelen istekler kabul edilmiyor.'}), 403
+            return jsonify({'error': t('err.foreign_site')}), 403
         origin = request.headers.get('Origin')
         if origin and urlparse(origin).hostname not in {h.strip('[]') for h in ALLOWED_HOSTNAMES}:
-            return jsonify({'error': 'Başka sitelerden gelen istekler kabul edilmiyor.'}), 403
+            return jsonify({'error': t('err.foreign_site')}), 403
 
 
 # --- Hata eşleme ve istek doğrulama ------------------------------------------
 
 def _http_error_message(e):
-    message = f'Gmail API hatası ({e.status_code}): {e.reason}'
+    message = t('err.gmail_http', status=e.status_code, reason=e.reason)
     if e.status_code == 403:
-        message += ' Yetki (scope) sorunu olabilir; hesabı çıkarıp yeniden eklemeyi dene.'
+        message += ' ' + t('err.gmail_scope_hint')
     return message
 
 
 # Google OAuth uygulaması "Testing" durumundaysa yenileme anahtarı birkaç günde sona erebilir.
-LOGIN_EXPIRED_MESSAGE = ('Google oturumunun süresi dolmuş ya da izni geri alınmış. '
-                         'Hesabı çıkarıp yeniden ekle.')
+def login_expired_message():
+    return t('err.login_expired')
 
 
 def handle_errors(f):
@@ -112,10 +124,10 @@ def handle_errors(f):
         except HttpError as e:
             return jsonify({'error': _http_error_message(e)}), 502
         except RefreshError:
-            return jsonify({'error': LOGIN_EXPIRED_MESSAGE}), 401
+            return jsonify({'error': login_expired_message()}), 401
         except Exception:
-            app.logger.exception('Beklenmeyen hata')
-            return jsonify({'error': 'Beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.'}), 500
+            app.logger.exception('Unexpected error')
+            return jsonify({'error': t('err.unexpected')}), 500
     return wrapper
 
 
@@ -133,14 +145,14 @@ def _current_paths(body=None):
 def _validated_senders(body):
     senders = (body or {}).get('senders')
     if not isinstance(senders, list):
-        raise ValueError("İstek gövdesinde 'senders' adında bir liste bekleniyor.")
+        raise ValueError(t('err.senders_list_required'))
     return senders
 
 
 def _validated_scope(body):
     scope = body.get('scope', 'inbox')
     if scope not in mailbox.SCOPE_QUERIES:
-        raise ValueError("'scope' yalnız 'inbox' ya da 'all' olabilir.")
+        raise ValueError(t('err.scope_invalid'))
     return scope
 
 
@@ -184,7 +196,12 @@ def _signin_snapshot():
         return dict(_signin)
 
 
-def _run_sign_in(client_config, expected):
+def _run_sign_in(client_config, expected, lang=None):
+    with use_language(lang or current_language()):
+        _sign_in(client_config, expected)
+
+
+def _sign_in(client_config, expected):
     def on_url(url):
         with _signin_lock:
             _signin['url'] = url
@@ -200,31 +217,30 @@ def _run_sign_in(client_config, expected):
         # Sık görülen: projede Gmail API açılmamış (403 accessNotConfigured).
         message = _http_error_message(e)
         if 'accessNotConfigured' in str(e.content) or 'has not been used' in str(e.content):
-            message = ('Bu hesabın Google Cloud projesinde Gmail API açık değil: APIs & Services › Library › '
-                       'Gmail API › Enable, birkaç dakika bekle ve tekrar dene.')
+            message = t('err.gmail_api_disabled')
         with _signin_lock:
             _signin.update(state='error', error=message)
     except Exception:
-        app.logger.exception('Google girişi hatası')
+        app.logger.exception('Google sign-in error')
         with _signin_lock:
-            _signin.update(state='error', error='Google girişi tamamlanamadı; ayrıntı sunucu konsolunda.')
+            _signin.update(state='error', error=t('err.signin_failed'))
 
 
 @app.route('/api/accounts/add', methods=['POST'])
 @handle_errors
 def api_accounts_add():
     if DEMO_MODE:
-        raise ValueError('Demo modunda hesap eklenmez; gerçek hesap için uygulamayı DEMO olmadan başlat.')
+        raise ValueError(t('err.demo_no_accounts'))
     body = _json_body()
     client = body.get('client')
     if client is not None and not isinstance(client, dict):
-        raise ValueError("'client' istemci dosyasının (client_secret_….json) içeriği olmalı.")
+        raise ValueError(t('err.client_must_be_object'))
     client_config, expected = accounts.sign_in_plan(client_config=client, pending=body.get('pending'))
     with _signin_lock:
         if _signin['state'] == 'waiting':
-            raise state.Busy('Başka bir Google girişi bekleniyor; önce onu bitir ya da 5 dakika bekle.')
+            raise state.Busy(t('err.signin_waiting'))
         _signin.update(state='waiting', url=None, account=None, expected=expected, error=None)
-    threading.Thread(target=_run_sign_in, args=(client_config, expected), daemon=True).start()
+    threading.Thread(target=_run_sign_in, args=(client_config, expected, current_language()), daemon=True).start()
     return jsonify(_signin_snapshot()), 202
 
 
@@ -260,7 +276,12 @@ def api_senders():
 
 # --- Tarama ------------------------------------------------------------------
 
-def _run_scan(service, paths, full=False):
+def _run_scan(service, paths, full=False, lang=None):
+    with use_language(lang or current_language()):
+        _scan(service, paths, full)
+
+
+def _scan(service, paths, full):
     account = paths.account
     try:
         scan_ids = {}
@@ -278,7 +299,7 @@ def _run_scan(service, paths, full=False):
         try:
             subscriptions.after_scan(paths, cache)
         except Exception:  # bildirim üretilemese de tarama sonucu kaydedilmiş kalsın
-            app.logger.exception('Tarama sonrası abonelik kontrolü hatası')
+            app.logger.exception('Post-scan subscription check failed')
         activity.record(paths, 'tarama', tam=full, mail=sum(len(v) for v in scan_ids.values()),
                         yeni_okunan=len(set(cache) - known), gonderen=len(senders),
                         sure_sn=round(time.time() - started))
@@ -286,12 +307,12 @@ def _run_scan(service, paths, full=False):
         state.update_scan(account, error=_http_error_message(e))
         activity.record(paths, 'tarama', tam=full, hata=_http_error_message(e))
     except RefreshError:
-        state.update_scan(account, error=LOGIN_EXPIRED_MESSAGE)
-        activity.record(paths, 'tarama', tam=full, hata=LOGIN_EXPIRED_MESSAGE)
+        state.update_scan(account, error=login_expired_message())
+        activity.record(paths, 'tarama', tam=full, hata=login_expired_message())
     except Exception:
-        app.logger.exception('Tarama hatası')
-        state.update_scan(account, error='Tarama sırasında beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.')
-        activity.record(paths, 'tarama', tam=full, hata='beklenmeyen hata')
+        app.logger.exception('Scan failed')
+        state.update_scan(account, error=t('err.scan_unexpected'))
+        activity.record(paths, 'tarama', tam=full, hata=t('err.unexpected_short'))
     finally:
         state.update_scan(account, running=False, finished_at=time.time())
 
@@ -306,7 +327,7 @@ def _start_scan(paths, full):
     except Exception:
         state.update_scan(paths.account, running=False)
         raise
-    threading.Thread(target=_run_scan, args=(service, paths, full), daemon=True).start()
+    threading.Thread(target=_run_scan, args=(service, paths, full, current_language()), daemon=True).start()
     return None, state.snapshot(paths.account)
 
 
@@ -331,8 +352,10 @@ def api_scan_all():
         try:
             error, scan = _start_scan(accounts.AccountPaths(name), full)
         except Exception as e:  # bir hesabın girişi bozuksa diğerleri yine taransın
-            error, scan = (LOGIN_EXPIRED_MESSAGE if isinstance(e, RefreshError) else str(e) or type(e).__name__), {}
-        results.append({'account': name, 'started': error is None, 'error': error})
+            error, scan = (login_expired_message() if isinstance(e, RefreshError) else str(e) or type(e).__name__), {}
+        # already_running: arayüz bu hesabı zaten süren tarama olarak izlesin (metne bakmadan)
+        results.append({'account': name, 'started': error is None, 'error': error,
+                        'already_running': error is not None and scan.get('running') is True})
     return jsonify({'accounts': results}), 202
 
 
@@ -474,7 +497,7 @@ def api_preview():
     paths = _current_paths(body)
     sender = body.get('sender')
     if not isinstance(sender, str) or not sender.strip():
-        raise ValueError("İstek gövdesinde 'sender' adında bir metin bekleniyor.")
+        raise ValueError(t('err.sender_text_required'))
     scope = _validated_scope(body)
     return jsonify(mailbox.preview(paths, sender, extract_email(sender), scope))
 
@@ -491,7 +514,7 @@ def api_unsubscribe():
     if confirm_one_click:
         for r in results:
             if r['status'] == 'done':
-                subscriptions.mark(paths, r['email'], True, how='otomatik')
+                subscriptions.mark(paths, r['email'], True, how='auto')
     activity.record(paths, 'abonelik', onayli=confirm_one_click,
                     sonuclar={r['email']: r['status'] for r in results})
     return jsonify({'results': results})
@@ -500,7 +523,7 @@ def api_unsubscribe():
 def main():
     if not settings.demo:
         for old, new in migrate.run():
-            print(f'Taşındı: {old} → {new}')
+            print(t('migrate.moved', old=old, new=new))
     if settings.demo:
         from . import demo
         demo.enable()

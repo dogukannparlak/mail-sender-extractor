@@ -1110,7 +1110,7 @@ class TestSubscriptions:
         paths = acct_paths()
         cache = {'m1': _entry('a@example.com', 1_000)}
         subscriptions.after_scan(paths, cache)
-        subscriptions.mark(paths, 'a@example.com', True, how='otomatik')
+        subscriptions.mark(paths, 'a@example.com', True, how='auto')
         since_ms = int(time.time() * 1000)
 
         assert subscriptions.after_scan(paths, cache) == []  # eski mail çıkıştan önce
@@ -1149,7 +1149,7 @@ class TestSubscriptions:
         client.post('/api/unsubscribe', json={'senders': ['a@example.com'], 'confirm_one_click': True})
 
         rows = subscriptions.rows(acct_paths(), web.read_json(acct_paths().scan_cache, {}))
-        assert rows[0]['cikis']['yontem'] == 'otomatik'
+        assert rows[0]['cikis']['yontem'] == 'auto'
         page = client.get('/subscriptions').get_data(as_text=True)
         assert 'https://a.example/u' in page and 'Çıkıldı' in page
         assert client.get('/notifications').status_code == 200
@@ -1160,7 +1160,7 @@ class TestSubscriptions:
         web.write_json(paths.scan_cache, {'m1': _entry('a@example.com', 1_000)})
 
         client.post('/api/subscriptions/mark', json={'sender': 'a@example.com', 'unsubscribed': True})
-        assert subscriptions.rows(paths, web.read_json(paths.scan_cache, {}))[0]['cikis']['yontem'] == 'elle'
+        assert subscriptions.rows(paths, web.read_json(paths.scan_cache, {}))[0]['cikis']['yontem'] == 'manual'
         client.post('/api/subscriptions/mark', json={'sender': 'a@example.com', 'unsubscribed': False})
         assert subscriptions.rows(paths, web.read_json(paths.scan_cache, {}))[0]['cikis'] is None
 
@@ -1189,7 +1189,8 @@ class TestScanAll:
         status = client.get('/api/scan/status/all').get_json()
 
         assert resp.status_code == 202
-        assert resp.get_json() == {'accounts': [{'account': TEST_ACCOUNT, 'started': True, 'error': None}]}
+        assert resp.get_json() == {'accounts': [{'account': TEST_ACCOUNT, 'started': True, 'error': None,
+                                                  'already_running': False}]}
         assert [(a['account'], a['running'], a['error']) for a in status['accounts']] == [(TEST_ACCOUNT, False, None)]
 
     def test_one_broken_account_does_not_stop_the_others(self, client, monkeypatch, inline_scan):
@@ -1209,7 +1210,8 @@ class TestScanAll:
 
         by_account = {a['account']: a for a in body['accounts']}
         assert by_account[TEST_ACCOUNT]['started'] is True
-        assert by_account['is@example.com'] == {'account': 'is@example.com', 'started': False, 'error': 'token bozuk'}
+        assert by_account['is@example.com'] == {'account': 'is@example.com', 'started': False, 'error': 'token bozuk',
+                                                'already_running': False}
         assert state.snapshot('is@example.com')['running'] is False
 
 

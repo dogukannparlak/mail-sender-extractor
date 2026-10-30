@@ -1,7 +1,9 @@
-const CATEGORY_LABELS = { bulten: 'Bülten', promosyon: 'Promosyon', bildirim: 'Bildirim', kisisel: 'Kişisel', spam: 'Spam' };
+// Kategori değerleri (bulten, promosyon, ...) verinin parçası; görünen adı çeviriden gelir.
+const CATEGORY_LABELS = Object.fromEntries(
+  ['bulten', 'promosyon', 'bildirim', 'kisisel', 'spam'].map(category => [category, t('category.' + category)]));
 const DIALOG_LIST_LIMIT = 8;
-const DELETE_LABEL = "Seçilenleri Çöp Kutusu'na taşı";
-const UNSUB_LABEL = 'Seçilenlerin aboneliğinden çık';
+const DELETE_LABEL = t('action.trash_selected');
+const UNSUB_LABEL = t('action.unsubscribe_selected');
 // Abonelikten çıkış yalnız çıkış bağlantısı (List-Unsubscribe) okunabilen göndericilerde sunulur.
 const canUnsubscribe = g => g.baglanti === true;
 

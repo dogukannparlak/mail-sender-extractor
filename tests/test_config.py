@@ -58,7 +58,7 @@ def test_real_environment_wins_over_env_file(tmp_path):
 ])
 def test_invalid_values_explain_what_is_wrong(tmp_path, text, word):
     with pytest.raises(config.ConfigError, match=word):
-        config.load_settings(write_env(tmp_path, text), environ={})
+        config.load_settings(write_env(tmp_path, text), environ={'LANGUAGE': 'tr'})
 
 
 def test_extra_account_with_external_token_is_listed_and_cannot_be_removed(tmp_path, monkeypatch):
@@ -103,4 +103,11 @@ EXTRA_ACCOUNTS=ek@gmail.example=/tmp/ek.json
 
 def test_bad_numbered_account_line_names_the_problem(tmp_path):
     with pytest.raises(config.ConfigError, match='geçersiz adres'):
-        config.load_settings(write_env(tmp_path, 'ACCOUNT_1=adres-yok=tokenlar/x.json'), environ={})
+        config.load_settings(write_env(tmp_path, 'ACCOUNT_1=adres-yok=tokenlar/x.json'), environ={'LANGUAGE': 'tr'})
+
+
+def test_language_setting_is_validated_and_defaults_to_the_browser_language():
+    assert config.load_settings('', environ={}).language == ''
+    assert config.load_settings('', environ={'LANGUAGE': 'EN'}).language == 'en'
+    with pytest.raises(config.ConfigError, match='LANGUAGE'):
+        config.load_settings('', environ={'LANGUAGE': 'de'})

@@ -1,11 +1,11 @@
 // --- Abonelikten çıkma -------------------------------------------------------
 
 function describeUnsubResult(r) {
-  if (r.status === 'done') return '✅ Otomatik olarak çıkıldı';
-  if (r.status === 'manual_link') return '🔗 Çıkış sayfası var';
-  if (r.status === 'manual_mailto') return '✉️ Çıkış maili adresi var';
-  if (r.status === 'not_found') return 'Bu gönderenden mail bulunamadı';
-  return 'Abonelik linki yok';
+  if (r.status === 'done') return t('unsub.result_done');
+  if (r.status === 'manual_link') return t('unsub.result_link');
+  if (r.status === 'manual_mailto') return t('unsub.result_mailto');
+  if (r.status === 'not_found') return t('unsub.result_not_found');
+  return t('unsub.result_none');
 }
 
 // Link, fetch'ten sonra window.open ile açılırsa popup engelleyicisine takılır;
@@ -17,7 +17,7 @@ function showUnsubResult(resultEl, r) {
     return;
   }
   resultEl.replaceChildren(el('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' },
-    r.status === 'manual_link' ? '🔗 Çıkış sayfasını aç' : '✉️ Çıkış maili gönder'));
+    r.status === 'manual_link' ? t('unsub.open_page') : t('unsub.send_mail')));
 }
 
 // Önce onaysız sorulur: sunucu hiçbir yere istek atmadan hangi gönderenlerde tek tıkla
@@ -29,11 +29,11 @@ async function unsubscribeWithConfirmation(senders) {
   if (!oneClick.length) return first;
 
   const ok = await confirmDialog({
-    title: 'Tek tıkla abonelikten çıkılsın mı?',
-    lines: [`Hesap: ${state.account}`,
-            `${oneClick.length} gönderenden otomatik olarak çıkılacak. Bu işlem geri alınamaz.`],
+    title: t('unsub.confirm_title'),
+    lines: [t('dialog.account', { account: state.account }),
+            t('unsub.confirm_body', { senders: tn('unit.sender', oneClick.length) })],
     items: oneClick.map(r => r.email),
-    confirmLabel: 'Abonelikten çık',
+    confirmLabel: t('row.unsubscribe'),
   });
   if (!ok) return first.map(r => r.status === 'one_click_available' ? { ...r, status: 'manual_link' } : r);
 
@@ -52,15 +52,15 @@ function showUnsubResultsInRows(results) {
 
 async function unsubscribeRow(sender, resultEl, btn) {
   btn.disabled = true;
-  btn.textContent = 'Bakılıyor…';
+  btn.textContent = t('unsub.checking');
   try {
     const [result] = await unsubscribeWithConfirmation([sender]);
     showUnsubResult(resultEl, result);
   } catch (err) {
-    resultEl.textContent = `Hata: ${err.message}`;
+    resultEl.textContent = t('common.error_prefix', { message: err.message });
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Abonelikten çık';
+    btn.textContent = t('row.unsubscribe');
   }
 }
 
@@ -69,19 +69,19 @@ async function unsubscribeSelected() {
   const senders = picked.filter(canUnsubscribe).map(g => g.gonderen);
   const skipped = picked.length - senders.length;  // abonelik bağlantısı olmayanlar atlanır
   setBusy(true);
-  $('unsubBtn').textContent = 'Bakılıyor…';
-  notify(`${senders.length} gönderen için abonelik bilgisi kontrol ediliyor…` +
-    (skipped ? ` (${skipped} gönderende abonelik bağlantısı yok, atlandı)` : ''));
+  $('unsubBtn').textContent = t('unsub.checking');
+  notify(t('unsub.checking_senders', { senders: tn('unit.sender', senders.length) }) +
+    (skipped ? ' ' + t('unsub.skipped_no_link', { senders: tn('unit.sender', skipped) }) : ''));
   try {
     const results = await unsubscribeWithConfirmation(senders);
     showUnsubResultsInRows(results);
     const done = results.filter(r => r.status === 'done').length;
     const links = results.filter(r => r.status === 'manual_link' || r.status === 'manual_mailto').length;
-    notify(`${done} gönderenden otomatik çıkıldı` +
-      (links ? `; ${links} gönderenin çıkış linki kendi satırında.` : '.'),
+    notify(t('unsub.summary_done', { senders: tn('unit.sender', done) }) +
+      (links ? t('unsub.summary_links', { senders: tn('unit.sender', links) }) : '.'),
       { details: results.map(r => `${r.email}: ${describeUnsubResult(r)}`) });
   } catch (err) {
-    notifyError('Abonelik işlemi yapılamadı', err);
+    notifyError(t('unsub.failed'), err);
   } finally {
     $('unsubBtn').textContent = UNSUB_LABEL;
     setBusy(false);

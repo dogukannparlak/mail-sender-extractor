@@ -8,7 +8,7 @@ $('unsubBtn').addEventListener('click', unsubscribeSelected);
 $('undoBtn').addEventListener('click', undoLastDelete);
 
 $('searchInput').addEventListener('input', e => {
-  state.searchText = e.target.value.trim().toLocaleLowerCase('tr');
+  state.searchText = e.target.value.trim().toLocaleLowerCase(window.LANG);
   if (state.data) render();
 });
 $('linkFilter').addEventListener('change', e => {
@@ -61,7 +61,7 @@ $('clientFileInput').addEventListener('change', async e => {
   try {
     await signIn({ client: await readClientFile(file) });
   } catch (err) {
-    notifyError('Hesap eklenemedi', err);
+    notifyError(t('account.add_failed'), err);
   }
 });
 $('useSharedClientBtn').addEventListener('click', () => {
@@ -70,4 +70,4 @@ $('useSharedClientBtn').addEventListener('click', () => {
 });
 $('removeAccountBtn').addEventListener('click', removeAccount);
 
-loadAccounts().catch(err => notifyError('Hesaplar yüklenemedi', err));
+loadAccounts().catch(err => notifyError(t('account.load_failed'), err));

@@ -8,6 +8,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from .i18n import t
 
 # app.py'nin silme özelliği 'modify' izni gerektirir; extract_senders.py salt
 # okunur çağrılar yapsa da aynı token.json paylaşıldığından ortak scope kullanılır.
@@ -54,12 +55,12 @@ class _ReportingFlow(InstalledAppFlow):
 def validate_client_config(config):
     """Google Cloud'dan indirilen istemci dosyası (client_secret_….json) Masaüstü uygulaması türünde olmalı."""
     if not isinstance(config, dict):
-        raise ValueError('İstemci dosyası okunamadı: JSON nesnesi bekleniyor.')
+        raise ValueError(t('err.client_not_object'))
     if 'web' in config and 'installed' not in config:
-        raise ValueError('Bu istemci "Web application" türünde; Google Cloud\'da "Desktop app" türünde bir istemci oluştur.')
+        raise ValueError(t('err.client_is_web'))
     installed = config.get('installed')
     if not isinstance(installed, dict) or not installed.get('client_id') or not installed.get('client_secret'):
-        raise ValueError('Bu bir Google OAuth istemci dosyası değil (client_secret_….json bekleniyor).')
+        raise ValueError(t('err.client_not_oauth'))
     return {'installed': installed}
 
 
@@ -78,11 +79,10 @@ def add_account(accounts_dir, client_config, expected_email=None, on_url=None):
             creds = flow.run_local_server(port=0, prompt='select_account', timeout_seconds=SIGN_IN_TIMEOUT_SECONDS)
         except AttributeError:
             # Süre içinde Google'dan dönüş olmadı (sayfa açılmadı ya da kapatıldı).
-            raise ValueError('Google girişi 5 dakika içinde tamamlanmadı; tekrar dene.') from None
+            raise ValueError(t('err.signin_timeout')) from None
         email = account_email(build('gmail', 'v1', credentials=creds))
         if expected_email and email != expected_email.lower():
-            raise WrongAccount(f'Google\'da {email} ile giriş yapıldı ama bu klasör {expected_email} için. '
-                               f'Giriş penceresinde {expected_email} hesabını seç.')
+            raise WrongAccount(t('err.wrong_account', email=email, expected=expected_email))
         folder = os.path.join(accounts_dir, email)
         os.makedirs(folder, mode=0o700, exist_ok=True)
         _write_private(os.path.join(folder, 'credentials.json'), json.dumps(client_config, indent=2) + '\n')
@@ -106,10 +106,7 @@ def _write_private(path, text):
 def _sign_in(**kwargs):
     """Tek hesaplı eski düzen için: kökteki credentials.json ile giriş."""
     if not os.path.exists(CREDENTIALS_PATH):
-        raise FileNotFoundError(
-            f"credentials.json bulunamadı ({CREDENTIALS_PATH}). "
-            "README.md'deki kurulum adımlarına bakın."
-        )
+        raise FileNotFoundError(t('err.credentials_missing', path=CREDENTIALS_PATH))
     flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
     return flow.run_local_server(port=0, **kwargs)
 

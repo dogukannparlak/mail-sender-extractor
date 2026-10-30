@@ -14,7 +14,7 @@ function setupList({ rows, search, selects = [], checks = [], sort, count, noMat
       row.hidden = !ok;
       if (ok) shown++;
     }
-    count.textContent = `${shown} / ${rows.length} gösteriliyor`;
+    count.textContent = t('list.showing', { shown, total: rows.length });
     noMatch.hidden = shown > 0;
   };
   const reorder = () => {

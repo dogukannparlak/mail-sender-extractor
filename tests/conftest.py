@@ -4,6 +4,8 @@ from pathlib import Path
 
 # Testler kullanıcının .env dosyasından etkilenmesin (ör. EXTRA_ACCOUNTS, ACCOUNTS_DIR).
 os.environ['MAIL_CLEANER_ENV_FILE'] = ''
+# Testlerin çoğu Türkçe metinleri bekler; dil testleri dili kendisi seçer.
+os.environ['LANGUAGE'] = 'tr'
 for _name in ('PORT', 'DEMO', 'FLASK_DEBUG', 'CREDENTIALS_PATH', 'ACCOUNTS_DIR', 'GMAIL_QUOTA_PER_MINUTE',
               'DEFAULT_SCOPE', 'EXTRA_ACCOUNTS'):
     os.environ.pop(_name, None)

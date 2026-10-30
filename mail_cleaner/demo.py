@@ -9,6 +9,7 @@ import random
 import re
 import tempfile
 import time
+from .i18n import t
 
 # (görünen ad, adres, mail sayısı, Gmail sekmesi, List-Unsubscribe var mı, one-click mi)
 DEMO_SENDERS = [
@@ -206,5 +207,5 @@ def enable():
     unsubscribe.requests.post = lambda *args, **kwargs: _DemoResponse()
     web.DEMO_MODE = True
     total = sum(len(m.store) for m in mailboxes.values())
-    print(f'DEMO modu: {len(mailboxes)} sahte hesap ({total} mail), veriler {data_dir}')
+    print(t('demo.banner', accounts=len(mailboxes), messages=total, folder=data_dir))
     return mailboxes

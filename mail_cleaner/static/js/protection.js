@@ -7,10 +7,10 @@ async function toggleProtected(value, makeProtected, btn) {
   try {
     state.protectedList = await api('/api/protected', { value, protected: makeProtected });
     setData(state.data);
-    notify(makeProtected ? `${value} korunuyor: seçilemez, taşınamaz.` : `${value} artık korunmuyor.`);
+    notify(t(makeProtected ? 'protect.on' : 'protect.off', { value }));
   } catch (err) {
     btn.removeAttribute('aria-disabled');
-    notifyError('Koruma değiştirilemedi', err);
+    notifyError(t('protect.failed'), err);
   }
 }
 

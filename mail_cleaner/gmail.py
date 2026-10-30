@@ -6,6 +6,7 @@ from collections import deque
 from email.utils import parseaddr
 
 from googleapiclient.errors import HttpError
+from .i18n import t
 
 # Gmail arama sözdizimine sızabilecek karakterler (boşluk, tırnak, parantez, ':') adreste olamaz.
 EMAIL_RE = re.compile(r'^[^@\s"()<>,;:\\\[\]]+@[\w-]+(\.[\w-]+)+$')
@@ -171,7 +172,7 @@ def run_batched(service, ids, make_request, sleep=time.sleep, method='get'):
         if retry:
             attempt = 1 if progressed else attempt + 1
             if attempt >= MAX_ATTEMPTS:
-                raise RuntimeError(f'{len(retry)} mail Gmail hız sınırı yüzünden {MAX_ATTEMPTS} denemede alınamadı.')
+                raise RuntimeError(t('err.rate_limited', count=len(retry), attempts=MAX_ATTEMPTS))
             sleep(2 ** (attempt - 1))
         pending = list(dict.fromkeys(retry))
 

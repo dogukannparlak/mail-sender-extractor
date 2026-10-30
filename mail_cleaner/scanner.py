@@ -5,6 +5,7 @@ import os
 import time
 
 from .gmail import fetch_metadata, gmail_execute, message_headers, sender_key
+from .i18n import t
 
 CSV_HEADER = ['Address', 'Name', 'Mail Count', 'Category', 'Unsubscribe']
 # Eski sürümlerin Türkçe başlığı hâlâ okunur; ham From başlığı + sayı biçimi (legacy) de.
@@ -142,7 +143,7 @@ def print_progress(processed, total, bar_length=30):
         bar = '#' * filled + '-' * (bar_length - filled)
         print(f'\r[{bar}] {processed}/{total} (%{ratio * 100:.1f})', end='', flush=True)
     else:
-        print(f'\rTaranan mail sayısı: {processed}', end='', flush=True)
+        print('\r' + t('cli.scanned_count', count=processed), end='', flush=True)
 
 
 # Görünen adı gönderen yazar; "=HYPERLINK(...)" gibi bir ad CSV Excel'de açılınca formül olur.
@@ -168,7 +169,7 @@ def save_to_csv(senders, filename='senders.csv'):
             writer.writerow([_csv_safe(address), _csv_safe(info['ad']), info['mail_sayisi'],
                              info.get('kategori', ''), abonelik])
     os.replace(tmp, filename)
-    print(f"{len(senders)} benzersiz gönderen '{filename}' dosyasına yazıldı.")
+    print(t('cli.csv_written', count=len(senders), file=filename))
 
 
 def load_csv(filename):

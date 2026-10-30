@@ -5,7 +5,7 @@ function passesFilters(g) {
   if (state.linkFilter === 'with' && !g.baglanti) return false;
   if (state.linkFilter === 'without' && g.baglanti) return false;
   if (state.searchText) {
-    const haystack = `${g.ad} ${g.gonderen}`.toLocaleLowerCase('tr');
+    const haystack = `${g.ad} ${g.gonderen}`.toLocaleLowerCase(window.LANG);
     if (!haystack.includes(state.searchText)) return false;
   }
   return true;
@@ -27,7 +27,7 @@ function buildRows() {
     groups.get(domain).push(g);
   });
   return [...groups].map(([domain, members]) => ({
-    key: '@' + domain, label: domain, sub: `${members.length} adres`,
+    key: '@' + domain, label: domain, sub: tn('unit.address', members.length),
     count: members.reduce((sum, g) => sum + g.mail_sayisi, 0), members, single: false,
   }));
 }
@@ -35,8 +35,8 @@ function buildRows() {
 function sortedRows() {
   const rows = buildRows();
   rows.sort((a, b) => {
-    if (state.sortMode === 'name_asc') return a.label.localeCompare(b.label, 'tr');
-    if (state.sortMode === 'name_desc') return b.label.localeCompare(a.label, 'tr');
+    if (state.sortMode === 'name_asc') return a.label.localeCompare(b.label, window.LANG);
+    if (state.sortMode === 'name_desc') return b.label.localeCompare(a.label, window.LANG);
     if (state.sortMode === 'members_desc' || state.sortMode === 'members_asc') {
       const byMembers = a.members.length - b.members.length || a.count - b.count;
       return state.sortMode === 'members_asc' ? byMembers : -byMembers;
@@ -63,8 +63,8 @@ async function load() {
     setData(senders);
   } catch (err) {
     $('senders').replaceChildren(el('div', { class: 'empty-state' },
-      el('p', {}, `Gönderenler yüklenemedi: ${err.message}`),
-      el('button', { type: 'button', class: 'secondary-btn', onclick: load }, 'Yeniden dene'),
+      el('p', {}, t('list.load_failed', { message: err.message })),
+      el('button', { type: 'button', class: 'secondary-btn', onclick: load }, t('common.retry')),
     ));
   }
 }
@@ -85,7 +85,7 @@ function restoreFocus(focus) {
 function render() {
   const focus = rememberFocus();
   const data = state.data;
-  $('grandTotal').textContent = `Toplam ${data.toplam_mail_sayisi} mail, ${data.gonderenler.length} gönderen`;
+  $('grandTotal').textContent = t('list.total', { mails: tn('unit.mail', data.toplam_mail_sayisi), senders: tn('unit.sender', data.gonderenler.length) });
   // Kategori ve abonelik bilgisi yalnız yeni taramada toplanır; eski kayıtta filtreleri gösterme.
   $('categoryFilterWrap').hidden = !data.gonderenler.some(g => g.kategori);
   $('unsubFilterWrap').hidden = !data.gonderenler.some(g => 'baglanti' in g);
@@ -93,7 +93,7 @@ function render() {
   const container = $('senders');
   if (!data.gonderenler.length) {
     container.replaceChildren(el('p', { class: 'empty-state' },
-      'Henüz veri yok. Yukarıdaki "Gelen Kutusunu Tara" butonuyla başla.'));
+      t('list.empty')));
     updateSelection();
     return;
   }
@@ -101,8 +101,8 @@ function render() {
   const rows = sortedRows();
   if (!rows.length) {
     container.replaceChildren(el('div', { class: 'empty-state' },
-      el('p', {}, 'Filtreye uyan gönderen yok.'),
-      el('button', { type: 'button', class: 'secondary-btn', onclick: clearFilters }, 'Filtreleri temizle'),
+      el('p', {}, t('list.no_match')),
+      el('button', { type: 'button', class: 'secondary-btn', onclick: clearFilters }, t('list.clear_filters')),
     ));
     updateSelection();
     return;
@@ -125,8 +125,8 @@ function createRow(rowData) {
 
   const checkbox = el('input', {
     type: 'checkbox', class: 'sender-checkbox', 'data-role': 'select',
-    'aria-label': `${rowData.label} seç`, disabled: allLocked,
-    title: allLocked ? 'Korunan gönderen: seçilemez' : null,
+    'aria-label': t('row.select_aria', { name: rowData.label }), disabled: allLocked,
+    title: allLocked ? t('row.locked_title') : null,
     onchange: () => {
       selectable.forEach(m => checkbox.checked ? state.selected.add(m.gonderen) : state.selected.delete(m.gonderen));
       updateSelection();  // açık adres listesindeki kutuları da eşitler
@@ -138,34 +138,34 @@ function createRow(rowData) {
   const previewBtn = el('button', {
     type: 'button', class: 'small-btn', 'data-role': 'preview',
     'aria-expanded': 'false', 'aria-controls': panel.id,
-    'aria-label': single ? `${rowData.label}: son mailleri önizle` : `${rowData.label}: adresleri göster`,
+    'aria-label': t(single ? 'row.preview_aria' : 'row.show_addresses_aria', { name: rowData.label }),
     onclick: () => togglePanel(rowData, panel, previewBtn),
-  }, single ? 'Önizle' : 'Adresler');
+  }, single ? t('row.preview') : t('row.addresses'));
 
   const copyText = single ? g.gonderen : domainOf(g.gonderen);
   const copyBtn = el('button', {
     type: 'button', class: 'small-btn copy-btn', 'data-role': 'copy',
-    'aria-label': `${copyText} kopyala`, onclick: () => copyToClipboard(copyText, copyBtn),
-  }, 'Kopyala');
+    'aria-label': t('row.copy_aria', { text: copyText }), onclick: () => copyToClipboard(copyText, copyBtn),
+  }, t('row.copy'));
 
   const lockBtn = el('button', {
     type: 'button', class: 'small-btn lock-btn', 'data-role': 'lock', 'aria-pressed': String(locked),
-    title: locked ? 'Korumayı kaldır' : 'Koru: seçilemez, taşınamaz, abonelikten çıkılamaz',
+    title: locked ? t('row.protect_remove_title') : t('row.protect_title'),
     onclick: () => toggleProtected(lockValue, !locked, lockBtn),
-  }, el('span', { 'aria-hidden': 'true' }, locked ? '🔒 ' : '🔓 '), locked ? 'Korunuyor' : 'Koru');
+  }, el('span', { 'aria-hidden': 'true' }, locked ? '🔒 ' : '🔓 '), locked ? t('row.protected') : t('row.protect'));
 
   const unsubResult = el('span', { class: 'unsub-result', 'data-result-for': single ? g.gonderen : null });
   const unsubBtn = single && canUnsubscribe(g) && el('button', {
     type: 'button', class: 'small-btn danger unsub-btn', 'data-role': 'unsub', disabled: allLocked,
-    'aria-label': `${rowData.label} aboneliğinden çık`,
+    'aria-label': t('row.unsubscribe_aria', { name: rowData.label }),
     onclick: () => unsubscribeRow(g.gonderen, unsubResult, unsubBtn),
-  }, 'Abonelikten çık');
+  }, t('row.unsubscribe'));
 
   const badge = single && CATEGORY_LABELS[g.kategori]
     ? el('span', { class: `badge badge-${g.kategori}` }, CATEGORY_LABELS[g.kategori]) : null;
   const protectedCount = members.length - selectable.length;
   const protectedBadge = protectedCount
-    ? el('span', { class: 'badge badge-protected' }, single ? 'Korunuyor' : `${protectedCount} korunuyor`) : null;
+    ? el('span', { class: 'badge badge-protected' }, single ? t('row.protected') : t('row.protected_count', { count: protectedCount })) : null;
 
   const row = el('div', { class: 'sender-row' + (allLocked ? ' protected' : ''), 'data-key': rowData.key },
     checkbox,
@@ -173,7 +173,7 @@ function createRow(rowData) {
       el('span', { class: 'sender-name' }, rowData.label, badge, protectedBadge),
       rowData.sub ? el('span', { class: 'sender-email' }, rowData.sub) : null,
     ),
-    el('span', { class: 'sender-count', 'aria-label': `${rowData.count} mail` }, rowData.count),
+    el('span', { class: 'sender-count', 'aria-label': tn('unit.mail', rowData.count) }, rowData.count),
     el('div', { class: 'row-actions' }, previewBtn, copyBtn, lockBtn, unsubBtn, unsubResult),
   );
   syncRowCheckbox(checkbox);

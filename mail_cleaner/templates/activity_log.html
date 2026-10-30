@@ -1,60 +1,59 @@
 {% extends 'base.html' %}
-{% block title %}İşlem günlüğü · Mail Temizleyici{% endblock %}
+{% block title %}{{ t('nav.activity_log') }} · {{ t('app.name') }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
 {% endblock %}
 {% block body %}
 <main>
   {% set current_page = 'activity-log' %}{% include '_nav.html' %}
-  <h1>İşlem günlüğü{% if page_account %} · {{ page_account }}{% endif %}</h1>
-  <p class="hint">Son {{ events|length }} işlem, en yenisi üstte. Dosya: <code>accounts/{{ page_account }}/activity_log.jsonl</code></p>
+  <h1>{{ t('nav.activity_log') }}{% if page_account %} · {{ page_account }}{% endif %}</h1>
+  <p class="hint">{{ tn('log.hint', events | length) }} {{ t('log.file') }} <code>accounts/{{ page_account }}/activity_log.jsonl</code></p>
   {% if events %}
   <div class="chips">
-    <span class="chip">{{ events | length }} işlem</span>
-    {% set hatali = events | selectattr('hata') | list | length %}
-    {% if hatali %}<span class="chip warn">{{ hatali }} hatalı</span>{% endif %}
+    <span class="chip">{{ tn('log.chip_total', events | length) }}</span>
+    {% set failed = events | selectattr('hata') | list | length %}
+    {% if failed %}<span class="chip warn">{{ tn('log.chip_failed', failed) }}</span>{% endif %}
   </div>
   <div class="toolbar">
-    <input type="search" id="q" placeholder="Adres ya da metin ara…" aria-label="Günlükte ara" autocomplete="off">
-    <label>İşlem
-      <select id="fTur"><option value="">Hepsi</option><option value="tarama">Tarama</option>
-        <option value="silme">Çöp Kutusu'na taşıma</option><option value="geri_alma">Geri alma</option>
-        <option value="abonelik">Abonelikten çıkma</option><option value="hesap">Hesap</option></select></label>
-    <label><input type="checkbox" id="fHata"> Yalnız hatalılar</label>
-    <label>Sırala
-      <select id="sort"><option value="zaman:desc">En yeni</option><option value="zaman:asc">En eski</option></select></label>
+    <input type="search" id="q" placeholder="{{ t('log.search_placeholder') }}" aria-label="{{ t('log.search_label') }}" autocomplete="off">
+    <label>{{ t('log.type') }}
+      <select id="fType"><option value="">{{ t('filter.all') }}</option><option value="tarama">{{ t('log.type_scan') }}</option>
+        <option value="silme">{{ t('log.type_trash') }}</option><option value="geri_alma">{{ t('log.type_undo') }}</option>
+        <option value="abonelik">{{ t('log.type_unsubscribe') }}</option><option value="hesap">{{ t('log.type_account') }}</option></select></label>
+    <label><input type="checkbox" id="fError"> {{ t('log.errors_only') }}</label>
+    <label>{{ t('sort.label_short') }}
+      <select id="sort"><option value="time:desc">{{ t('sort.newest') }}</option><option value="time:asc">{{ t('sort.oldest') }}</option></select></label>
     <span class="result-count" id="count" aria-live="polite"></span>
   </div>
   <div class="table-wrap">
   <table>
-    <thead><tr><th>Zaman</th><th>İşlem</th><th>Ayrıntı</th></tr></thead>
+    <thead><tr><th>{{ t('common.time') }}</th><th>{{ t('log.col_action') }}</th><th>{{ t('log.col_details') }}</th></tr></thead>
     <tbody>
-    {% set durumlar = {'done': 'çıkıldı', 'one_click_available': 'tek tıkla çıkış mümkün (henüz gönderilmedi)', 'manual_link': 'çıkış sayfası var', 'manual_mailto': 'çıkış maili adresi var', 'not_found': 'mail bulunamadı', 'none': 'abonelik bağlantısı yok'} %}
     {% for e in events %}
-    <tr data-tur="{{ 'hesap' if e.islem.startswith('hesap') else e.islem }}" data-hata="{{ '1' if e.hata else '0' }}" data-sort-zaman="{{ e.zaman | int }}">
+    <tr data-type="{{ 'hesap' if e.islem.startswith('hesap') else e.islem }}" data-error="{{ '1' if e.hata else '0' }}" data-sort-time="{{ e.zaman | int }}">
       <td class="time">{{ e.zaman | int | datetimeformat }}</td>
       {% if e.islem == 'tarama' %}
-        <td class="tag">{{ 'Tam tarama' if e.tam else 'Tarama' }}</td>
-        <td>{% if e.hata %}<span class="err">Hata: {{ e.hata }}</span>
-            {% else %}{{ e.mail }} mail, {{ e.gonderen }} gönderen · {{ e.yeni_okunan }} yeni mail okundu · {{ e.sure_sn }} sn{% endif %}</td>
+        <td class="tag">{{ t('log.full_scan') if e.tam else t('log.scan') }}</td>
+        <td>{% if e.hata %}<span class="err">{{ t('common.error_prefix', message=e.hata) }}</span>
+            {% else %}{{ t('log.scan_details', mails=tn('unit.mail', e.mail), senders=tn('unit.sender', e.gonderen), new=tn('log.new_read', e.yeni_okunan), seconds=e.sure_sn) }}{% endif %}</td>
       {% elif e.islem == 'silme' %}
-        <td class="tag">Çöp Kutusu'na taşıma</td>
-        <td>Kapsam: {{ 'tüm mailler' if e.kapsam == 'all' else 'gelen kutusu' }}
-          {% if e.hata %}· <span class="err">Hata: {{ e.hata }}</span>{% else %}· toplam {{ e.toplam }} mail{% endif %}
+        <td class="tag">{{ t('log.type_trash') }}</td>
+        <td>{{ t('log.scope') }} {{ t('log.scope_all') if e.kapsam == 'all' else t('log.scope_inbox') }}
+          {% if e.hata %}· <span class="err">{{ t('common.error_prefix', message=e.hata) }}</span>{% else %}· {{ t('log.total', mails=tn('unit.mail', e.toplam)) }}{% endif %}
           <ul>
-          {% if e.gonderenler is mapping %}{% for addr, n in e.gonderenler.items() %}<li>{{ addr }}: {{ n }} mail</li>{% endfor %}
+          {% if e.gonderenler is mapping %}{% for addr, n in e.gonderenler.items() %}<li>{{ addr }}: {{ tn('unit.mail', n) }}</li>{% endfor %}
           {% else %}{% for addr in e.gonderenler %}<li>{{ addr }}</li>{% endfor %}{% endif %}
           </ul></td>
       {% elif e.islem == 'geri_alma' %}
-        <td class="tag">Geri alma</td>
-        <td>{{ e.geri_alinan }} mail geri alındı{% if e.bulunamayan %}, {{ e.bulunamayan }} mail bulunamadı{% endif %}: {{ e.gonderenler | join(', ') }}</td>
+        <td class="tag">{{ t('log.type_undo') }}</td>
+        <td>{{ t('log.restored', mails=tn('unit.mail', e.geri_alinan)) }}{% if e.bulunamayan %}, {{ t('log.missing', mails=tn('unit.mail', e.bulunamayan)) }}{% endif %}: {{ e.gonderenler | join(', ') }}</td>
       {% elif e.islem == 'abonelik' %}
-        <td class="tag">Abonelikten çıkma{{ ' (onaylı)' if e.onayli else ' (kontrol)' }}</td>
-        <td><ul>{% for addr, status in e.sonuclar.items() %}<li>{{ addr }}: {{ durumlar.get(status, status) }}</li>{% endfor %}</ul></td>
+        <td class="tag">{{ t('log.type_unsubscribe') }}{{ ' ' ~ t('log.confirmed') if e.onayli else ' ' ~ t('log.check') }}</td>
+        <td><ul>{% for addr, status in e.sonuclar.items() %}<li>{{ addr }}: {{ t('unsub.status.' ~ status) }}</li>{% endfor %}</ul></td>
       {% elif e.islem == 'hesap_eklendi' %}
-        <td class="tag">Hesap eklendi</td><td></td>
+        <td class="tag">{{ t('log.account_added') }}</td><td></td>
       {% elif e.islem == 'hesap_cikarildi' %}
-        <td class="tag">Hesap çıkarıldı</td><td></td>
+        <td class="tag">{{ t('log.account_removed') }}</td><td></td>
       {% else %}
         <td class="tag">{{ e.islem }}</td><td></td>
       {% endif %}
@@ -62,8 +61,10 @@
     {% endfor %}
     </tbody>
   </table>
+  <p class="no-match" id="noMatch" hidden>{{ t('log.no_match') }}</p>
+  </div>
   {% else %}
-  <p>Henüz kayıtlı işlem yok.</p>
+  <p>{{ t('log.empty') }}</p>
   {% endif %}
 </main>
 {% endblock %}
@@ -74,7 +75,7 @@ const $ = id => document.getElementById(id);
 if ($('sort')) {
   setupList({
     rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
-    selects: [{ el: $('fTur'), attr: 'tur' }], checks: [{ el: $('fHata'), attr: 'hata' }],
+    selects: [{ el: $('fType'), attr: 'type' }], checks: [{ el: $('fError'), attr: 'error' }],
   });
 }
 </script>

@@ -8,6 +8,7 @@ import re
 from .config import BASE_DIR
 from .gmail import EMAIL_RE
 from .storage import read_json, write_json
+from .i18n import t
 
 PROTECTED_PATH = os.path.join(BASE_DIR, 'protected.json')
 DOMAIN_RE = re.compile(r'^@[\w-]+(\.[\w-]+)+$')
@@ -30,20 +31,20 @@ def reject_protected(emails):
     protected = load_protected()
     blocked = [email for email in emails if is_protected(email, protected)]
     if blocked:
-        raise ValueError('Korunan gönderenlere işlem yapılamaz: ' + ', '.join(blocked))
+        raise ValueError(t('err.protected_senders', senders=', '.join(blocked)))
 
 
 def set_protected(value, make_protected):
     """Adresi ya da @alan adını listeye ekler/çıkarır; güncel listeyi döner."""
     if not isinstance(value, str):
-        raise ValueError("İstek gövdesinde 'value' adında bir metin bekleniyor.")
+        raise ValueError(t('err.value_required'))
     value = value.strip().lower()
     if DOMAIN_RE.match(value):
         field = 'alanlar'
     elif EMAIL_RE.match(value):
         field = 'adresler'
     else:
-        raise ValueError(f'Geçersiz adres ya da alan adı: {value!r} (alan adı için "@ornek.com" yaz).')
+        raise ValueError(t('err.invalid_protect_value', value=repr(value)))
 
     protected = load_protected()
     entries = set(protected[field])

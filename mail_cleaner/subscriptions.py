@@ -66,7 +66,7 @@ def rows(paths, cache, only_links=False):
     return sorted(result, key=lambda i: -i['sayi'])
 
 
-def mark(paths, address, unsubscribed, how='elle'):
+def mark(paths, address, unsubscribed, how='manual'):
     """Göndericiyi "çıkıldı" olarak işaretler (ya da işareti kaldırır)."""
     with _lock:
         state = read_json(paths.subscriptions, {})

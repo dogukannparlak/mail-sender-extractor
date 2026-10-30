@@ -5,6 +5,7 @@ Tarama ile taşıma/geri alma aynı hesapta aynı anda çalışmaz (tarama sonuc
 """
 import threading
 from contextlib import contextmanager
+from .i18n import t
 
 lock = threading.Lock()
 scans = {}
@@ -36,9 +37,9 @@ def start_scan(account, now):
     with lock:
         state = scan_state(account)
         if state['running']:
-            return 'Tarama zaten sürüyor.', dict(state)
+            return t('err.scan_running'), dict(state)
         if mutations.get(account):
-            return 'Silme ya da geri alma sürüyor; bitince tekrar dene.', dict(state)
+            return t('err.mutation_running_start'), dict(state)
         state.update(running=True, processed=0, total=0, error=None, started_at=now, finished_at=None)
         return None, dict(state)
 
@@ -47,9 +48,9 @@ def start_scan(account, now):
 def mutation(account):
     with lock:
         if scan_state(account)['running']:
-            raise Busy('Tarama sürerken silme ya da geri alma yapılamaz; tarama bitince tekrar dene.')
+            raise Busy(t('err.scan_blocks_mutation'))
         if mutations.get(account):  # iki sekme ya da çift tıklama: ikinci işlem birincinin geri alma kaydını ezerdi
-            raise Busy('Başka bir silme ya da geri alma sürüyor; bitince tekrar dene.')
+            raise Busy(t('err.mutation_running'))
         mutations[account] = 1
     try:
         yield

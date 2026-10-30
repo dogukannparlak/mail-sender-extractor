@@ -7,10 +7,10 @@ function notify(text, { error = false, details = null, action = null } = {}) {
   box.replaceChildren(el('div', { class: 'notice-row' },
     el('span', { class: 'notice-text' }, text),
     action && el('button', { type: 'button', class: 'small-btn', onclick: action.onclick }, action.label),
-    el('button', { type: 'button', class: 'small-btn', 'aria-label': 'Bildirimi kapat', onclick: clearNotice }, '✕'),
+    el('button', { type: 'button', class: 'small-btn', 'aria-label': t('notice.close'), onclick: clearNotice }, '✕'),
   ));
   if (details && details.length) {
-    box.append(el('details', {}, el('summary', {}, 'Ayrıntılar'), el('ul', {}, details.map(d => el('li', {}, d)))));
+    box.append(el('details', {}, el('summary', {}, t('notice.details')), el('ul', {}, details.map(d => el('li', {}, d)))));
   }
   box.scrollIntoView({ block: 'nearest' });
 }
@@ -36,7 +36,7 @@ function confirmDialog({ title, lines = [], items = [], warning = '', confirmLab
   $('confirmContent').replaceChildren(...[
     ...lines.map(line => el('p', {}, line)),
     items.length ? el('ul', {}, items.slice(0, DIALOG_LIST_LIMIT).map(item => el('li', {}, item))) : null,
-    rest.length ? el('details', {}, el('summary', {}, `ve ${rest.length} gönderen daha`),
+    rest.length ? el('details', {}, el('summary', {}, t('dialog.and_more', { count: rest.length })),
                      el('ul', {}, rest.map(item => el('li', {}, item)))) : null,
     warning ? el('p', { class: 'dialog-warning' }, warning) : null,
   ].filter(Boolean));

@@ -46,11 +46,11 @@ async function api(url, payload) {
   try {
     res = await fetch(url, options);
   } catch (err) {
-    throw new ApiError('Sunucuya ulaşılamadı. Uygulama hâlâ çalışıyor mu?', 0, null);
+    throw new ApiError(t('api.unreachable'), 0, null);
   }
   let body = null;
   try { body = await res.json(); } catch (err) { /* JSON değil */ }
-  if (!res.ok) throw new ApiError(body?.error || `Sunucu hatası (${res.status})`, res.status, body);
+  if (!res.ok) throw new ApiError(body?.error || t('api.server_error', { status: res.status }), res.status, body);
   return body;
 }
 
@@ -67,15 +67,17 @@ function isProtected(address) {
     state.protectedList.alanlar.some(d => domain === d.slice(1) || domain.endsWith('.' + d.slice(1)));
 }
 
+const LOCALES = { en: 'en-GB', tr: 'tr-TR' };
+
 function formatDate(ms) {
   if (!ms) return '';
-  return new Date(Number(ms)).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(Number(ms)).toLocaleDateString(LOCALES[window.LANG] || 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatDuration(seconds) {
-  if (seconds < 60) return 'bir dakikadan az';
+  if (seconds < 60) return t('duration.under_minute');
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `yaklaşık ${minutes} dk`;
-  return `yaklaşık ${Math.floor(minutes / 60)} sa ${minutes % 60} dk`;
+  if (minutes < 60) return t('duration.minutes', { minutes });
+  return t('duration.hours', { hours: Math.floor(minutes / 60), minutes: minutes % 60 });
 }
 

@@ -5,6 +5,7 @@ import shutil
 import threading
 
 from . import auth, gmail
+from .i18n import t
 from .config import BASE_DIR, settings
 from .gmail import EMAIL_RE
 from .scanner import load_csv, save_to_csv
@@ -72,10 +73,10 @@ def resolve(account):
     if not account:
         if len(accounts) == 1:
             return AccountPaths(accounts[0])
-        raise ValueError('Önce bir Gmail hesabı ekle.' if not accounts else 'Hangi hesapta çalışılacağı belirtilmedi.')
+        raise ValueError(t('err.account_required') if not accounts else t('err.account_unspecified'))
     account = str(account).strip().lower()
     if account not in accounts:  # listede olmayan ad (ör. "../x") hiçbir klasöre ulaşamaz
-        raise ValueError(f'Bilinmeyen hesap: {account!r}')
+        raise ValueError(t('err.unknown_account', account=repr(account)))
     return AccountPaths(account)
 
 
@@ -93,14 +94,13 @@ def sign_in_plan(client_config=None, pending=None):
     if pending:
         pending = str(pending).strip().lower()
         if pending not in list_pending():
-            raise ValueError(f'Girişi bekleyen böyle bir hesap yok: {pending!r}')
+            raise ValueError(t('err.no_pending_account', account=repr(pending)))
         return auth.validate_client_config(auth.load_client_config(AccountPaths(pending).client)), pending
     if client_config is not None:
         return auth.validate_client_config(client_config), None
     if has_shared_client():
         return auth.validate_client_config(auth.load_client_config(auth.CREDENTIALS_PATH)), None
-    raise ValueError('Bu hesabın Google Cloud istemci dosyasını (client_secret_….json) seç. '
-                     'Nasıl oluşturulacağı README\'de adım adım yazıyor.')
+    raise ValueError(t('err.client_file_needed'))
 
 
 def add_account(client_config, expected_email=None, on_url=None):
@@ -109,7 +109,7 @@ def add_account(client_config, expected_email=None, on_url=None):
 
 def remove_token(paths):
     if paths.external_token:
-        raise ValueError(f'{paths.account} .env dosyasında (ACCOUNT_n / EXTRA_ACCOUNTS) tanımlı; çıkarmak için oradaki satırı sil.')
+        raise ValueError(t('err.env_account_remove', account=paths.account))
     os.remove(paths.token)
 
 

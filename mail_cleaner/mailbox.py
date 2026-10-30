@@ -8,6 +8,7 @@ from . import accounts
 from .gmail import EMAIL_RE, fetch_metadata, from_address, gmail_execute, message_headers, run_batched
 from .protected import is_protected, load_protected
 from .storage import read_json, write_json
+from .i18n import t
 
 # "inbox" yalnız gelen kutusu; "all" arşiv ve spam dahil, çöp hariç (tarama kapsamıyla aynı).
 # Gmail araması spam'i varsayılan olarak dışarıda bırakır; "all" için includeSpamTrash gerekir.
@@ -24,7 +25,7 @@ def extract_email(sender):
     # "x@y.com OR label:inbox" gibi bir değer bütün gelen kutusunu eşleştirir.
     _, email = parseaddr(sender)
     if not EMAIL_RE.match(email):
-        raise ValueError(f'Geçersiz gönderen adresi: {sender!r}')
+        raise ValueError(t('err.invalid_sender', sender=repr(sender)))
     return email
 
 
@@ -182,7 +183,7 @@ def undo_last(paths):
     """Son taşımayı geri alır: çöpten çıkarır, INBOX/UNREAD etiketlerini eski haline getirir."""
     undo = load_undo(paths)
     if not undo:
-        raise ValueError('Geri alınacak bir silme işlemi yok.')
+        raise ValueError(t('err.nothing_to_undo'))
     service = accounts.get_service(paths.account)
     # Resmi yol messages.untrash; çöp boşaltılmışsa ya da 30 gün geçmişse mail 404 döner, atlanır.
     messages = service.users().messages()
@@ -217,7 +218,7 @@ def preview(paths, sender, email, scope):
         headers = message_headers(msg)
         internal = msg.get('internalDate')
         previews.append({
-            'subject': headers.get('subject', '(konu yok)'),
+            'subject': headers.get('subject', t('preview.no_subject')),
             'date': int(internal) if internal else None,
             'snippet': msg.get('snippet', ''),
         })
