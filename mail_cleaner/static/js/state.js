@@ -5,7 +5,7 @@ const DIALOG_LIST_LIMIT = 8;
 const DELETE_LABEL = t('action.trash_selected');
 const UNSUB_LABEL = t('action.unsubscribe_selected');
 // Abonelikten çıkış yalnız çıkış bağlantısı (List-Unsubscribe) okunabilen göndericilerde sunulur.
-const canUnsubscribe = g => g.baglanti === true;
+const canUnsubscribe = g => g.baglanti === true && g.cikildi !== true;
 
 const state = {
   accounts: [],

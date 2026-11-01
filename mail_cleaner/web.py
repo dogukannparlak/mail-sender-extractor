@@ -269,8 +269,13 @@ def api_senders():
     payload = _senders_payload(accounts.load_saved_senders(paths))
     # Çıkış bağlantısı okunabilen göndericiler: arayüz "Abonelikten çık"ı yalnız onlarda sunar.
     linked = {r['adres'] for r in subscriptions.rows(paths, read_json(paths.scan_cache, {}), only_links=True)}
+    exited = subscriptions.exited_addresses(paths)
+    links = subscriptions.exit_links(paths)
     for sender in payload['gonderenler']:
+        if sender['gonderen'] in links:
+            sender['cikis_sonucu'] = links[sender['gonderen']]
         sender['baglanti'] = sender['gonderen'] in linked
+        sender['cikildi'] = sender['gonderen'] in exited
     return jsonify(payload)
 
 
@@ -516,6 +521,10 @@ def api_unsubscribe():
         for r in results:
             if r['status'] == 'done':
                 subscriptions.mark(paths, r['email'], True, how='auto')
+    # Onay beklerken tek tıkla çıkış da önce bağlantı olarak gösterilir (onaylanmazsa bağlantı kalır).
+    subscriptions.remember_exit_links(paths, {
+        r['email']: {'status': 'manual_link' if r['status'] == 'one_click_available' else r['status'], 'url': r['url']}
+        for r in results if r['status'] in ('manual_link', 'manual_mailto', 'one_click_available')})
     activity.record(paths, 'abonelik', onayli=confirm_one_click,
                     sonuclar={r['email']: r['status'] for r in results})
     return jsonify({'results': results})

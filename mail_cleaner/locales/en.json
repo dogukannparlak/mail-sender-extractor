@@ -175,6 +175,7 @@
   "unsub.summary_done": "Unsubscribed automatically from {senders}",
   "unsub.summary_links": "; the unsubscribe link of {senders} is in its own row.",
   "unsub.failed": "Could not unsubscribe",
+  "unsub.already_done": "Unsubscribed",
   "delete.counting": "Counting…",
   "delete.scope_all": "in all mail (archive and spam included)",
   "delete.scope_inbox": "in the inbox",

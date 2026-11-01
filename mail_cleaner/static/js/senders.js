@@ -154,9 +154,11 @@ function createRow(rowData) {
     onclick: () => toggleProtected(lockValue, !locked, lockBtn),
   }, el('span', { 'aria-hidden': 'true' }, locked ? '🔒 ' : '🔓 '), locked ? t('row.protected') : t('row.protect'));
 
-  const unsubResult = el('span', { class: 'unsub-result', 'data-result-for': single ? g.gonderen : null });
+  const unsubResult = el('span', { class: 'unsub-result', 'data-result-for': single ? g.gonderen : null },
+    single && g.cikildi ? t('unsub.already_done') : '');
+  if (single && !g.cikildi && g.cikis_sonucu) showUnsubResult(unsubResult, g.cikis_sonucu);  // önceki denemenin bağlantısı
   const unsubBtn = single && canUnsubscribe(g) && el('button', {
-    type: 'button', class: 'small-btn danger unsub-btn', 'data-role': 'unsub', disabled: allLocked,
+    type: 'button', class: 'small-btn danger unsub-btn', 'data-role': 'unsub', 'data-sender': g.gonderen, disabled: allLocked,
     'aria-label': t('row.unsubscribe_aria', { name: rowData.label }),
     onclick: () => unsubscribeRow(g.gonderen, unsubResult, unsubBtn),
   }, t('row.unsubscribe'));

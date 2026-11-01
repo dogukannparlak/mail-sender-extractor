@@ -43,7 +43,18 @@ async function unsubscribeWithConfirmation(senders) {
   return first.map(r => bySender.get(r.sender) || r);
 }
 
+// Otomatik çıkılan gönderenin satırında "Abonelikten çık" butonu kalmasın; sonuç yazısı yeter.
+function markUnsubscribedInRows(results) {
+  results.filter(r => r.status === 'done').forEach(r => {
+    const g = state.data.gonderenler.find(x => x.gonderen === r.sender);
+    if (g) { g.cikildi = true; delete g.cikis_sonucu; }
+    document.querySelector(`.unsub-btn[data-sender="${CSS.escape(r.sender)}"]`)?.remove();
+  });
+  updateSelection();  // "Çıkılanları çöpe taşı" sayacı güncellensin
+}
+
 function showUnsubResultsInRows(results) {
+  markUnsubscribedInRows(results);
   results.forEach(r => {
     const target = document.querySelector(`.unsub-result[data-result-for="${CSS.escape(r.sender)}"]`);
     if (target) showUnsubResult(target, r);
@@ -55,6 +66,7 @@ async function unsubscribeRow(sender, resultEl, btn) {
   btn.textContent = t('unsub.checking');
   try {
     const [result] = await unsubscribeWithConfirmation([sender]);
+    markUnsubscribedInRows([result]);
     showUnsubResult(resultEl, result);
   } catch (err) {
     resultEl.textContent = t('common.error_prefix', { message: err.message });

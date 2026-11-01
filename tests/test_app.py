@@ -370,8 +370,8 @@ class TestApiSenders:
         assert resp.get_json() == {
             'toplam_mail_sayisi': 5,
             'gonderenler': [
-                {'gonderen': 'a@example.com', 'ad': '', 'baglanti': False, 'mail_sayisi': 3},
-                {'gonderen': 'b@example.com', 'ad': '', 'baglanti': False, 'mail_sayisi': 2},
+                {'gonderen': 'a@example.com', 'ad': '', 'baglanti': False, 'cikildi': False, 'mail_sayisi': 3},
+                {'gonderen': 'b@example.com', 'ad': '', 'baglanti': False, 'cikildi': False, 'mail_sayisi': 2},
             ],
         }
 
@@ -384,7 +384,7 @@ class TestApiSenders:
             writer.writerow(['"Ayşe (Classroom)" <No-Reply@classroom.google.com>', '2'])
 
         assert client.get('/api/senders').get_json()['gonderenler'] == [
-            {'gonderen': 'no-reply@classroom.google.com', 'ad': 'Ali (Classroom)', 'baglanti': False, 'mail_sayisi': 7},
+            {'gonderen': 'no-reply@classroom.google.com', 'ad': 'Ali (Classroom)', 'baglanti': False, 'cikildi': False, 'mail_sayisi': 7},
         ]
 
     def test_missing_csv_returns_empty_payload(self, client, monkeypatch, tmp_path):
@@ -414,7 +414,7 @@ class TestApiScan:
         assert (status['processed'], status['total']) == (2, 2)
         assert client.get('/api/senders').get_json() == {
             'toplam_mail_sayisi': 2,
-            'gonderenler': [{'gonderen': 'a@example.com', 'ad': '', 'baglanti': False, 'mail_sayisi': 2}],
+            'gonderenler': [{'gonderen': 'a@example.com', 'ad': '', 'baglanti': False, 'cikildi': False, 'mail_sayisi': 2}],
         }
 
     def test_second_scan_while_running_is_rejected(self, client, monkeypatch, inline_scan):
@@ -493,7 +493,7 @@ class TestApiDelete:
         assert resp.status_code == 200
         assert client.get('/api/senders').get_json() == {
             'toplam_mail_sayisi': 2,
-            'gonderenler': [{'gonderen': 'bob@example.com', 'ad': 'Bob', 'baglanti': False, 'mail_sayisi': 2}],
+            'gonderenler': [{'gonderen': 'bob@example.com', 'ad': 'Bob', 'baglanti': False, 'cikildi': False, 'mail_sayisi': 2}],
         }
 
     def test_delete_without_saved_csv_does_not_create_one(self, client, monkeypatch, fake_service_factory, tmp_path):
@@ -792,6 +792,18 @@ class TestOneClickConfirmation:
 
         post_mock.assert_called_once()
         assert resp.get_json()['results'][0]['status'] == 'done'
+
+    def test_shown_link_survives_reload_until_unsubscribed(self, client, monkeypatch, fake_service_factory, public_dns):
+        monkeypatch.setattr(unsubscribe.requests, 'post', MagicMock(return_value=MagicMock(ok=True, is_redirect=False)))
+        monkeypatch.setattr(accounts, 'get_service', lambda *_: self._service(fake_service_factory))
+        from mail_cleaner import subscriptions
+
+        client.post('/api/unsubscribe', json={'senders': ['x@example.com']})
+        assert subscriptions.exit_links(acct_paths())['x@example.com'] == {
+            'status': 'manual_link', 'url': 'https://example.com/u'}
+
+        client.post('/api/unsubscribe', json={'senders': ['x@example.com'], 'confirm_one_click': True})
+        assert 'x@example.com' not in subscriptions.exit_links(acct_paths())
 
 
 def _from_msg(value):

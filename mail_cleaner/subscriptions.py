@@ -66,6 +66,26 @@ def rows(paths, cache, only_links=False):
     return sorted(result, key=lambda i: -i['sayi'])
 
 
+def exited_addresses(paths):
+    """Çıkıldı olarak işaretli (otomatik ya da elle) gönderen adresleri."""
+    return set(read_json(paths.subscriptions, {}).get('cikilanlar', {}))
+
+
+def exit_links(paths):
+    """Elle açılacak çıkış sayfası/mailto bağlantıları: {adres: {'status', 'url'}}."""
+    return read_json(paths.subscriptions, {}).get('cikis_baglantilari', {})
+
+
+def remember_exit_links(paths, links):
+    """Satırda gösterilen çıkış bağlantısı sayfa yenilenince kaybolmasın diye saklanır."""
+    if not links:
+        return
+    with _lock:
+        state = read_json(paths.subscriptions, {})
+        state.setdefault('cikis_baglantilari', {}).update(links)
+        write_json(paths.subscriptions, state)
+
+
 def mark(paths, address, unsubscribed, how='manual'):
     """Göndericiyi "çıkıldı" olarak işaretler (ya da işareti kaldırır)."""
     with _lock:
@@ -73,6 +93,7 @@ def mark(paths, address, unsubscribed, how='manual'):
         exits = state.setdefault('cikilanlar', {})
         if unsubscribed:
             exits[address] = {'zaman': time.time(), 'yontem': how, 'uyarilan': 0}
+            state.get('cikis_baglantilari', {}).pop(address, None)  # çıkıldı: bağlantıya gerek kalmadı
         else:
             exits.pop(address, None)
         write_json(paths.subscriptions, state)
