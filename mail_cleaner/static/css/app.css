@@ -16,7 +16,7 @@
     --badge-kisisel: #15803d;
     --badge-spam: #b91c1c;
     --focus: #2563eb;
-    --bar-height: 72px;
+    --bar-height: 52px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -182,10 +182,13 @@
   .action-bar {
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 10;
     background: var(--card); border-top: 1px solid var(--border);
-    padding: 12px 32px calc(12px + env(safe-area-inset-bottom));
-    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 14px;
+    padding: 7px 24px calc(7px + env(safe-area-inset-bottom));
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 8px;
   }
-  #selectedInfo { font-size: 14px; color: var(--muted); }
+  /* Alt çubuk içeriği kapatmasın: düğmeler ve seçici küçük, hepsi tek satıra sığsın. */
+  .action-bar button { padding: 5px 11px; font-size: 13px; font-weight: 500; }
+  .action-bar select { padding: 4px 6px; }
+  #selectedInfo { font-size: 13px; color: var(--muted); }
   .empty-state { color: var(--muted); padding: 24px; text-align: center; }
 
   dialog {
