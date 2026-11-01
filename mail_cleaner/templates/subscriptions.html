@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/multiselect.css') }}">
 {% endblock %}
 {% block body %}
-<main>
+<main class="wide">
   {% from '_icons.html' import icon %}
   {% set current_page = 'subscriptions' %}{% include '_nav.html' %}
   <h1>{{ t('nav.subscriptions') }}{% if page_account %} · {{ page_account }}{% endif %}</h1>
