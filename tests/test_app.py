@@ -1117,6 +1117,39 @@ class TestSubscriptions:
         row = subscriptions.rows(paths, {}, include_exited=True)[0]
         assert (row['ad'], row['kategori'], row['silinen']) == ('Old', 'promosyon', 7)
 
+    def test_recover_reads_name_category_and_links_from_gmail(self, client, monkeypatch):
+        from mail_cleaner import gmail, subscriptions
+        from mail_cleaner.storage import write_json
+        paths = acct_paths()
+        write_json(paths.subscriptions, {'cikilanlar': {a: {'zaman': 1.0, 'yontem': 'auto', 'uyarilan': 0}
+                                                          for a in ('a@example.com', 'gone@example.com')}})
+        ids = {'a@example.com': 'm1', 'gone@example.com': None}
+
+        class Req:
+            def __init__(self, result): self.result = result
+            def execute(self, **_): return self.result
+
+        class Messages:
+            def list(self, q, **_):
+                address = q.split('"')[1]
+                return Req({'messages': [{'id': ids[address]}]} if ids[address] else {})
+
+        class Service:
+            def users(self): return self
+            def messages(self): return Messages()
+
+        monkeypatch.setattr(gmail, 'gmail_execute', lambda request, method, service=None: request.execute())
+        monkeypatch.setattr(gmail, 'fetch_metadata', lambda service, wanted, headers: [(i, {
+            'labelIds': ['CATEGORY_PROMOTIONS'], 'internalDate': '5000',
+            'payload': {'headers': [{'name': 'From', 'value': 'Shop <a@example.com>'},
+                                    {'name': 'List-Unsubscribe', 'value': '<https://a.example/u>'}]}}) for i in wanted])
+
+        assert subscriptions.recover_from_gmail(paths, Service()) == (1, 1)
+        rows = {r['adres']: r for r in subscriptions.rows(paths, {}, include_exited=True)}
+        assert (rows['a@example.com']['ad'], rows['a@example.com']['kategori']) == ('Shop', 'promosyon')
+        assert rows['a@example.com']['baglantilar'] == ['https://a.example/u']
+        assert subscriptions.recover_from_gmail(paths, Service()) == (0, 0)  # bulunamayan tekrar aranmaz
+
     def test_exited_sender_stays_listed_after_its_mails_are_deleted(self, client):
         from mail_cleaner import subscriptions
         from mail_cleaner.storage import write_json

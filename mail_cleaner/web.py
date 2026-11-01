@@ -431,6 +431,16 @@ def api_subscriptions_mark():
 
 # --- Korunanlar --------------------------------------------------------------
 
+@app.route('/api/subscriptions/recover', methods=['POST'])
+@handle_errors
+def api_subscriptions_recover():
+    paths = _current_paths(_json_body())
+    service = accounts.get_service(paths.account)
+    found, missing = subscriptions.recover_from_gmail(paths, service)
+    activity.record(paths, 'bilgi_kurtarma', bulunan=found, bulunamayan=missing)
+    return jsonify({'found': found, 'missing': missing})
+
+
 @app.route('/api/protected')
 @handle_errors
 def api_protected():

@@ -18,6 +18,8 @@
     {% set still_mailing = rows | selectattr('yeni_mail') | list | length %}{% if still_mailing %}<span class="chip warn">{{ t('subs.chip_still_mailing', count=still_mailing) }}</span>{% endif %}
   </div>
   <div class="toolbar">
+    <button type="button" id="recoverBtn" data-account="{{ page_account }}" title="{{ t('subs.recover_title') }}">{{ t('subs.recover') }}</button>
+    <span id="recoverMsg" class="muted" role="status"></span>
     <input type="search" id="q" placeholder="{{ t('search.placeholder') }}" aria-label="{{ t('search.label') }}" autocomplete="off">
     <span class="tool">{{ t('filter.category_short') }}
       <details class="multi" id="fCategory">
@@ -85,6 +87,29 @@ if ($('sort')) {
     selects: [{ el: $('fCategory'), attr: 'category' }, { el: $('fStatus'), attr: 'status' }],
   });
 }
+const recoverBtn = $('recoverBtn');
+if ($('recoverMsg') && sessionStorage.getItem('recoverMsg')) {
+  $('recoverMsg').textContent = sessionStorage.getItem('recoverMsg');
+  sessionStorage.removeItem('recoverMsg');
+}
+if (recoverBtn) recoverBtn.addEventListener('click', async () => {
+  recoverBtn.disabled = true;
+  recoverBtn.textContent = {{ t('subs.recovering') | tojson }};
+  try {
+    const resp = await fetch('/api/subscriptions/recover', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: recoverBtn.dataset.account }),
+    });
+    const body = await resp.json();
+    if (!resp.ok) throw new Error(body.error || resp.status);
+    sessionStorage.setItem('recoverMsg', {{ t('subs.recovered') | tojson }}.replace('{found}', body.found).replace('{missing}', body.missing));
+    location.reload();
+  } catch (err) {
+    recoverBtn.textContent = {{ t('subs.recover') | tojson }};
+    recoverBtn.disabled = false;
+    $('recoverMsg').textContent = err.message;
+  }
+});
 const TEXT = {
   pillOn: {{ t('subs.pill_unsubscribed') | tojson }}, pillOff: {{ t('subs.pill_not_unsubscribed') | tojson }},
   mark: {{ t('subs.mark') | tojson }}, unmark: {{ t('subs.unmark') | tojson }},

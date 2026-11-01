@@ -163,6 +163,50 @@ def backfill_from_history(paths):
         return changed
 
 
+def recover_from_gmail(paths, service):
+    """Adı bilinmeyen çıkılmış göndericilerin ad/kategori/linkini Gmail'deki (Çöp ve Spam dahil) en yeni mailinden okur.
+
+    Gönderen başına tek arama + tek metadata isteği; Çöp'teki mailler 30 gün saklanır, ondan eskisi bulunamaz.
+    Döner: (bulunan, bulunamayan) gönderen sayısı. Bulunamayanlar tekrar aranmasın diye işaretlenir.
+    """
+    from .gmail import fetch_metadata, gmail_execute, message_headers, sender_key
+    from .scanner import message_category
+    state = read_json(paths.subscriptions, {})
+    todo = [a for a, e in state.get('cikilanlar', {}).items() if not e.get('bilgi', {}).get('ad') and not e.get('bilgi', {}).get('arandi')]
+    newest = {}
+    for address in todo:
+        resp = gmail_execute(service.users().messages().list(
+            userId='me', q=f'from:"{address}" in:anywhere', maxResults=1, includeSpamTrash=True), 'list', service)
+        if resp.get('messages'):
+            newest[resp['messages'][0]['id']] = address
+    found = {}
+    for msg_id, msg in fetch_metadata(service, list(newest), ['From', 'List-Unsubscribe']):
+        headers = message_headers(msg)
+        if not msg or 'from' not in headers:
+            continue
+        address = newest[msg_id]
+        key, name = sender_key(headers['from'])
+        if key != address:  # arama başka bir göndericinin mailini getirmiş olabilir
+            continue
+        header = headers.get('list-unsubscribe', '')
+        found[address] = {'ad': name, 'kategori': message_category(msg.get('labelIds'), bool(header)),
+                          'son_mail': int(msg.get('internalDate') or 0),
+                          'baglantilar': [u for u in unsubscribe_links(header) if u.lower().startswith(LINK_SCHEMES)]}
+    with _lock:
+        state = read_json(paths.subscriptions, {})  # arama sürerken değişmiş olabilir; taze okunur
+        for address in todo:
+            exit_info = state.get('cikilanlar', {}).get(address)
+            if exit_info is None:
+                continue
+            saved = exit_info.setdefault('bilgi', {})
+            if address in found:
+                saved.update(found[address])
+            else:
+                saved['arandi'] = True
+        write_json(paths.subscriptions, state)
+    return len(found), len(todo) - len(found)
+
+
 def _add_notifications(paths, items):
     if not items:
         return
