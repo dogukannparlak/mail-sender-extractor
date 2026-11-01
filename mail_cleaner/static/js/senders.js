@@ -1,7 +1,7 @@
 // --- Veri ve liste -----------------------------------------------------------
 
 function passesFilters(g) {
-  if (state.categoryFilter && g.kategori !== state.categoryFilter) return false;
+  if (state.categoryFilters.length && !state.categoryFilters.includes(g.kategori)) return false;
   if (state.linkFilter === 'with' && !g.baglanti) return false;
   if (state.linkFilter === 'without' && g.baglanti) return false;
   if (state.searchText) {
@@ -192,10 +192,10 @@ function syncRowCheckbox(checkbox) {
 
 function clearFilters() {
   state.searchText = '';
-  state.categoryFilter = '';
+  state.categoryFilters = [];
   state.linkFilter = '';
   $('searchInput').value = '';
-  $('categorySelect').value = '';
+  $('categorySelect').clear();
   $('linkFilter').value = '';
   render();
 }

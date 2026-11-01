@@ -29,7 +29,7 @@ function updateSelection() {
   $('trashUnsubBtn').textContent = t('unsub.trash_button', { count: exited.length });
 
   const boxes = visibleCheckboxes();
-  const filtered = state.searchText || state.categoryFilter || state.linkFilter;
+  const filtered = state.searchText || state.categoryFilters.length || state.linkFilter;
   $('selectAllLabel').textContent = `${filtered ? t('select.visible') : t('select.all')} (${boxes.length})`;
   $('selectAll').checked = boxes.length > 0 && boxes.every(b => b.checked);
   $('selectAll').indeterminate = boxes.some(b => b.checked || b.indeterminate) && !$('selectAll').checked;

@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/multiselect.css') }}">
 {% endblock %}
 {% block body %}
 {% from '_icons.html' import icon %}
@@ -51,15 +52,17 @@
       </select>
     </span>
     <span class="tool" id="categoryFilterWrap" hidden>
-      <label for="categorySelect">{{ t('filter.category') }}</label>
-      <select id="categorySelect">
-        <option value="">{{ t('filter.all') }}</option>
-        <option value="bulten">{{ t('category.bulten') }}</option>
-        <option value="promosyon">{{ t('category.promosyon') }}</option>
-        <option value="bildirim">{{ t('category.bildirim') }}</option>
-        <option value="kisisel">{{ t('category.kisisel') }}</option>
-        <option value="spam">{{ t('category.spam') }}</option>
-      </select>
+      <label id="categoryLabel">{{ t('filter.category') }}</label>
+      <details class="multi" id="categorySelect" aria-labelledby="categoryLabel">
+        <summary>{{ t('filter.all') }}</summary>
+        <div class="multi-menu">
+          <label><input type="checkbox" value="bulten"> {{ t('category.bulten') }}</label>
+          <label><input type="checkbox" value="promosyon"> {{ t('category.promosyon') }}</label>
+          <label><input type="checkbox" value="bildirim"> {{ t('category.bildirim') }}</label>
+          <label><input type="checkbox" value="kisisel"> {{ t('category.kisisel') }}</label>
+          <label><input type="checkbox" value="spam"> {{ t('category.spam') }}</label>
+        </div>
+      </details>
     </span>
     <span class="tool">
       <label for="viewSelect">{{ t('view.label') }}</label>
@@ -131,6 +134,7 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/state.js') }}"></script>
 <script src="{{ url_for('static', filename='js/util.js') }}"></script>
+<script src="{{ url_for('static', filename='js/multiselect.js') }}"></script>
 <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
 <script src="{{ url_for('static', filename='js/senders.js') }}"></script>
 <script src="{{ url_for('static', filename='js/preview.js') }}"></script>

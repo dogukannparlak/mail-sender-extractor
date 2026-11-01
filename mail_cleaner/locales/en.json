@@ -77,6 +77,7 @@
   "select.none": "No selection",
   "search.placeholder": "Search name or address…",
   "search.label": "Search senders",
+  "filter.n_selected": "{count} selected",
   "filter.all": "All",
   "filter.link": "Subscription link:",
   "filter.link_with": "With a link",

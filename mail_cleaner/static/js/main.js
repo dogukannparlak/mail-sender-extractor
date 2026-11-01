@@ -16,8 +16,9 @@ $('linkFilter').addEventListener('change', e => {
   state.linkFilter = e.target.value;
   if (state.data) render();
 });
-$('categorySelect').addEventListener('change', e => {
-  state.categoryFilter = e.target.value;
+setupMultiSelect($('categorySelect'));
+$('categorySelect').addEventListener('change', () => {
+  state.categoryFilters = $('categorySelect').values();
   if (state.data) render();
 });
 $('viewSelect').addEventListener('change', e => {

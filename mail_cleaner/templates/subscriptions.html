@@ -2,6 +2,7 @@
 {% block title %}{{ t('nav.subscriptions') }} · {{ t('app.name') }}{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/multiselect.css') }}">
 {% endblock %}
 {% block body %}
 <main>
@@ -18,10 +19,13 @@
   </div>
   <div class="toolbar">
     <input type="search" id="q" placeholder="{{ t('search.placeholder') }}" aria-label="{{ t('search.label') }}" autocomplete="off">
-    <label>{{ t('filter.category_short') }}
-      <select id="fCategory"><option value="">{{ t('filter.all') }}</option>
-        {% for k in rows | map(attribute='kategori') | unique | select | sort %}<option value="{{ k }}">{{ t('category.' ~ k) }}</option>{% endfor %}
-      </select></label>
+    <span class="tool">{{ t('filter.category_short') }}
+      <details class="multi" id="fCategory">
+        <summary>{{ t('filter.all') }}</summary>
+        <div class="multi-menu">
+          {% for k in rows | map(attribute='kategori') | unique | select | sort %}<label><input type="checkbox" value="{{ k }}"> {{ t('category.' ~ k) }}</label>{% endfor %}
+        </div>
+      </details></span>
     <label>{{ t('subs.status') }}
       <select id="fStatus"><option value="">{{ t('filter.all') }}</option><option value="not_unsubscribed">{{ t('subs.status_not_unsubscribed') }}</option>
         <option value="unsubscribed">{{ t('subs.status_unsubscribed') }}</option><option value="still_mailing">{{ t('subs.status_still_mailing') }}</option></select></label>
@@ -70,10 +74,12 @@
 </main>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/multiselect.js') }}"></script>
 <script src="{{ url_for('static', filename='js/list.js') }}"></script>
 <script>
 const $ = id => document.getElementById(id);
 if ($('sort')) {
+  setupMultiSelect($('fCategory'));
   setupList({
     rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
     selects: [{ el: $('fCategory'), attr: 'category' }, { el: $('fStatus'), attr: 'status' }],

@@ -16,7 +16,7 @@ const state = {
   sortMode: 'count_desc',
   scope: document.getElementById('scopeSelect')?.value || 'inbox',  // varsayılan .env'deki DEFAULT_SCOPE
   viewMode: 'address',
-  categoryFilter: '',
+  categoryFilters: [],  // seçili kategoriler; boş = hepsi
   searchText: '',
   linkFilter: '',  // '' (tümü) | 'with' (çıkış bağlantısı olanlar) | 'without' (olmayanlar)
   protectedList: { adresler: [], alanlar: [] },

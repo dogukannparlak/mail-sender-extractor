@@ -9,7 +9,10 @@ function setupList({ rows, search, selects = [], checks = [], sort, count, noMat
     let shown = 0;
     for (const row of rows) {
       let ok = !query || row.textContent.toLocaleLowerCase('tr').includes(query);
-      for (const { el, attr } of selects) if (ok && el.value && row.dataset[attr] !== el.value) ok = false;
+      for (const { el, attr } of selects) {
+        const wanted = el.values ? el.values() : (el.value ? [el.value] : []);  // çoklu seçimde boş liste = hepsi
+        if (ok && wanted.length && !wanted.includes(row.dataset[attr])) ok = false;
+      }
       for (const { el, attr } of checks) if (ok && el.checked && row.dataset[attr] !== '1') ok = false;
       row.hidden = !ok;
       if (ok) shown++;
