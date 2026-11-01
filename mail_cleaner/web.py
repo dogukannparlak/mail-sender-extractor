@@ -390,6 +390,8 @@ def log_page():
 def subscriptions_page():
     paths = _page_paths()
     cache = read_json(paths.scan_cache, {}) if paths else {}
+    if paths:
+        subscriptions.backfill_from_history(paths)  # eski çıkışların ad/kategori/silinen mail bilgisini günlükten doldurur
     rows = subscriptions.rows(paths, cache, only_links=True, include_exited=True) if paths else []
     without_links = len(subscriptions.rows(paths, cache)) - len(rows) if paths else 0
     return render_template('subscriptions.html', rows=rows, without_links=without_links,

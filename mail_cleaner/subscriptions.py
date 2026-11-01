@@ -73,7 +73,7 @@ def rows(paths, cache, only_links=False, include_exited=False):
             result.append({'adres': address, 'ad': saved.get('ad', ''), 'kategori': saved.get('kategori', ''),
                            'sayi': 0, 'son_mail': saved.get('son_mail', 0), 'abone': True,
                            'baglantilar': saved.get('baglantilar', []), 'cikis': exit_info,
-                           'yeni_mail': 0, 'silindi': True})
+                           'yeni_mail': 0, 'silindi': True, 'silinen': saved.get('silinen', 0)})
     return sorted(result, key=lambda i: -i['sayi'])
 
 
@@ -117,6 +117,50 @@ def mark(paths, address, unsubscribed, how='manual'):
         else:
             exits.pop(address, None)
         write_json(paths.subscriptions, state)
+
+
+def backfill_from_history(paths):
+    """Çıkılmış ama bilgisi saklanmamış göndericileri eldeki geçmişten doldurur (tek seferlik, tekrar çalışması zararsız).
+
+    Kaynaklar: etkinlik günlüğü (silinen mail sayısı), son silmenin geri alma kaydı ve kayıtlı gönderen listesi (ad, kategori).
+    """
+    from . import activity  # döngüsel içe aktarmayı önlemek için burada
+    with _lock:
+        state = read_json(paths.subscriptions, {})
+        exits = state.get('cikilanlar', {})
+        if not exits:
+            return 0
+        deleted = Counter()
+        for event in activity._read(paths):
+            senders = event.get('gonderenler')
+            if event.get('islem') == 'silme' and isinstance(senders, dict):
+                deleted.update({k: v for k, v in senders.items() if isinstance(v, int)})
+        known = {}
+        for address, info in read_json(paths.undo, {}).get('gonderenler', {}).items():
+            known[address] = info
+        try:
+            import csv
+            with open(paths.csv, encoding='utf-8', newline='') as f:
+                for row in csv.DictReader(f):
+                    known.setdefault(row['Address'], {'ad': row.get('Name', ''), 'kategori': row.get('Category', '')})
+        except (OSError, KeyError):
+            pass
+        changed = 0
+        for address, exit_info in exits.items():
+            saved = exit_info.setdefault('bilgi', {}) if (address in known or address in deleted) else exit_info.get('bilgi')
+            if saved is None:
+                continue
+            before = dict(saved)
+            if address in known:
+                saved.setdefault('ad', known[address].get('ad', ''))
+                saved.setdefault('kategori', known[address].get('kategori', ''))
+            if address in deleted:
+                saved.setdefault('silinen', deleted[address])
+            if saved != before:
+                changed += 1
+        if changed:
+            write_json(paths.subscriptions, state)
+        return changed
 
 
 def _add_notifications(paths, items):

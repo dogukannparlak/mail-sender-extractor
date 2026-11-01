@@ -278,6 +278,8 @@
   "subs.no_match": "No subscription matches the filters.",
   "subs.empty": "No sender with an unsubscribe link in this account.",
   "subs.mails_gone": "No mail left (deleted)",
+  "subs.mails_deleted_one": "1 mail deleted",
+  "subs.mails_deleted_other": "{count} mails deleted",
   "subs.links_unread": "The links have not been read yet: pick this account on the main page and press \"Full scan\".",
   "subs.not_scanned": "This account has not been scanned with this version yet: pick it on the main page and press \"Full scan\".",
   "notif.hint": "Created after each scan: subscriptions seen for the first time and new mail from senders you unsubscribed from. No new-subscription notification is created on the very first scan.",

@@ -278,6 +278,8 @@
   "subs.no_match": "Filtreye uyan abonelik yok.",
   "subs.empty": "Bu hesapta çıkış bağlantısı olan gönderen yok.",
   "subs.mails_gone": "Mail kalmadı (silinmiş)",
+  "subs.mails_deleted_one": "1 mail silindi",
+  "subs.mails_deleted_other": "{count} mail silindi",
   "subs.links_unread": "Bağlantılar henüz okunmadı: ana sayfada bu hesabı seçip \"Tam tara\"ya bas.",
   "subs.not_scanned": "Bu hesap yeni sürümle henüz taranmadı: ana sayfada bu hesabı seçip \"Tam tara\"ya bas.",
   "notif.hint": "Her taramadan sonra üretilir: taramada ilk kez görülen abonelikler ve aboneliğinden çıktığın göndericilerden gelen yeni mailler. İlk taramada yeni abonelik bildirimi üretilmez.",

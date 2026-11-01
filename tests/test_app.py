@@ -1104,6 +1104,19 @@ def _entry(address, date_ms, unsub='<https://a.example/u>, <mailto:u@a.example>'
 
 
 class TestSubscriptions:
+    def test_backfill_fills_old_exits_from_the_activity_log_and_last_action(self, client):
+        from mail_cleaner import activity, subscriptions
+        from mail_cleaner.storage import write_json
+        paths = acct_paths()
+        write_json(paths.subscriptions, {'cikilanlar': {'old@example.com': {'zaman': 1.0, 'yontem': 'auto', 'uyarilan': 0}}})
+        activity.record(paths, 'silme', kapsam='inbox', toplam=7, gonderenler={'old@example.com': 7})
+        write_json(paths.undo, {'gonderenler': {'old@example.com': {'ad': 'Old', 'kategori': 'promosyon'}}})
+
+        assert subscriptions.backfill_from_history(paths) == 1
+        assert subscriptions.backfill_from_history(paths) == 0  # ikinci çalışma değişiklik yapmaz
+        row = subscriptions.rows(paths, {}, include_exited=True)[0]
+        assert (row['ad'], row['kategori'], row['silinen']) == ('Old', 'promosyon', 7)
+
     def test_exited_sender_stays_listed_after_its_mails_are_deleted(self, client):
         from mail_cleaner import subscriptions
         from mail_cleaner.storage import write_json
