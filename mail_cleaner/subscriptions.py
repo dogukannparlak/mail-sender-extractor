@@ -29,10 +29,11 @@ def _newer_count(cache, address, since):
                if e and e[0] == address and len(e) > 4 and e[4] and e[4] > since_ms)
 
 
-def rows(paths, cache, only_links=False):
+def rows(paths, cache, only_links=False, include_exited=False):
     """Abonelik başlığı görülen göndericiler, en çok mail atandan başlayarak.
 
-    only_links=True: çıkış bağlantısı okunabilmiş olanlar (eski önbellek girdilerinde bağlantı yoktur)."""
+    only_links=True: çıkış bağlantısı okunabilmiş olanlar (eski önbellek girdilerinde bağlantı yoktur).
+    include_exited=True: mailleri silinip taramadan düşmüş olsa da çıkılmış göndericiler de listelenir (kayıtlı bilgiyle)."""
     senders = {}
     for entry in cache.values():
         if not entry:
@@ -63,6 +64,16 @@ def rows(paths, cache, only_links=False):
         info['yeni_mail'] = _newer_count(cache, info['adres'], exit_info['zaman']) if exit_info else 0
         del info['adlar'], info['baglanti_tarihi']
         result.append(info)
+    if include_exited:
+        listed = {r['adres'] for r in result}
+        for address, exit_info in state.items():
+            if address in listed:
+                continue
+            saved = exit_info.get('bilgi', {})  # çıkış anında/taramada saklanan son bilgi; eski kayıtlarda yoktur
+            result.append({'adres': address, 'ad': saved.get('ad', ''), 'kategori': saved.get('kategori', ''),
+                           'sayi': 0, 'son_mail': saved.get('son_mail', 0), 'abone': True,
+                           'baglantilar': saved.get('baglantilar', []), 'cikis': exit_info,
+                           'yeni_mail': 0, 'silindi': True})
     return sorted(result, key=lambda i: -i['sayi'])
 
 
@@ -86,6 +97,11 @@ def remember_exit_links(paths, links):
         write_json(paths.subscriptions, state)
 
 
+def _snapshot(info):
+    return {'ad': info['ad'], 'kategori': info['kategori'], 'son_mail': info['son_mail'],
+            'baglantilar': info['baglantilar']}
+
+
 def mark(paths, address, unsubscribed, how='manual'):
     """Göndericiyi "çıkıldı" olarak işaretler (ya da işareti kaldırır)."""
     with _lock:
@@ -93,6 +109,10 @@ def mark(paths, address, unsubscribed, how='manual'):
         exits = state.setdefault('cikilanlar', {})
         if unsubscribed:
             exits[address] = {'zaman': time.time(), 'yontem': how, 'uyarilan': 0}
+            # Mailler sonradan silinirse gönderen taramadan düşer; sayfada görünmesi için bilgisi saklanır.
+            current = next((r for r in rows(paths, read_json(paths.scan_cache, {})) if r['adres'] == address), None)
+            if current:
+                exits[address]['bilgi'] = _snapshot(current)
             state.get('cikis_baglantilari', {}).pop(address, None)  # çıkıldı: bağlantıya gerek kalmadı
         else:
             exits.pop(address, None)
@@ -124,6 +144,8 @@ def after_scan(paths, cache):
                     notes.append({'zaman': now, 'tur': 'yeni_abonelik', 'gonderen': address, 'ad': info['ad'],
                                   'sayi': info['sayi'], 'okundu': False})
         for address, exit_info in state.get('cikilanlar', {}).items():
+            if address in subscribed:
+                exit_info['bilgi'] = _snapshot(subscribed[address])
             newer = _newer_count(cache, address, exit_info['zaman'])
             if newer > exit_info.get('uyarilan', 0):
                 name = subscribed.get(address, {}).get('ad', '')

@@ -1104,6 +1104,21 @@ def _entry(address, date_ms, unsub='<https://a.example/u>, <mailto:u@a.example>'
 
 
 class TestSubscriptions:
+    def test_exited_sender_stays_listed_after_its_mails_are_deleted(self, client):
+        from mail_cleaner import subscriptions
+        from mail_cleaner.storage import write_json
+        paths = acct_paths()
+        cache = {'m1': _entry('a@example.com', 1_000)}
+        write_json(paths.scan_cache, cache)
+        subscriptions.mark(paths, 'a@example.com', True, how='auto')
+
+        gone = subscriptions.rows(paths, {}, include_exited=True)  # mailler silindi: tarama önbelleği boş
+        assert [(r['adres'], r['sayi'], r['silindi']) for r in gone] == [('a@example.com', 0, True)]
+        assert subscriptions.rows(paths, {}) == []  # bildirim mantığı hayaletleri görmez
+
+        subscriptions.mark(paths, 'a@example.com', False)
+        assert subscriptions.rows(paths, {}, include_exited=True) == []
+
     def test_first_scan_gives_no_new_subscription_notifications_then_new_senders_do(self, client):
         from mail_cleaner import subscriptions
         paths = acct_paths()

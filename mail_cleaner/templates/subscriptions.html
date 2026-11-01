@@ -46,8 +46,8 @@
         data-sort-count="{{ r.sayi }}" data-sort-last="{{ r.son_mail }}"
         data-sort-name="{{ (r.ad or r.adres) | lower }}">
       <td>{{ r.ad or r.adres }}{% if r.ad %}<br><span class="muted">{{ r.adres }}</span>{% endif %}</td>
-      <td>{{ t('category.' ~ r.kategori) }}</td>
-      <td>{{ r.sayi }}</td>
+      <td>{% if r.kategori %}{{ t('category.' ~ r.kategori) }}{% endif %}</td>
+      <td>{{ r.sayi }}{% if r.silindi %}<br><span class="muted">{{ t('subs.mails_gone') }}</span>{% endif %}</td>
       <td class="time">{% if r.son_mail %}{{ (r.son_mail / 1000) | int | datetimeformat }}{% endif %}</td>
       <td>
         {% if r.cikis %}
