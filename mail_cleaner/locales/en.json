@@ -92,6 +92,7 @@
   "view.address": "Address",
   "view.domain": "Domain",
   "sort.label": "Sort:",
+  "row.last_mail": "last mail {date}",
   "sort.count_desc": "Mail count (high to low)",
   "sort.count_asc": "Mail count (low to high)",
   "sort.name_asc": "Name (A–Z)",

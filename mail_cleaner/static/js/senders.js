@@ -16,8 +16,8 @@ function buildRows() {
   const visible = state.data.gonderenler.filter(passesFilters);
   if (state.viewMode === 'address') {
     return visible.map(g => ({
-      key: g.gonderen, label: g.ad || g.gonderen, sub: g.ad ? g.gonderen : '',
-      count: g.mail_sayisi, members: [g], single: true,
+      key: g.gonderen, label: g.ad || g.gonderen, sub: withDate(g.ad ? g.gonderen : '', g.son_mail),
+      count: g.mail_sayisi, last: g.son_mail || 0, members: [g], single: true,
     }));
   }
   const groups = new Map();
@@ -26,10 +26,18 @@ function buildRows() {
     if (!groups.has(domain)) groups.set(domain, []);
     groups.get(domain).push(g);
   });
-  return [...groups].map(([domain, members]) => ({
-    key: '@' + domain, label: domain, sub: tn('unit.address', members.length),
-    count: members.reduce((sum, g) => sum + g.mail_sayisi, 0), members, single: false,
-  }));
+  return [...groups].map(([domain, members]) => {
+    const last = Math.max(0, ...members.map(g => g.son_mail || 0));
+    return {
+      key: '@' + domain, label: domain, sub: withDate(tn('unit.address', members.length), last),
+      count: members.reduce((sum, g) => sum + g.mail_sayisi, 0), last, members, single: false,
+    };
+  });
+}
+
+// Alt satıra son mailin tarihi eklenir (eski kayıtlarda tarih yoktur).
+function withDate(text, ms) {
+  return ms ? [text, t('row.last_mail', { date: formatDate(ms) })].filter(Boolean).join(' · ') : text;
 }
 
 function sortedRows() {
@@ -37,6 +45,8 @@ function sortedRows() {
   rows.sort((a, b) => {
     if (state.sortMode === 'name_asc') return a.label.localeCompare(b.label, window.LANG);
     if (state.sortMode === 'name_desc') return b.label.localeCompare(a.label, window.LANG);
+    if (state.sortMode === 'last_desc') return b.last - a.last;
+    if (state.sortMode === 'last_asc') return a.last - b.last;
     if (state.sortMode === 'members_desc' || state.sortMode === 'members_asc') {
       const byMembers = a.members.length - b.members.length || a.count - b.count;
       return state.sortMode === 'members_asc' ? byMembers : -byMembers;

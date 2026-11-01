@@ -271,7 +271,13 @@ def api_senders():
     linked = {r['adres'] for r in subscriptions.rows(paths, read_json(paths.scan_cache, {}), only_links=True)}
     exited = subscriptions.exited_addresses(paths)
     links = subscriptions.exit_links(paths)
+    last_mail = {}  # gönderen başına en yeni mailin tarihi (ms); tarama önbelleğinden
+    for entry in read_json(paths.scan_cache, {}).values():
+        if entry and len(entry) > 4 and entry[4] > last_mail.get(entry[0], 0):
+            last_mail[entry[0]] = entry[4]
     for sender in payload['gonderenler']:
+        if sender['gonderen'] in last_mail:
+            sender['son_mail'] = last_mail[sender['gonderen']]
         if sender['gonderen'] in links:
             sender['cikis_sonucu'] = links[sender['gonderen']]
         sender['baglanti'] = sender['gonderen'] in linked

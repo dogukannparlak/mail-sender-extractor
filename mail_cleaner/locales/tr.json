@@ -92,6 +92,7 @@
   "view.address": "Adres",
   "view.domain": "Alan adı",
   "sort.label": "Sırala:",
+  "row.last_mail": "son mail {date}",
   "sort.count_desc": "Mail sayısı (çoktan aza)",
   "sort.count_asc": "Mail sayısı (azdan çoğa)",
   "sort.name_asc": "İsme göre (A–Z)",
