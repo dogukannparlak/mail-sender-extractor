@@ -1,7 +1,14 @@
 // --- Çöp Kutusu'na taşıma ve geri alma ---------------------------------------
 
 async function deleteSelected() {
-  const picked = getSelected();
+  await deleteSenders(getSelected());
+}
+
+function exitedSenders() {
+  return state.data ? state.data.gonderenler.filter(g => g.cikildi && !isProtected(g.gonderen)) : [];
+}
+
+async function deleteSenders(picked) {
   const senders = picked.map(g => g.gonderen);
   const hidden = picked.filter(g => !passesFilters(g)).length;
   setBusy(true);

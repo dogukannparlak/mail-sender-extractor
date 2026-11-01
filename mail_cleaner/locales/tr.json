@@ -176,6 +176,7 @@
   "unsub.summary_links": "; {senders}in çıkış linki kendi satırında.",
   "unsub.failed": "Abonelik işlemi yapılamadı",
   "unsub.already_done": "Abonelikten çıkıldı",
+  "unsub.trash_button": "Çıkılanları Çöp Kutusu'na taşı ({count})",
   "delete.counting": "Sayılıyor…",
   "delete.scope_all": "tüm maillerde (arşiv ve spam dahil)",
   "delete.scope_inbox": "gelen kutusunda",

@@ -5,6 +5,7 @@ $('fullScanBtn').addEventListener('click', () => scanInbox(true));
 $('scanAllBtn').addEventListener('click', scanAllAccounts);
 $('deleteBtn').addEventListener('click', deleteSelected);
 $('unsubBtn').addEventListener('click', unsubscribeSelected);
+$('trashUnsubBtn').addEventListener('click', () => deleteSenders(exitedSenders()));
 $('undoBtn').addEventListener('click', undoLastDelete);
 
 $('searchInput').addEventListener('input', e => {

@@ -23,6 +23,11 @@ function updateSelection() {
   $('unsubBtn').disabled = state.busy || unsubscribable.length === 0;
   $('unsubBtn').title = picked.length && !unsubscribable.length ? t('select.no_links') : '';
 
+  // Çıkılmış (otomatik ya da elle işaretli) gönderenler her zaman tek tuşla çöpe taşınabilir; yoksa pasif.
+  const exited = exitedSenders();
+  $('trashUnsubBtn').disabled = state.busy || exited.length === 0;
+  $('trashUnsubBtn').textContent = t('unsub.trash_button', { count: exited.length });
+
   const boxes = visibleCheckboxes();
   const filtered = state.searchText || state.categoryFilter || state.linkFilter;
   $('selectAllLabel').textContent = `${filtered ? t('select.visible') : t('select.all')} (${boxes.length})`;
