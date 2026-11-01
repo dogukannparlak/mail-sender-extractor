@@ -422,7 +422,9 @@ def api_subscriptions_mark():
     paths = _current_paths(body)
     address = extract_email(str(body.get('sender', '')))
     subscriptions.mark(paths, address.lower(), body.get('unsubscribed') is True)
-    return jsonify({'sender': address.lower(), 'unsubscribed': body.get('unsubscribed') is True})
+    unsubscribed = body.get('unsubscribed') is True
+    return jsonify({'sender': address.lower(), 'unsubscribed': unsubscribed,
+                    'when': datetimeformat(time.time()) + ' · ' + t('method.manual') if unsubscribed else ''})
 
 
 # --- Korunanlar --------------------------------------------------------------

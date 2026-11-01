@@ -79,17 +79,47 @@ if ($('sort')) {
     selects: [{ el: $('fCategory'), attr: 'category' }, { el: $('fStatus'), attr: 'status' }],
   });
 }
+const TEXT = {
+  pillOn: {{ t('subs.pill_unsubscribed') | tojson }}, pillOff: {{ t('subs.pill_not_unsubscribed') | tojson }},
+  mark: {{ t('subs.mark') | tojson }}, unmark: {{ t('subs.unmark') | tojson }},
+  chip: {{ t('subs.chip_unsubscribed', count='{n}') | tojson }},
+};
+// Sayfayı yenilemek kaydırma yerini kaybettirir; yalnız tıklanan satır yerinde güncellenir.
 document.addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-sender]');
   if (!button) return;
+  const unsubscribed = button.dataset.unsubscribed === 'true';
   button.disabled = true;
-  await fetch('/api/subscriptions/mark', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ account: button.dataset.account, sender: button.dataset.sender,
-                           unsubscribed: button.dataset.unsubscribed === 'true' }),
-  });
-  location.reload();
+  try {
+    const resp = await fetch('/api/subscriptions/mark', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account: button.dataset.account, sender: button.dataset.sender, unsubscribed }),
+    });
+    if (!resp.ok) throw new Error(resp.status);
+    const result = await resp.json();
+    const row = button.closest('tr');
+    const cell = row.children[4];
+    const pill = document.createElement('span');
+    pill.className = 'pill ' + (unsubscribed ? 'ok' : 'muted');
+    pill.textContent = unsubscribed ? TEXT.pillOn : TEXT.pillOff;
+    cell.replaceChildren(pill);
+    if (unsubscribed) {
+      const when = document.createElement('span');
+      when.className = 'muted';
+      when.textContent = result.when;
+      cell.append(document.createElement('br'), when);
+    }
+    row.dataset.status = unsubscribed ? 'unsubscribed' : 'not_unsubscribed';
+    button.dataset.unsubscribed = String(!unsubscribed);
+    button.textContent = unsubscribed ? TEXT.unmark : TEXT.mark;
+    const chip = document.querySelector('.chip.good');
+    if (chip) chip.textContent = TEXT.chip.replace('{n}', document.querySelectorAll('tbody tr[data-status="unsubscribed"], tbody tr[data-status="still_mailing"]').length);
+  } catch (err) {
+    location.reload();  // beklenmedik hatada sayfa gerçek durumu göstersin
+  } finally {
+    button.disabled = false;
+  }
 });
 </script>
 {% endblock %}
