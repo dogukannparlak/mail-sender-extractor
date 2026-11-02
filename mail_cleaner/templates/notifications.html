@@ -12,7 +12,7 @@
   <div class="chips">
     <span class="chip">{{ tn('notif.chip_total', notifications | length) }}</span>
     {% set unread = notifications | rejectattr('okundu') | list | length %}
-    {% if unread %}<span class="chip warn">{{ t('notif.chip_unread', count=unread) }}</span>{% endif %}
+    {% if unread %}<span class="chip warn" id="unreadChip">{{ t('notif.chip_unread', count=unread) }}</span>{% endif %}
     {% set failed = notifications | selectattr('tur', 'equalto', 'mail_geliyor') | list | length %}
     {% if failed %}<span class="chip warn">{{ t('notif.chip_failed', count=failed) }}</span>{% endif %}
   </div>
@@ -66,11 +66,24 @@ if ($('sort')) {
     selects: [{ el: $('fType'), attr: 'type' }], checks: [{ el: $('fUnread'), attr: 'unread' }],
   });
   $('readAll').addEventListener('click', async () => {
-    await fetch('/api/notifications/read', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account: {{ page_account | tojson }} }),
-    });
+    $('readAll').disabled = true;
+    try {
+      const resp = await fetch('/api/notifications/read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account: {{ page_account | tojson }} }),
+      });
+      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || resp.status);
+    } catch (err) {
+      $('readAll').disabled = false;
+      $('count').textContent = err.message;
+      return;
+    }
+    // Sayfayı yenilemeden satırları, sayaçları ve menü rozetini güncelle.
+    document.querySelectorAll('tbody tr.unread').forEach(row => { row.classList.remove('unread'); row.dataset.unread = '0'; });
+    $('unreadChip')?.remove();
+    document.querySelectorAll('.count-badge').forEach(badge => { badge.hidden = true; badge.textContent = '0'; });
+  });
     location.reload();
   });
 }

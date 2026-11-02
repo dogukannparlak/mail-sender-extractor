@@ -59,6 +59,9 @@ async function refreshNotificationBadge() {
   } catch (err) { /* rozet yenilenemezse sayfa yenilenince güncellenir */ }
 }
 
+// Bildirimler başka sekmede okunmuş olabilir; ana sayfaya dönünce rozet tazelensin.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.account) refreshNotificationBadge(); });
+
 async function scanInbox(full = false) {
   try {
     showScanProgress(await api('/api/scan', { full }));
