@@ -9,6 +9,7 @@
       <a href="/settings{{ q }}"{% if current_page == 'settings' %} class="current" aria-current="page"{% endif %}>{{ icon('settings') }}{{ t('nav.settings') }}</a>
     <a href="/help"{% if current_page == 'help' %} class="current" aria-current="page"{% endif %}>{{ icon('help') }}{{ t('nav.help') }}</a>
   </nav>
+  {% if in_app %}<button type="button" class="link-btn" onclick="openInBrowser()" title="{{ t('nav.open_browser_title') }}">{{ icon('browser') }}{{ t('nav.open_browser') }}</button>{% endif %}
   <label class="language-pick" title="{{ t('lang.label') }}">{{ icon('language') }}
     <select id="languageSelect" aria-label="{{ t('lang.label') }}">{% for code, name in languages.items() %}<option value="{{ code }}"{% if code == lang %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
   </label>

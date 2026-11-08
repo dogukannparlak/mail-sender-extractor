@@ -27,14 +27,42 @@ function showScanProgress(scan) {
 }
 
 // Tarama sunucuda arka planda sürer; bitene kadar durumu yokla.
+// İptal düğmesi: tarama sürerken görünür. all=true → bütün hesapların taraması.
+let cancelAll = false;
+
+function showCancel(all) {
+  cancelAll = all;
+  $('cancelScanBtn').textContent = t('scan.cancel');
+  $('cancelScanBtn').disabled = false;
+  $('cancelScanBtn').hidden = false;
+}
+
+function hideCancel() {
+  $('cancelScanBtn').hidden = true;
+}
+
+async function cancelScan() {
+  $('cancelScanBtn').disabled = true;
+  $('cancelScanBtn').textContent = t('scan.cancelling');
+  try {
+    await api(cancelAll ? '/api/scan/cancel/all' : '/api/scan/cancel', {});
+  } catch (err) {
+    notifyError(t('scan.failed'), err);
+    $('cancelScanBtn').disabled = false;
+    $('cancelScanBtn').textContent = t('scan.cancel');
+  }
+}
+
 async function pollScan() {
   const account = state.account;
   setBusy(true);
+  showCancel(false);
   try {
     while (state.account === account) {
       const scan = await api('/api/scan/status');
       if (!scan.running) {
         if (scan.error) throw new Error(scan.error);
+        if (scan.cancelled) { notify(t('scan.cancelled')); return; }
         await load();
         refreshNotificationBadge();
         notify(t('scan.done', { mails: tn('unit.mail', state.data.toplam_mail_sayisi), senders: tn('unit.sender', state.data.gonderenler.length) }));
@@ -46,6 +74,7 @@ async function pollScan() {
   } catch (err) {
     notifyError(t('scan.failed'), err);
   } finally {
+    hideCancel();
     $('scanBtn').textContent = t('scan.start');
     setBusy(false);
   }
@@ -104,6 +133,7 @@ function showAllScanProgress(list) {
 
 async function pollAllScans(seen) {
   setBusy(true);
+  showCancel(true);
   $('scanAllBtn').textContent = t('scan.running');
   try {
     for (;;) {
@@ -113,9 +143,12 @@ async function pollAllScans(seen) {
       showAllScanProgress(mine);
       if (!mine.some(a => a.running)) {
         const failed = mine.filter(a => a.error);
+        const cancelled = mine.filter(a => a.cancelled);
         await load();
         refreshNotificationBadge();
-        if (failed.length) {
+        if (cancelled.length) {
+          notify(t('scan.all_cancelled'), { details: cancelled.map(a => a.account) });
+        } else if (failed.length) {
           notify(tn('scan.all_failed', failed.length), {
             error: true, details: failed.map(a => `${a.account}: ${a.error}`) });
         } else {
@@ -128,14 +161,15 @@ async function pollAllScans(seen) {
   } catch (err) {
     notifyError(t('scan.failed'), err);
   } finally {
+    hideCancel();
     $('scanAllBtn').textContent = t('scan.all');
     setBusy(false);
   }
 }
 
-async function scanAllAccounts() {
+async function scanAllAccounts(full = false) {
   try {
-    const { accounts } = await api('/api/scan/all', {});
+    const { accounts } = await api('/api/scan/all', { full });
     const errors = accounts.filter(a => !a.started && !a.already_running);
     if (errors.length === accounts.length) {
       notify(t('scan.none_started'), { error: true, details: errors.map(a => `${a.account}: ${a.error}`) });
@@ -154,3 +188,34 @@ async function resumeScanIfRunning() {
   } catch (err) { /* durum alınamazsa sayfa normal açılır */ }
 }
 
+
+// "Yeni bir şey var mı?": bütün hesaplarda yalnız id listesine bakar; hiçbir şey okunmaz ya da yazılmaz.
+async function checkForNew() {
+  setBusy(true);
+  $('checkNewBtn').textContent = t('scan.checking');
+  try {
+    const { accounts } = await api('/api/scan/check', {});
+    const failed = accounts.filter(a => a.error);
+    const found = accounts.filter(a => !a.error && !a.running && (a.new > 0 || !a.scanned));
+    const details = [
+      ...found.map(a => a.scanned ? t('scan.check_account_new', { account: a.account, count: tn('unit.mail', a.new) })
+                                  : t('scan.check_account_never', { account: a.account })),
+      ...failed.map(a => `${a.account}: ${a.error}`),
+    ];
+    if (found.length) {
+      notify(tn('scan.check_found', found.length), {
+        error: failed.length > 0, details,
+        action: { label: t('scan.check_scan_now'), onclick: () => scanAllAccounts() },
+      });
+    } else if (failed.length) {
+      notify(t('scan.check_failed'), { error: true, details });
+    } else {
+      notify(t('scan.check_none'));
+    }
+  } catch (err) {
+    notifyError(t('scan.check_failed'), err);
+  } finally {
+    $('checkNewBtn').textContent = t('scan.check');
+    setBusy(false);
+  }
+}

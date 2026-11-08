@@ -24,6 +24,7 @@
   <a href="/activity-log" target="_blank" rel="noopener" class="log-link" data-page="activity-log">{{ icon('log') }}{{ t('nav.activity_log') }}</a>
   <a href="/settings" class="log-link" data-page="settings">{{ icon('settings') }}{{ t('nav.settings') }}</a>
   <a href="/help" class="log-link">{{ icon('help') }}{{ t('nav.help') }}</a>
+  {% if in_app %}<button type="button" class="log-link link-btn" onclick="openInBrowser()" title="{{ t('nav.open_browser_title') }}">{{ icon('browser') }}{{ t('nav.open_browser') }}</button>{% endif %}
   </nav>
   <div class="scan-actions">
   <button id="scanBtn" type="button" disabled>{{ t('scan.start') }}</button>
@@ -31,6 +32,11 @@
           title="{{ t('scan.full_title') }}">{{ t('scan.full') }}</button>
   <button id="scanAllBtn" class="secondary-btn" type="button" hidden
           title="{{ t('scan.all_title') }}">{{ t('scan.all') }}</button>
+  <button id="fullScanAllBtn" class="secondary-btn" type="button" hidden
+          title="{{ t('scan.full_all_title') }}">{{ t('scan.full_all') }}</button>
+  <button id="checkNewBtn" class="secondary-btn" type="button" disabled
+          title="{{ t('scan.check_title') }}">{{ t('scan.check') }}</button>
+  <button id="cancelScanBtn" class="secondary-btn danger-btn" type="button" hidden>{{ t('scan.cancel') }}</button>
   </div>
   </div>
 </header>

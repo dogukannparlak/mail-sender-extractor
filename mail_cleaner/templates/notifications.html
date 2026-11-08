@@ -12,7 +12,7 @@
   <div class="chips">
     <span class="chip">{{ tn('notif.chip_total', notifications | length) }}</span>
     {% set unread = notifications | rejectattr('okundu') | list | length %}
-    {% if unread %}<span class="chip warn" id="unreadChip">{{ t('notif.chip_unread', count=unread) }}</span>{% endif %}
+    <span class="chip warn" id="unreadChip"{% if not unread %} hidden{% endif %}>{{ t('notif.chip_unread', count=unread) }}</span>
     {% set failed = notifications | selectattr('tur', 'equalto', 'mail_geliyor') | list | length %}
     {% if failed %}<span class="chip warn">{{ t('notif.chip_failed', count=failed) }}</span>{% endif %}
   </div>
@@ -26,15 +26,19 @@
       <select id="sort"><option value="time:desc">{{ t('sort.newest') }}</option><option value="time:asc">{{ t('sort.oldest') }}</option>
         <option value="count:desc">{{ t('sort.count_desc') }}</option></select></label>
     <button id="readAll" type="button" {% if not unread %}disabled{% endif %}>{{ t('notif.mark_all_read') }}</button>
+    <button id="markRead" type="button" disabled>{{ t('notif.mark_read') }}</button>
+    <button id="markUnread" type="button" disabled>{{ t('notif.mark_unread') }}</button>
+    <span class="result-count" id="selCount" aria-live="polite"></span>
     <span class="result-count" id="count" aria-live="polite"></span>
   </div>
   <div class="table-wrap">
-  <table>
-    <thead><tr><th>{{ t('common.time') }}</th><th>{{ t('notif.col_notification') }}</th></tr></thead>
+  <table id="notifTable" data-account="{{ page_account or '' }}">
+    <thead><tr><th class="sel"><input type="checkbox" id="selectAll" aria-label="{{ t('notif.select_all') }}"></th><th>{{ t('common.time') }}</th><th>{{ t('notif.col_notification') }}</th></tr></thead>
     <tbody>
     {% for n in notifications %}
     <tr{% if not n.okundu %} class="unread"{% endif %} data-type="{{ n.tur }}" data-unread="{{ '0' if n.okundu else '1' }}"
-        data-sort-time="{{ n.zaman | int }}" data-sort-count="{{ n.sayi }}">
+        data-id="{{ n.id }}" data-sort-time="{{ n.zaman | int }}" data-sort-count="{{ n.sayi }}">
+      <td class="sel"><input type="checkbox" class="rowSel" aria-label="{{ t('notif.select_row') }}"></td>
       <td class="time">{{ n.zaman | int | datetimeformat }}</td>
       {% if n.tur == 'yeni_abonelik' %}
         <td><span class="pill">{{ t('notif.type_new') }}</span> {{ n.ad or n.gonderen }} &lt;{{ n.gonderen }}&gt; · {{ tn('unit.mail', n.sayi) }}.
@@ -58,34 +62,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/list.js') }}"></script>
-<script>
-const $ = id => document.getElementById(id);
-if ($('sort')) {
-  setupList({
-    rows: [...document.querySelectorAll('tbody tr')], search: $('q'), sort: $('sort'), count: $('count'), noMatch: $('noMatch'),
-    selects: [{ el: $('fType'), attr: 'type' }], checks: [{ el: $('fUnread'), attr: 'unread' }],
-  });
-  $('readAll').addEventListener('click', async () => {
-    $('readAll').disabled = true;
-    try {
-      const resp = await fetch('/api/notifications/read', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ account: {{ page_account | tojson }} }),
-      });
-      if (!resp.ok) throw new Error((await resp.json().catch(() => ({}))).error || resp.status);
-    } catch (err) {
-      $('readAll').disabled = false;
-      $('count').textContent = err.message;
-      return;
-    }
-    // Sayfayı yenilemeden satırları, sayaçları ve menü rozetini güncelle.
-    document.querySelectorAll('tbody tr.unread').forEach(row => { row.classList.remove('unread'); row.dataset.unread = '0'; });
-    $('unreadChip')?.remove();
-    document.querySelectorAll('.count-badge').forEach(badge => { badge.hidden = true; badge.textContent = '0'; });
-  });
-    location.reload();
-  });
-}
-</script>
+<script src="{{ url_for('static', filename='js/notifications.js') }}"></script>
 {% endblock %}

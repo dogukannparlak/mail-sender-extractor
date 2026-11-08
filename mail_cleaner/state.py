@@ -19,7 +19,8 @@ class Busy(Exception):
 def scan_state(account):
     """Kilit altında çağrılmalı."""
     return scans.setdefault(account, {'running': False, 'processed': 0, 'total': 0, 'error': None,
-                                      'started_at': None, 'finished_at': None})
+                                      'started_at': None, 'finished_at': None,
+                                      'cancel': False, 'cancelled': False})
 
 
 def snapshot(account):
@@ -40,8 +41,24 @@ def start_scan(account, now):
             return t('err.scan_running'), dict(state)
         if mutations.get(account):
             return t('err.mutation_running_start'), dict(state)
-        state.update(running=True, processed=0, total=0, error=None, started_at=now, finished_at=None)
+        state.update(running=True, processed=0, total=0, error=None, started_at=now, finished_at=None,
+                     cancel=False, cancelled=False)
         return None, dict(state)
+
+
+def request_cancel(account):
+    """Süren taramayı iptal ister (tarama bir sonraki ilerleme adımında durur). Çalışan tarama yoksa False."""
+    with lock:
+        state = scan_state(account)
+        if not state['running']:
+            return False
+        state['cancel'] = True
+        return True
+
+
+def cancel_requested(account):
+    with lock:
+        return scan_state(account)['cancel']
 
 
 @contextmanager

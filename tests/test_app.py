@@ -1243,6 +1243,26 @@ class TestSubscriptions:
         client.post('/api/notifications/read')
         assert client.get('/api/notifications/unread').get_json() == {'unread': 0}
 
+        # Seçilenleri okundu / okunmadı yap
+        subscriptions._add_notifications(paths, [
+            {'zaman': 2, 'tur': 'yeni_abonelik', 'gonderen': 'p@y.com', 'ad': '', 'sayi': 1, 'okundu': False},
+            {'zaman': 3, 'tur': 'yeni_abonelik', 'gonderen': 'q@y.com', 'ad': '', 'sayi': 1, 'okundu': False}])
+        first, second = [n['id'] for n in subscriptions.all_notifications(paths) if not n['okundu']]
+        assert client.post('/api/notifications/read', json={'ids': [first]}).get_json() == {'unread': 1}
+        assert client.post('/api/notifications/read', json={'ids': [first], 'read': False}).get_json() == {'unread': 2}
+        assert client.post('/api/notifications/read', json={'ids': ['yok']}).get_json() == {'unread': 2}
+        assert client.post('/api/notifications/read', json={'ids': 'x'}).status_code == 400
+        assert client.post('/api/notifications/read', json={'read': True}).get_json() == {'unread': 0}
+
+
+def test_old_notifications_without_ids_get_ids(tmp_path):
+    from mail_cleaner import subscriptions
+    from mail_cleaner.storage import write_json
+    paths = type('P', (), {'notifications': str(tmp_path / 'n.json')})()
+    write_json(paths.notifications, [{'zaman': 1, 'tur': 'yeni_abonelik', 'gonderen': 'a@b.c', 'okundu': False}])
+    ids = [n['id'] for n in subscriptions.all_notifications(paths)]
+    assert len(ids) == 1 and ids == [n['id'] for n in subscriptions.all_notifications(paths)]  # kalıcı
+
 
 class TestLinkLabel:
     def test_long_links_become_short_labels(self):
@@ -1336,3 +1356,40 @@ def test_open_url_rejects_non_http():
     from mail_cleaner.web import app
     res = app.test_client().post('/api/open-url', json={'url': 'file:///etc/passwd'})
     assert res.status_code == 400
+
+
+# --- Tarama iptali ve "yeni bir şey var mı" kontrolü ---------------------------
+
+def test_cancel_request_only_applies_to_a_running_scan():
+    from mail_cleaner import state
+    assert state.request_cancel('iptal@example.com') is False
+    state.start_scan('iptal@example.com', 1)
+    assert state.request_cancel('iptal@example.com') is True
+    assert state.cancel_requested('iptal@example.com') is True
+    state.update_scan('iptal@example.com', running=False)
+    state.start_scan('iptal@example.com', 2)  # yeni tarama iptal bayrağını sıfırlar
+    assert state.cancel_requested('iptal@example.com') is False
+    state.update_scan('iptal@example.com', running=False)
+
+
+def test_cancelled_scan_saves_nothing_but_keeps_read_headers(tmp_path, monkeypatch):
+    from mail_cleaner import state, web
+    paths = type('P', (), {'account': 'c@example.com', 'scan_cache': str(tmp_path / 'cache.json'),
+                           'scan_ids': str(tmp_path / 'ids.json'), 'csv': str(tmp_path / 's.csv'),
+                           'log': str(tmp_path / 'log.jsonl')})()
+    saved = []
+    monkeypatch.setattr(web.accounts, 'save_senders', lambda *a, **k: saved.append(a))
+
+    def fake_extract(service, progress, id_index, cache):
+        cache['m1'] = ['a@x.com', 'A', 'primary', False, 0, '']
+        progress(1, 10)
+        raise AssertionError('iptal edilen tarama devam etmemeli')
+
+    monkeypatch.setattr(web, 'extract_senders', fake_extract)
+    state.start_scan(paths.account, 1)
+    state.request_cancel(paths.account)
+    web._scan(None, paths, full=False)
+    snap = state.snapshot(paths.account)
+    assert snap['cancelled'] is True and snap['running'] is False and snap['error'] is None
+    assert saved == []  # gönderen listesi yazılmadı
+    assert 'm1' in web.read_json(paths.scan_cache, {})  # okunan başlık önbellekte kaldı

@@ -2,7 +2,10 @@
 
 $('scanBtn').addEventListener('click', () => scanInbox());
 $('fullScanBtn').addEventListener('click', () => scanInbox(true));
-$('scanAllBtn').addEventListener('click', scanAllAccounts);
+$('scanAllBtn').addEventListener('click', () => scanAllAccounts());
+$('fullScanAllBtn').addEventListener('click', () => scanAllAccounts(true));
+$('checkNewBtn').addEventListener('click', checkForNew);
+$('cancelScanBtn').addEventListener('click', cancelScan);
 $('deleteBtn').addEventListener('click', deleteSelected);
 $('unsubBtn').addEventListener('click', unsubscribeSelected);
 $('trashUnsubBtn').addEventListener('click', () => deleteSenders(exitedSenders()));

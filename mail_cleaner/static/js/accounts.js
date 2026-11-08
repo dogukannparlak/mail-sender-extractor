@@ -24,6 +24,9 @@ function renderAccounts() {
   $('fullScanBtn').disabled = state.busy || !state.account;
   $('scanAllBtn').hidden = state.accounts.length < 2;
   $('scanAllBtn').disabled = state.busy;
+  $('fullScanAllBtn').hidden = state.accounts.length < 2;
+  $('fullScanAllBtn').disabled = state.busy;
+  $('checkNewBtn').disabled = state.busy || !state.account;
   // Abonelikler, Bildirimler ve Günlük sayfaları seçili hesabın verisini gösterir.
   for (const link of document.querySelectorAll('.log-link[data-page]')) {
     link.href = `/${link.dataset.page}` + (state.account ? '?account=' + encodeURIComponent(state.account) : '');

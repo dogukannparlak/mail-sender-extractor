@@ -78,3 +78,8 @@
   html[data-app="1"] body { -webkit-user-select: none; user-select: none; cursor: default; }
   html[data-app="1"] input, html[data-app="1"] textarea, html[data-app="1"] .doc, html[data-app="1"] td { -webkit-user-select: text; user-select: text; }
   html[data-app="1"] a, html[data-app="1"] button, html[data-app="1"] select { cursor: pointer; }
+  .link-btn { display: inline-flex; align-items: center; font: inherit; color: var(--muted); background: none; border: 1px solid transparent; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  .link-btn:hover { color: var(--text); background: var(--tab-hover); }
+  th.sel, td.sel { width: 28px; text-align: center; }
+  tbody tr { cursor: default; }
+  tr.unread td { font-weight: 600; }

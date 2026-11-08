@@ -15,7 +15,7 @@ from .config import settings
 from .i18n import COOKIE_NAME, LANGUAGES, current_language, messages_for, t, tn, use_language
 from .gmail import quota
 from .mailbox import extract_email
-from .scanner import extract_senders
+from .scanner import extract_senders, list_scan_ids
 from .storage import read_json, write_json
 from .unsubscribe import find_unsubscribe_info
 from . import auth, storage
@@ -294,6 +294,10 @@ def _run_scan(service, paths, full=False, lang=None):
         _scan(service, paths, full)
 
 
+class ScanCancelled(Exception):
+    """Kullanıcı taramayı iptal etti."""
+
+
 def _scan(service, paths, full):
     account = paths.account
     try:
@@ -301,9 +305,12 @@ def _scan(service, paths, full):
         cache = {} if full else read_json(paths.scan_cache, {})
         known = set(cache)
         started = time.time()
-        senders = extract_senders(
-            service, progress=lambda done, total: state.update_scan(account, processed=done, total=total),
-            id_index=scan_ids, cache=cache)
+        def progress(done, total):
+            state.update_scan(account, processed=done, total=total)
+            if state.cancel_requested(account):
+                raise ScanCancelled
+
+        senders = extract_senders(service, progress=progress, id_index=scan_ids, cache=cache)
         accounts.save_senders(paths, senders)
         write_json(paths.scan_ids, scan_ids)
         write_json(paths.scan_cache, cache, compact=True)
@@ -316,6 +323,13 @@ def _scan(service, paths, full):
         activity.record(paths, 'tarama', tam=full, mail=sum(len(v) for v in scan_ids.values()),
                         yeni_okunan=len(set(cache) - known), gonderen=len(senders),
                         sure_sn=round(time.time() - started))
+    except ScanCancelled:
+        # Yarım kalan sonuç kaydedilmez. Artımlı taramada o ana kadar okunan başlıklar önbellekte kalır (sonraki tarama
+        # kaldığı yerden sürer); tam taramada önbellek boş başlar, yarım hâli iyi önbelleğin yerine yazılmaz.
+        if not full:
+            write_json(paths.scan_cache, cache, compact=True)
+        state.update_scan(account, cancelled=True)
+        activity.record(paths, 'tarama', tam=full, iptal=True)
     except HttpError as e:
         state.update_scan(account, error=_http_error_message(e))
         activity.record(paths, 'tarama', tam=full, hata=_http_error_message(e))
@@ -372,6 +386,50 @@ def api_scan_all():
     return jsonify({'accounts': results}), 202
 
 
+@app.route('/api/scan/cancel', methods=['POST'])
+@handle_errors
+def api_scan_cancel():
+    return jsonify({'cancelling': state.request_cancel(_current_paths().account)})
+
+
+@app.route('/api/scan/cancel/all', methods=['POST'])
+@handle_errors
+def api_scan_cancel_all():
+    return jsonify({'cancelling': [name for name in accounts.list_accounts() if state.request_cancel(name)]})
+
+
+def _check_account(name, lang):
+    """Gmail'de önbellekte olmayan mail var mı? Yalnız id listesini okur (başlık okumaz, hiçbir şey yazmaz)."""
+    with use_language(lang):
+        result = {'account': name, 'new': 0, 'gone': 0, 'scanned': True, 'running': False, 'error': None}
+        try:
+            if state.snapshot(name)['running']:
+                return {**result, 'running': True}
+            cache = read_json(accounts.AccountPaths(name).scan_cache, None)
+            ids = set(list_scan_ids(accounts.get_service(name)))
+            if cache is None:
+                return {**result, 'scanned': False, 'new': len(ids)}
+            return {**result, 'new': len(ids - set(cache)), 'gone': len(set(cache) - ids)}
+        except HttpError as e:
+            return {**result, 'error': _http_error_message(e)}
+        except RefreshError:
+            return {**result, 'error': login_expired_message()}
+        except Exception as e:
+            app.logger.exception('Check failed')
+            return {**result, 'error': str(e) or type(e).__name__}
+
+
+@app.route('/api/scan/check', methods=['POST'])
+@handle_errors
+def api_scan_check():
+    """Bütün hesaplarda "yeni bir şey var mı?" kontrolü: taramadan çok daha hafif, hesaplar aynı anda kontrol edilir."""
+    from concurrent.futures import ThreadPoolExecutor
+    names, lang = accounts.list_accounts(), current_language()
+    with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
+        results = list(pool.map(lambda n: _check_account(n, lang), names))
+    return jsonify({'accounts': results})
+
+
 @app.route('/api/scan/status/all')
 @handle_errors
 def api_scan_status_all():
@@ -421,8 +479,12 @@ def api_notifications_unread():
 @app.route('/api/notifications/read', methods=['POST'])
 @handle_errors
 def api_notifications_read():
-    subscriptions.mark_all_read(_current_paths())
-    return jsonify({'unread': 0})
+    body = _json_body()
+    ids = body.get('ids')
+    if ids is not None and not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
+        raise ValueError(t('err.unexpected'))
+    read = body.get('read', True) is not False  # read:false → okunmadı yap
+    return jsonify({'unread': subscriptions.set_read(_current_paths(body), ids, read)})
 
 
 @app.route('/api/subscriptions/mark', methods=['POST'])

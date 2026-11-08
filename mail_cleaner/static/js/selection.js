@@ -43,6 +43,8 @@ function setBusy(busy) {
   $('scanBtn').disabled = busy || !state.account;
   $('fullScanBtn').disabled = busy || !state.account;
   $('scanAllBtn').disabled = busy;
+  $('fullScanAllBtn').disabled = busy;
+  $('checkNewBtn').disabled = busy || !state.account;
   // İşlem sürerken hesap değiştirilemez: sonuç yanlış hesabın ekranına yazılmasın.
   $('accountSelect').disabled = busy;
   $('addAccountBtn').disabled = busy;

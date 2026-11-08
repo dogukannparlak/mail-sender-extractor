@@ -35,6 +35,9 @@
     location.href = path + (account && path !== '/' && path !== '/help' ? '?account=' + encodeURIComponent(account) : '');
   };
 
+  // Uygulama penceresindeki sayfayı varsayılan tarayıcıda da aç (isteğe bağlı).
+  window.openInBrowser = function () { openExternal(location.href); };
+
   // Küçük geçici bildirim (menüden tetiklenen işlemlerin sonucu için)
   window.appToast = function (text, error) {
     let box = document.getElementById('appToast');

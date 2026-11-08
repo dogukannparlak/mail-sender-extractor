@@ -5,6 +5,7 @@ Veri, taramanın mail önbelleğinden (paths.scan_cache) okunur; önbellek girdi
 """
 import threading
 import time
+import uuid
 from collections import Counter
 
 from .storage import read_json, write_json
@@ -207,11 +208,15 @@ def recover_from_gmail(paths, service):
     return len(found), len(todo) - len(found)
 
 
+def _new_id():
+    return uuid.uuid4().hex[:12]
+
+
 def _add_notifications(paths, items):
     if not items:
         return
     notes = read_json(paths.notifications, [])
-    notes.extend(items)
+    notes.extend({**item, 'id': item.get('id') or _new_id()} for item in items)
     write_json(paths.notifications, notes[-NOTIFICATION_LIMIT:])
 
 
@@ -247,7 +252,11 @@ def after_scan(paths, cache):
 
 
 def all_notifications(paths, limit=200):
-    items = read_json(paths.notifications, [])
+    with _lock:
+        items = read_json(paths.notifications, [])
+        if any(not n.get('id') for n in items):  # eski bildirimlere kimlik ver (seçip okundu yapabilmek için)
+            items = [n if n.get('id') else {**n, 'id': _new_id()} for n in items]
+            write_json(paths.notifications, items)
     items.sort(key=lambda n: n.get('zaman', 0), reverse=True)
     return items[:limit]
 
@@ -256,8 +265,12 @@ def unread_count(paths):
     return sum(1 for n in read_json(paths.notifications, []) if not n.get('okundu'))
 
 
-def mark_all_read(paths):
+def set_read(paths, ids, read=True):
+    """Verilen kimliklerdeki bildirimleri okundu (read=True) ya da okunmadı yapar; ids None ise hepsini. Okunmamış sayısını döner."""
+    wanted = None if ids is None else set(ids)
     with _lock:
         notes = read_json(paths.notifications, [])
-        if any(not n.get('okundu') for n in notes):
-            write_json(paths.notifications, [{**n, 'okundu': True} for n in notes])
+        changed = [{**n, 'okundu': read} if (wanted is None or n.get('id') in wanted) else n for n in notes]
+        if changed != notes:
+            write_json(paths.notifications, changed)
+        return sum(1 for n in changed if not n.get('okundu'))

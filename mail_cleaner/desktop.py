@@ -13,11 +13,11 @@ TITLE = 'Mail Sender Extractor'
 MENU = {
     'tr': {'go': 'Git', 'home': 'Ana sayfa', 'subs': 'Abonelikler', 'notif': 'Bildirimler', 'log': 'Etkinlik günlüğü',
            'settings': 'Ayarlar…', 'file': 'Dosya', 'csv': 'CSV dışa aktar', 'data': 'Veri klasörünü aç',
-           'backup': 'Yedekle', 'help': 'Yardım', 'setup': 'Kurulum rehberi', 'features': 'Özellikler',
+           'backup': 'Yedekle', 'browser': 'Tarayıcıda aç', 'help': 'Yardım', 'setup': 'Kurulum rehberi', 'features': 'Özellikler',
            'config': 'Yapılandırma'},
     'en': {'go': 'Go', 'home': 'Home', 'subs': 'Subscriptions', 'notif': 'Notifications', 'log': 'Activity log',
            'settings': 'Settings…', 'file': 'File', 'csv': 'Export CSV', 'data': 'Open data folder',
-           'backup': 'Back up', 'help': 'Help', 'setup': 'Setup guide', 'features': 'Features',
+           'backup': 'Back up', 'browser': 'Open in browser', 'help': 'Help', 'setup': 'Setup guide', 'features': 'Features',
            'config': 'Configuration'},
 }
 
@@ -49,7 +49,8 @@ def build_menu(window, language):
     return [
         Menu(m['file'], [MenuAction(m['settings'], go('/settings')), MenuSeparator(),
                          MenuAction(m['csv'], post('/api/export/csv')), MenuAction(m['backup'], post('/api/data/backup')),
-                         MenuAction(m['data'], post('/api/data/open'))]),
+                         MenuAction(m['data'], post('/api/data/open')), MenuSeparator(),
+                         MenuAction(m['browser'], lambda: window.evaluate_js('openInBrowser()'))]),
         Menu(m['go'], [MenuAction(m['home'], go('/')), MenuAction(m['subs'], go('/subscriptions')),
                        MenuAction(m['notif'], go('/notifications')), MenuAction(m['log'], go('/activity-log'))]),
         Menu(m['help'], [MenuAction(m['setup'], go('/help/setup')), MenuAction(m['features'], go('/help/features')),

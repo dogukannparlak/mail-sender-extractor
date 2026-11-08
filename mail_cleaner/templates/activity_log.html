@@ -35,6 +35,7 @@
       {% if e.islem == 'tarama' %}
         <td class="tag">{{ t('log.full_scan') if e.tam else t('log.scan') }}</td>
         <td>{% if e.hata %}<span class="err">{{ t('common.error_prefix', message=e.hata) }}</span>
+            {% elif e.iptal %}{{ t('log.scan_cancelled') }}
             {% else %}{{ t('log.scan_details', mails=tn('unit.mail', e.mail), senders=tn('unit.sender', e.gonderen), new=tn('log.new_read', e.yeni_okunan), seconds=e.sure_sn) }}{% endif %}</td>
       {% elif e.islem == 'silme' %}
         <td class="tag">{{ t('log.type_trash') }}</td>
