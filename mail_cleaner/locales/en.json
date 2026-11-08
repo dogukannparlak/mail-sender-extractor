@@ -18,7 +18,7 @@
   "err.gmail_http": "Gmail API error ({status}): {reason}",
   "err.gmail_scope_hint": "It may be a permission (scope) problem; remove the account and add it again.",
   "err.gmail_api_disabled": "The Gmail API is not enabled in this account's Google Cloud project: APIs & Services › Library › Gmail API › Enable, wait a few minutes and try again.",
-  "err.login_expired": "The Google session has expired or access was revoked. Remove the account and add it again.",
+  "err.login_expired": "The Google session has expired or access was revoked. Select the account and click \"Sign in again\".",
   "err.unexpected": "An unexpected error occurred; see the server console for details.",
   "err.unexpected_short": "unexpected error",
   "err.scan_unexpected": "An unexpected error occurred during the scan; see the server console for details.",
@@ -399,5 +399,7 @@
   "notif.mark_unread": "Mark selected as unread",
   "notif.selected": "{count} selected",
   "notif.select_all": "Select all shown notifications",
-  "notif.select_row": "Select this notification"
+  "notif.select_row": "Select this notification",
+  "account.reauth": "Sign in again",
+  "account.reauth_title": "Renew the Google sign-in of this account (use it when scans say the session expired)"
 }

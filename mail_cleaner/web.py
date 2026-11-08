@@ -250,7 +250,7 @@ def api_accounts_add():
     client = body.get('client')
     if client is not None and not isinstance(client, dict):
         raise ValueError(t('err.client_must_be_object'))
-    client_config, expected = accounts.sign_in_plan(client_config=client, pending=body.get('pending'))
+    client_config, expected = accounts.sign_in_plan(client_config=client, pending=body.get('pending'), reauth=body.get('reauth') is True)
     with _signin_lock:
         if _signin['state'] == 'waiting':
             raise state.Busy(t('err.signin_waiting'))

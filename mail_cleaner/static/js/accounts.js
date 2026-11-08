@@ -11,6 +11,7 @@ function renderAccounts() {
   select.hidden = state.accounts.length === 0;
   $('accountLabel').hidden = select.hidden;
   $('removeAccountBtn').hidden = state.accounts.length === 0;
+  $('reauthBtn').hidden = !state.account;
   $('scanBtn').disabled = state.busy || !state.account;
   $('fullScanBtn').disabled = state.busy || !state.account;
   $('scanAllBtn').hidden = state.accounts.length < 2;

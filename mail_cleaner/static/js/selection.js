@@ -49,6 +49,7 @@ function setBusy(busy) {
   $('accountSelect').disabled = busy;
   $('addAccountBtn').disabled = busy;
   $('removeAccountBtn').disabled = busy;
+  $('reauthBtn').disabled = busy;
   updateSelection();
 }
 

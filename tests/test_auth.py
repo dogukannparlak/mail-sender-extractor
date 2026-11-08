@@ -102,3 +102,22 @@ def test_written_token_is_readable_only_by_owner(patched_paths, monkeypatch):
     gmail_auth.get_service()
 
     assert stat.S_IMODE(token_path.stat().st_mode) == 0o600
+
+
+def test_expired_token_without_shared_client_asks_for_sign_in_again(tmp_path, monkeypatch):
+    from google.auth.exceptions import RefreshError
+    from mail_cleaner import auth
+
+    class Dead:
+        valid, expired, refresh_token = False, True, 'r'
+
+        def refresh(self, _request):
+            raise RefreshError('invalid_grant')
+
+    token = tmp_path / 'token.json'
+    token.write_text('{}')
+    monkeypatch.setattr(auth.Credentials, 'from_authorized_user_file', lambda *a, **k: Dead())
+    monkeypatch.setattr(auth, 'CREDENTIALS_PATH', str(tmp_path / 'yok.json'))
+    import pytest
+    with pytest.raises(RefreshError):
+        auth._load_credentials(str(token))

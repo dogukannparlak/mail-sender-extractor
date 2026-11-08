@@ -74,5 +74,6 @@ $('useSharedClientBtn').addEventListener('click', () => {
   signIn({});
 });
 $('removeAccountBtn').addEventListener('click', removeAccount);
+$('reauthBtn').addEventListener('click', () => signIn({ pending: state.account, reauth: true }, state.account));
 
 loadAccounts().catch(err => notifyError(t('account.load_failed'), err));

@@ -118,7 +118,8 @@ def _save_token(creds, token_path):
 
 def _load_credentials(token_path):
     creds = None
-    if os.path.exists(token_path):
+    had_token = os.path.exists(token_path)
+    if had_token:
         creds = Credentials.from_authorized_user_file(token_path, SCOPES)
     if not creds or not creds.valid:
         refreshed = False
@@ -130,6 +131,9 @@ def _load_credentials(token_path):
                 # Yenileme anahtarı geçersiz (süresi doldu ya da izin geri alındı): yeniden giriş gerekir.
                 creds = None
         if not refreshed:
+            if had_token and not os.path.exists(CREDENTIALS_PATH):
+                # Ortak istemci yok: arka plan işlemi giriş penceresi açamaz; arayüz "Yeniden giriş yap" önerir.
+                raise RefreshError('login required')
             creds = _sign_in()
         _save_token(creds, token_path)
     return creds

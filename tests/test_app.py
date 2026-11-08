@@ -910,7 +910,7 @@ class TestDeleteEfficiency:
         resp = client.post('/api/count', json={'senders': ['a@example.com']})
 
         assert resp.status_code == 401
-        assert 'yeniden ekle' in resp.get_json()['error']
+        assert 'Yeniden giriş yap' in resp.get_json()['error']
 
 
 class TestOneClickPrivacy:
@@ -1411,3 +1411,18 @@ def test_active_account_is_shared_by_pages_and_api(client):
     assert client.post('/api/active-account', json={'account': 'yok@example.com'}).status_code == 400
     client.get('/subscriptions?account=a@example.com')                # bağlantıdaki hesap etkin olur
     assert client.get('/api/active-account').get_json() == {'active': 'a@example.com'}
+
+
+def test_reauth_allows_existing_account_with_its_own_client():
+    import os
+    import pytest
+    from mail_cleaner import accounts
+    paths = accounts.AccountPaths('eski@example.com')
+    os.makedirs(paths.root, exist_ok=True)
+    open(paths.token, 'w').write('{}')
+    with pytest.raises(ValueError):                                         # istemci dosyası yoksa olmaz
+        accounts.sign_in_plan(pending='eski@example.com', reauth=True)
+    open(paths.client, 'w').write('{"installed": {"client_id": "i", "client_secret": "s"}}')
+    with pytest.raises(ValueError):                                         # reauth istenmeden mevcut hesap "bekleyen" sayılmaz
+        accounts.sign_in_plan(pending='eski@example.com')
+    assert accounts.sign_in_plan(pending='eski@example.com', reauth=True)[1] == 'eski@example.com'

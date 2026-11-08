@@ -18,7 +18,7 @@
   "err.gmail_http": "Gmail API hatası ({status}): {reason}",
   "err.gmail_scope_hint": "Yetki (scope) sorunu olabilir; hesabı çıkarıp yeniden eklemeyi dene.",
   "err.gmail_api_disabled": "Bu hesabın Google Cloud projesinde Gmail API açık değil: APIs & Services › Library › Gmail API › Enable, birkaç dakika bekle ve tekrar dene.",
-  "err.login_expired": "Google oturumunun süresi dolmuş ya da izni geri alınmış. Hesabı çıkarıp yeniden ekle.",
+  "err.login_expired": "Google oturumunun süresi dolmuş ya da izni geri alınmış. Hesabı seçip \"Yeniden giriş yap\"a bas.",
   "err.unexpected": "Beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.",
   "err.unexpected_short": "beklenmeyen hata",
   "err.scan_unexpected": "Tarama sırasında beklenmeyen bir hata oluştu; ayrıntı sunucu konsolunda.",
@@ -399,5 +399,7 @@
   "notif.mark_unread": "Seçilenleri okunmadı yap",
   "notif.selected": "{count} seçili",
   "notif.select_all": "Görünen bildirimlerin hepsini seç",
-  "notif.select_row": "Bu bildirimi seç"
+  "notif.select_row": "Bu bildirimi seç",
+  "account.reauth": "Yeniden giriş yap",
+  "account.reauth_title": "Bu hesabın Google girişini yenile (tarama \"oturum süresi doldu\" derse kullan)"
 }

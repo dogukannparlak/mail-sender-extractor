@@ -118,12 +118,14 @@ def get_service(account):
     return service
 
 
-def sign_in_plan(client_config=None, pending=None):
+def sign_in_plan(client_config=None, pending=None, reauth=False):
     """Hangi istemciyle, hangi hesap için giriş yapılacağı. Öncelik: girişi bekleyen klasör >
     yüklenen istemci dosyası > (varsa) ortak credentials.json. (istemci, beklenen adres) döner."""
     if pending:
         pending = str(pending).strip().lower()
-        if pending not in list_pending():
+        # reauth: token'ı geçersizleşmiş (süresi dolmuş / izni geri alınmış) mevcut hesap, kendi klasöründeki istemciyle yeniden girer
+        renewable = reauth and pending in list_accounts() and os.path.exists(AccountPaths(pending).client)
+        if pending not in list_pending() and not renewable:
             raise ValueError(t('err.no_pending_account', account=repr(pending)))
         return auth.validate_client_config(auth.load_client_config(AccountPaths(pending).client)), pending
     if client_config is not None:
