@@ -8,13 +8,13 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from .config import BASE_DIR
 from .i18n import t
 
 # app.py'nin silme özelliği 'modify' izni gerektirir; extract_senders.py salt
 # okunur çağrılar yapsa da aynı token.json paylaşıldığından ortak scope kullanılır.
 SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # proje klasörü
 TOKEN_PATH = os.path.join(BASE_DIR, 'token.json')
 CREDENTIALS_PATH = os.path.join(BASE_DIR, 'credentials.json')
 

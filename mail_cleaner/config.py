@@ -5,11 +5,25 @@ Biçim: her satırda `AD=değer`; `#` ile başlayan satırlar yorumdur. Örnek: 
 """
 import os
 import re
+import sys
 
 from .gmail import EMAIL_RE
 
-# Proje klasörü (paketin bir üstü): .env, credentials.json ve veriler burada.
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _data_dir():
+    """Veri klasörü: .env, credentials.json, accounts/ burada durur.
+
+    MAIL_CLEANER_HOME verilmişse o; macOS .app'inde (PyInstaller) paket içine yazılamaz,
+    bu yüzden ~/Library/Application Support/Mail Sender Extractor; yoksa proje klasörü.
+    """
+    custom = os.environ.get('MAIL_CLEANER_HOME', '').strip()
+    if custom:
+        return os.path.abspath(os.path.expanduser(custom))
+    if getattr(sys, 'frozen', False):
+        return os.path.expanduser('~/Library/Application Support/Mail Sender Extractor')
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+BASE_DIR = _data_dir()
 # MAIL_CLEANER_ENV_FILE başka bir dosyayı gösterebilir; boş verilirse .env hiç okunmaz (testler böyle çalışır).
 ENV_PATH = os.environ.get('MAIL_CLEANER_ENV_FILE', os.path.join(BASE_DIR, '.env'))
 

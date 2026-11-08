@@ -22,3 +22,5 @@ tokens/*
 tokenlar/*
 protected.json.migrated
 korunanlar.json.migrated
+build/
+dist/
