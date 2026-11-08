@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ lang }}"{% if in_app %} data-app="1"{% endif %}>
+<html lang="{{ lang }}"{% if in_app %} data-app="1"{% endif %}{% if page_account %} data-account="{{ page_account }}"{% endif %}>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">

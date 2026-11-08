@@ -30,7 +30,7 @@ class ApiError extends Error {
 // Bütün sunucu çağrıları buradan geçer: JSON olmayan hata sayfası ya da kapalı sunucu
 // da okunur bir mesaja dönüşür.
 // Her istek seçili hesabı taşır; sunucu hangi hesabın dosyalarına ve Gmail'ine gideceğini buradan bilir.
-const ACCOUNT_FREE_URLS = ['/api/accounts', '/api/accounts/add', '/api/scan/all', '/api/scan/status/all', '/api/scan/cancel/all', '/api/scan/check'];
+const ACCOUNT_FREE_URLS = ['/api/accounts', '/api/accounts/add', '/api/scan/all', '/api/scan/status/all', '/api/scan/cancel/all', '/api/scan/check', '/api/active-account'];
 
 async function api(url, payload) {
   const withAccount = state.account && !ACCOUNT_FREE_URLS.includes(url);

@@ -87,14 +87,14 @@ def test_language_comes_from_query_then_cookie_then_setting_then_browser(client,
     monkeypatch.setattr(settings, 'language', '')
     page = lambda **kw: client.get('/notifications', **kw).get_data(as_text=True)
 
-    assert '<html lang="en">' in page()                                                     # başlık yok → İngilizce
-    assert '<html lang="tr">' in page(headers={'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8'})
-    assert '<html lang="en">' in page(headers={'Accept-Language': 'de-DE,de;q=0.9'})
+    assert '<html lang="en"' in page()                                                     # başlık yok → İngilizce
+    assert '<html lang="tr"' in page(headers={'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8'})
+    assert '<html lang="en"' in page(headers={'Accept-Language': 'de-DE,de;q=0.9'})
     monkeypatch.setattr(settings, 'language', 'tr')
-    assert '<html lang="tr">' in page(headers={'Accept-Language': 'en-US'})                 # .env tarayıcıyı yener
+    assert '<html lang="tr"' in page(headers={'Accept-Language': 'en-US'})                 # .env tarayıcıyı yener
     client.set_cookie('lang', 'en')
-    assert '<html lang="en">' in page()                                                     # çerez .env'yi yener
-    assert '<html lang="tr">' in page(query_string={'lang': 'tr'})                           # ?lang= çerezi yener
+    assert '<html lang="en"' in page()                                                     # çerez .env'yi yener
+    assert '<html lang="tr"' in page(query_string={'lang': 'tr'})                           # ?lang= çerezi yener
 
 
 def test_lang_query_is_remembered_in_a_cookie(client):

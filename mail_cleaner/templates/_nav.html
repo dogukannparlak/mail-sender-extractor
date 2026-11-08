@@ -1,5 +1,5 @@
 {% from '_icons.html' import icon %}
-{% set q = ('?account=' ~ (page_account | urlencode)) if page_account else '' %}
+{% set q = '' %}
 <header class="topbar">
   <a href="/" class="back">{{ icon('back') }}{{ t('nav.back') }}</a>
   <nav class="tabs" aria-label="{{ t('nav.pages') }}">
@@ -19,6 +19,6 @@
       {% for name in account_list %}<option value="{{ name }}"{% if name == page_account %} selected{% endif %}>{{ name }}</option>{% endfor %}
     </select>
   </label>
-  <script>document.getElementById('accountPick').addEventListener('change', e => { location.search = '?account=' + encodeURIComponent(e.target.value); });</script>
+  <script>document.getElementById('accountPick').addEventListener('change', e => setActiveAccount(e.target.value));</script>
   {% endif %}
 </header>

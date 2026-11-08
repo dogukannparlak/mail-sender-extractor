@@ -69,6 +69,34 @@ def has_shared_client():
     return os.path.exists(auth.CREDENTIALS_PATH)
 
 
+def _active_file():
+    return os.path.join(ACCOUNTS_DIR, '.active_account')
+
+
+def get_active():
+    """Uygulamanın her yerinde (ana sayfa, alt sayfalar, sekmeler) kullanılan tek etkin hesap; yeniden açılınca da hatırlanır.
+    Kayıtlı hesap artık yoksa (silinmişse) ilk hesaba düşer; hiç hesap yoksa None."""
+    names = list_accounts()
+    try:
+        with open(_active_file(), encoding='utf-8') as f:
+            saved = f.read().strip().lower()
+    except OSError:
+        saved = ''
+    return saved if saved in names else (names[0] if names else None)
+
+
+def set_active(account):
+    """Etkin hesabı değiştirir. Bilinmeyen hesap ValueError fırlatır."""
+    account = resolve(account).account
+    try:
+        os.makedirs(ACCOUNTS_DIR, mode=0o700, exist_ok=True)
+        with open(_active_file(), 'w', encoding='utf-8') as f:
+            f.write(account)
+    except OSError:
+        pass  # kaydedilemese de bu oturumda sayfalar yine aynı kalır (dosya okunamazsa ilk hesap)
+    return account
+
+
 def resolve(account):
     """İstekteki hesabı doğrular. Tek hesap varsa account verilmese de o hesap kullanılır."""
     accounts = list_accounts()

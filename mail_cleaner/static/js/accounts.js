@@ -1,17 +1,8 @@
 // --- Hesaplar ----------------------------------------------------------------
 
-const ACCOUNT_STORAGE_KEY = 'mail-cleaner-account';
-const LEGACY_ACCOUNT_STORAGE_KEY = 'mail-temizleyici-hesap';  // eski sürümde seçilen hesap kaybolmasın
-
-function rememberAccount(account) {
-  try { localStorage.setItem(ACCOUNT_STORAGE_KEY, account); } catch (err) { /* gizli pencere: hatırlamasak da olur */ }
-}
-
-function rememberedAccount() {
-  try {
-    return localStorage.getItem(ACCOUNT_STORAGE_KEY) || localStorage.getItem(LEGACY_ACCOUNT_STORAGE_KEY);
-  } catch (err) { return null; }
-}
+// Etkin hesap sunucuda tutulur: ana sayfa, alt sayfalar ve açık bütün sekmeler aynı hesabı gösterir (bkz. app.js).
+window.currentAccount = () => state.account;
+window.onActiveAccountChanged = account => { if (!state.busy) switchAccount(account, false); };
 
 function renderAccounts() {
   const select = $('accountSelect');
@@ -29,7 +20,7 @@ function renderAccounts() {
   $('checkNewBtn').disabled = state.busy || !state.account;
   // Abonelikler, Bildirimler ve Günlük sayfaları seçili hesabın verisini gösterir.
   for (const link of document.querySelectorAll('.log-link[data-page]')) {
-    link.href = `/${link.dataset.page}` + (state.account ? '?account=' + encodeURIComponent(state.account) : '');
+    link.href = `/${link.dataset.page}`;
   }
   if (state.account) refreshNotificationBadge();
 }
@@ -41,12 +32,12 @@ async function loadAccounts(preferred = null) {
   state.sharedClient = Boolean(info.shared_client);
   state.demo = Boolean(info.demo);
   if (info.migrated) notify(t('account.migrated', { account: info.migrated }));
-  const wanted = [preferred, state.account, rememberedAccount()].find(a => a && state.accounts.includes(a));
+  const wanted = [preferred, state.account, info.active].find(a => a && state.accounts.includes(a));
   await switchAccount(wanted || state.accounts[0] || null);
 }
 
 // Hesap değişince her şey sıfırlanır: seçim, önizlemeler, açık paneller başka hesaba aittir.
-async function switchAccount(account) {
+async function switchAccount(account, publish = true) {
   state.account = account;
   state.data = null;
   state.selected.clear();
@@ -64,7 +55,7 @@ async function switchAccount(account) {
     updateSelection();
     return;
   }
-  rememberAccount(account);
+  if (publish) api('/api/active-account', { account }).catch(() => { /* kaydedilemese de bu pencere çalışır */ });
   await load();
   await refreshUndo();
   await resumeScanIfRunning();

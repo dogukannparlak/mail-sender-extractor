@@ -1393,3 +1393,21 @@ def test_cancelled_scan_saves_nothing_but_keeps_read_headers(tmp_path, monkeypat
     assert snap['cancelled'] is True and snap['running'] is False and snap['error'] is None
     assert saved == []  # gönderen listesi yazılmadı
     assert 'm1' in web.read_json(paths.scan_cache, {})  # okunan başlık önbellekte kaldı
+
+
+# --- Tek etkin hesap (her sayfa ve sekmede aynı) -------------------------------
+
+def test_active_account_is_shared_by_pages_and_api(client):
+    from mail_cleaner import accounts
+    for name in ('a@example.com', 'b@example.com'):
+        paths = accounts.AccountPaths(name)
+        import os
+        os.makedirs(paths.root, exist_ok=True)
+        open(paths.token, 'w').write('{}')
+    assert client.get('/api/active-account').get_json() == {'active': 'a@example.com'}  # kayıt yoksa ilk hesap
+    assert client.post('/api/active-account', json={'account': 'b@example.com'}).get_json() == {'active': 'b@example.com'}
+    assert client.get('/api/accounts').get_json()['active'] == 'b@example.com'
+    assert b'b@example.com' in client.get('/notifications').data       # alt sayfa da b'yi gösterir
+    assert client.post('/api/active-account', json={'account': 'yok@example.com'}).status_code == 400
+    client.get('/subscriptions?account=a@example.com')                # bağlantıdaki hesap etkin olur
+    assert client.get('/api/active-account').get_json() == {'active': 'a@example.com'}

@@ -35,9 +35,10 @@ app.config['MAX_CONTENT_LENGTH'] = 256 * 1024
 
 def _page_paths():
     """Sayfaların hesabı: ?account=; yoksa ya da bilinmiyorsa ilk hesap. Hesap yoksa None."""
-    names = accounts.list_accounts()
     wanted = (request.args.get('account') or '').strip().lower()
-    name = wanted if wanted in names else (names[0] if names else None)
+    if wanted in accounts.list_accounts():  # bağlantıdaki hesap etkin hesap olur; her sayfa aynı hesabı gösterir
+        accounts.set_active(wanted)
+    name = accounts.get_active()
     return accounts.AccountPaths(name) if name else None
 
 
@@ -184,8 +185,20 @@ def index():
 @handle_errors
 def api_accounts():
     migrated = accounts.migrate_legacy_account()
-    return jsonify({'accounts': accounts.list_accounts(), 'pending': accounts.list_pending(),
+    return jsonify({'accounts': accounts.list_accounts(), 'active': accounts.get_active(), 'pending': accounts.list_pending(),
                     'shared_client': accounts.has_shared_client(), 'migrated': migrated, 'demo': DEMO_MODE})
+
+
+@app.route('/api/active-account')
+@handle_errors
+def api_active_account():
+    return jsonify({'active': accounts.get_active()})
+
+
+@app.route('/api/active-account', methods=['POST'])
+@handle_errors
+def api_set_active_account():
+    return jsonify({'active': accounts.set_active(_json_body().get('account'))})
 
 
 # Google girişi tarayıcıda yapılır ve dakikalar sürebilir; arka planda bekler, arayüz durumu sorar.

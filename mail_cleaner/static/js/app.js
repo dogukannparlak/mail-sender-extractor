@@ -31,9 +31,35 @@
 
   // Menüden ve sayfalardan: seçili hesabı koruyarak başka sayfaya geç.
   window.appGo = function (path) {
-    const account = new URLSearchParams(location.search).get('account') || (window.state && window.state.account);
-    location.href = path + (account && path !== '/' && path !== '/help' ? '?account=' + encodeURIComponent(account) : '');
+    location.href = path;  // etkin hesap sunucuda; adreste hesap taşımaya gerek yok
   };
+
+  // --- Etkin hesap: her sayfada ve sekmede aynı ---------------------------------
+  async function activeAccount() {
+    const res = await fetch('/api/active-account');
+    return (await res.json()).active;
+  }
+
+  // Alt sayfalardaki hesap seçici: önce sunucuya yaz, sonra sayfayı yeni hesapla yenile.
+  window.setActiveAccount = async function (account) {
+    await fetch('/api/active-account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account }) });
+    location.href = location.pathname;  // ?account= kalmasın: sunucudaki etkin hesap geçerli
+  };
+
+  async function syncAccount() {
+    if (document.hidden) return;
+    const current = typeof window.currentAccount === 'function' ? window.currentAccount() : document.documentElement.dataset.account;
+    if (!current) return;
+    try {
+      const active = await activeAccount();
+      if (!active || active === current) return;
+      if (typeof window.onActiveAccountChanged === 'function') window.onActiveAccountChanged(active);
+      else location.href = location.pathname;
+    } catch (err) { /* sunucuya ulaşılamıyorsa bir sonraki yoklamada tekrar denenir */ }
+  }
+  setInterval(syncAccount, 3000);
+  window.addEventListener('focus', syncAccount);
+  document.addEventListener('visibilitychange', syncAccount);
 
   // Uygulama penceresindeki sayfayı varsayılan tarayıcıda da aç (isteğe bağlı).
   window.openInBrowser = function () { openExternal(location.href); };
@@ -56,7 +82,7 @@
 
   // Menüden: bir işlem uç noktasını çağır, sonucu bildir (CSV, yedek, veri klasörü).
   window.appPost = async function (url) {
-    const account = new URLSearchParams(location.search).get('account') || (window.state && window.state.account) || '';
+    const account = (window.currentAccount && window.currentAccount()) || document.documentElement.dataset.account || '';
     try {
       const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ account }) });
       const data = await res.json().catch(() => ({}));
