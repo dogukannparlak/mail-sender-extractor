@@ -4,3 +4,4 @@ google-auth-oauthlib==1.5.0
 requests==2.34.2
 # app.py imports urllib3 directly (URL parsing for the one-click SSRF check).
 urllib3==2.8.0
+Markdown==3.7

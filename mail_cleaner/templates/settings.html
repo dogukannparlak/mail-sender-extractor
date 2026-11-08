@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('nav.settings') }} · {{ t('app.name') }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+{% endblock %}
+{% block body %}
+<main>
+  {% set current_page = 'settings' %}{% include '_nav.html' %}
+  <h1>{{ t('nav.settings') }}</h1>
+  <div id="notice" role="status" aria-live="polite" class="hint"></div>
+
+  <h2>{{ t('settings.general') }}</h2>
+  <form id="settingsForm" class="settings-form">
+    <label>{{ t('settings.language') }}
+      <select name="LANGUAGE">
+        <option value=""{% if not values.LANGUAGE %} selected{% endif %}>{{ t('settings.language_auto') }}</option>
+        {% for code, name in languages.items() %}<option value="{{ code }}"{% if values.LANGUAGE == code %} selected{% endif %}>{{ name }}</option>{% endfor %}
+      </select></label>
+    <label>{{ t('settings.scope') }}
+      <select name="DEFAULT_SCOPE">
+        <option value="inbox"{% if values.DEFAULT_SCOPE == 'inbox' %} selected{% endif %}>{{ t('settings.scope_inbox') }}</option>
+        <option value="all"{% if values.DEFAULT_SCOPE == 'all' %} selected{% endif %}>{{ t('settings.scope_all') }}</option>
+      </select></label>
+    <label>{{ t('settings.quota') }}
+      <input type="number" name="GMAIL_QUOTA_PER_MINUTE" min="0" value="{{ values.GMAIL_QUOTA_PER_MINUTE }}"></label>
+    <label class="check"><input type="checkbox" name="COMPACT_FILES" value="1"{% if values.COMPACT_FILES == '1' %} checked{% endif %}> {{ t('settings.compact') }}</label>
+    <div><button type="submit">{{ t('settings.save') }}</button></div>
+  </form>
+
+  <h2>{{ t('settings.data') }}</h2>
+  <p class="hint">{{ t('settings.data_hint', path=data_dir) }}</p>
+  <div class="actions">
+    <button type="button" id="openData">{{ t('settings.open_data') }}</button>
+    <button type="button" id="backupData">{{ t('settings.backup') }}</button>
+    {% if account_list %}
+    <select id="csvAccount" aria-label="{{ t('account.pick') }}">{% for name in account_list %}<option value="{{ name }}"{% if name == page_account %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>
+    <button type="button" id="exportCsv">{{ t('settings.export_csv') }}</button>
+    {% endif %}
+  </div>
+  <p class="hint">{{ t('settings.backup_warning') }}</p>
+
+  <h2>{{ t('settings.help') }}</h2>
+  <p><a href="/help/setup">{{ t('help.setup') }}</a> · <a href="/help/features">{{ t('help.features') }}</a> · <a href="/help/configuration">{{ t('help.configuration') }}</a></p>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/settings.js') }}"></script>
+{% endblock %}

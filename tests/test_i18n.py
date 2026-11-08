@@ -68,8 +68,8 @@ def test_unused_keys_are_not_left_behind():
     unused = []
     for key in load('en'):
         base = re.sub(r'_(one|other)$', '', key)
-        # dinamik anahtarlar: 'category.' + değer, 'method.' ~ yöntem, 'unsub.status.' ~ durum
-        dynamic = any(key.startswith(prefix) for prefix in ('category.', 'method.', 'unsub.status.'))
+        # dinamik anahtarlar: 'category.' + değer, 'method.' ~ yöntem, 'unsub.status.' ~ durum, 'help.' ~ sayfa
+        dynamic = any(key.startswith(prefix) for prefix in ('category.', 'method.', 'unsub.status.', 'help.'))
         if not dynamic and f"'{key}'" not in text and f"'{base}'" not in text and f'"{key}"' not in text:
             unused.append(key)
     assert unused == []

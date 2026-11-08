@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}{{ t('nav.help') }} · {{ t('app.name') }}{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/pages.css') }}">
+{% endblock %}
+{% block body %}
+<main>
+  {% set current_page = 'help' %}{% include '_nav.html' %}
+  <p class="help-pages">{% for p in pages %}<a href="/help/{{ p }}"{% if p == name %} class="current"{% endif %}>{{ t('help.' ~ p) }}</a>{% endfor %}</p>
+  <article class="doc">{{ body | safe }}</article>
+</main>
+{% endblock %}

@@ -6,6 +6,8 @@
     <a href="/subscriptions{{ q }}"{% if current_page == 'subscriptions' %} class="current" aria-current="page"{% endif %}>{{ icon('subscription') }}{{ t('nav.subscriptions') }}</a>
     <a href="/notifications{{ q }}"{% if current_page == 'notifications' %} class="current" aria-current="page"{% endif %}>{{ icon('notification') }}{{ t('nav.notifications') }}<span class="count-badge" {% if not unread_notifications %}hidden{% endif %}>{{ unread_notifications }}</span></a>
     <a href="/activity-log{{ q }}"{% if current_page == 'activity-log' %} class="current" aria-current="page"{% endif %}>{{ icon('log') }}{{ t('nav.activity_log') }}</a>
+      <a href="/settings{{ q }}"{% if current_page == 'settings' %} class="current" aria-current="page"{% endif %}>{{ icon('settings') }}{{ t('nav.settings') }}</a>
+    <a href="/help"{% if current_page == 'help' %} class="current" aria-current="page"{% endif %}>{{ icon('help') }}{{ t('nav.help') }}</a>
   </nav>
   <label class="language-pick" title="{{ t('lang.label') }}">{{ icon('language') }}
     <select id="languageSelect" aria-label="{{ t('lang.label') }}">{% for code, name in languages.items() %}<option value="{{ code }}"{% if code == lang %} selected{% endif %}>{{ name }}</option>{% endfor %}</select>

@@ -58,3 +58,23 @@
     .toolbar input[type=search] { min-width: 0; width: 100%; }
     .toolbar .result-count { margin-left: 0; }
   }
+  /* Ayarlar ve Yardım sayfaları */
+  .settings-form { display: grid; gap: 12px; max-width: 460px; }
+  .settings-form label { display: grid; gap: 4px; }
+  .settings-form label.check { display: flex; gap: 8px; align-items: center; }
+  .settings-form input[type=number], .settings-form select, .actions select { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); }
+  .settings-form button, .actions button { font: inherit; padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text); cursor: pointer; }
+  .settings-form button:hover, .actions button:hover { background: var(--tab-hover); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .help-pages { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 12px; }
+  .help-pages a.current { font-weight: 600; color: var(--text); text-decoration: none; }
+  .doc { max-width: 860px; line-height: 1.6; }
+  .doc img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+  .doc pre { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; }
+  .doc code { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; }
+  .doc table { margin: 10px 0; }
+  .doc th, .doc td { text-align: left; padding: 5px 10px; border: 1px solid var(--border); vertical-align: top; }
+  /* Uygulama hissi: arayüz metni seçilmez, düğmeler imleçi okla değiştirmez */
+  html[data-app="1"] body { -webkit-user-select: none; user-select: none; cursor: default; }
+  html[data-app="1"] input, html[data-app="1"] textarea, html[data-app="1"] .doc, html[data-app="1"] td { -webkit-user-select: text; user-select: text; }
+  html[data-app="1"] a, html[data-app="1"] button, html[data-app="1"] select { cursor: pointer; }

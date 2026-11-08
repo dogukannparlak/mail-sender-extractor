@@ -9,6 +9,53 @@ import threading
 
 TITLE = 'Mail Sender Extractor'
 
+# Menü metinleri (arayüz dili: .env'deki LANGUAGE, boşsa sistem dili)
+MENU = {
+    'tr': {'go': 'Git', 'home': 'Ana sayfa', 'subs': 'Abonelikler', 'notif': 'Bildirimler', 'log': 'Etkinlik günlüğü',
+           'settings': 'Ayarlar…', 'file': 'Dosya', 'csv': 'CSV dışa aktar', 'data': 'Veri klasörünü aç',
+           'backup': 'Yedekle', 'help': 'Yardım', 'setup': 'Kurulum rehberi', 'features': 'Özellikler',
+           'config': 'Yapılandırma'},
+    'en': {'go': 'Go', 'home': 'Home', 'subs': 'Subscriptions', 'notif': 'Notifications', 'log': 'Activity log',
+           'settings': 'Settings…', 'file': 'File', 'csv': 'Export CSV', 'data': 'Open data folder',
+           'backup': 'Back up', 'help': 'Help', 'setup': 'Setup guide', 'features': 'Features',
+           'config': 'Configuration'},
+}
+
+
+def menu_language(configured):
+    if configured in MENU:
+        return configured
+    system = (os.environ.get('LANG') or '').lower()
+    try:
+        from Foundation import NSLocale
+        system = str((NSLocale.preferredLanguages() or [system])[0]).lower()
+    except ImportError:
+        pass
+    return 'tr' if system.startswith('tr') else 'en'
+
+
+def build_menu(window, language):
+    """Yerel macOS menüsü: sayfalar, dosya işlemleri ve yardım. Eylemler sayfadaki JS'e iletilir."""
+    from webview.menu import Menu, MenuAction, MenuSeparator
+    m = MENU[language]
+
+    def go(path):
+        return lambda: window.evaluate_js(f'appGo({path!r})')
+
+    def post(url):
+        js = f"appPost({url!r})"
+        return lambda: window.evaluate_js(js)
+
+    return [
+        Menu(m['file'], [MenuAction(m['settings'], go('/settings')), MenuSeparator(),
+                         MenuAction(m['csv'], post('/api/export/csv')), MenuAction(m['backup'], post('/api/data/backup')),
+                         MenuAction(m['data'], post('/api/data/open'))]),
+        Menu(m['go'], [MenuAction(m['home'], go('/')), MenuAction(m['subs'], go('/subscriptions')),
+                       MenuAction(m['notif'], go('/notifications')), MenuAction(m['log'], go('/activity-log'))]),
+        Menu(m['help'], [MenuAction(m['setup'], go('/help/setup')), MenuAction(m['features'], go('/help/features')),
+                         MenuAction(m['config'], go('/help/configuration'))]),
+    ]
+
 
 def main():
     try:
@@ -16,6 +63,7 @@ def main():
     except ImportError:
         sys.exit('Pencere için pywebview gerekli: pip install -r requirements-desktop.txt')
     from werkzeug.serving import make_server
+    os.environ['MAIL_CLEANER_APP'] = '1'  # şablonlar uygulama kipini bilsin (data-app)
     try:
         from .config import BASE_DIR, settings
         from .web import app
@@ -33,8 +81,8 @@ def main():
     threading.Thread(target=server.serve_forever, daemon=True).start()
     url = f'http://127.0.0.1:{server.server_port}/'
     try:
-        webview.create_window(TITLE, url, width=1280, height=840, min_size=(900, 600))
-        webview.start()
+        window = webview.create_window(TITLE, url, width=1280, height=840, min_size=(900, 600))
+        webview.start(menu=build_menu(window, menu_language(settings.language)))
     finally:
         server.shutdown()
 

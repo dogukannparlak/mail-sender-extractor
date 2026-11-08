@@ -227,3 +227,6 @@
     .unsub-result { text-align: left; }
     .sender-preview { padding-left: 16px; }
   }
+  html[data-app="1"] body { -webkit-user-select: none; user-select: none; cursor: default; }
+  html[data-app="1"] input, html[data-app="1"] textarea, html[data-app="1"] td { -webkit-user-select: text; user-select: text; }
+  html[data-app="1"] a, html[data-app="1"] button, html[data-app="1"] select { cursor: pointer; }

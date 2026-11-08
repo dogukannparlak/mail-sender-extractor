@@ -31,6 +31,8 @@ set -- --noconfirm --clean --windowed --specpath build \
   --add-data "$ROOT/mail_cleaner/static:mail_cleaner/static" \
   --add-data "$ROOT/mail_cleaner/templates:mail_cleaner/templates" \
   --add-data "$ROOT/mail_cleaner/locales:mail_cleaner/locales" \
+  --add-data "$ROOT/doc:doc" \
+  --add-data "$ROOT/doc-tr:doc-tr" \
   packaging/macos/entry.py
 [ -n "$ICON_FILE" ] && set -- --icon "$ICON_FILE" "$@"
 "$VENV/bin/pyinstaller" "$@"

@@ -1312,3 +1312,27 @@ def test_senders_payload_marks_only_senders_with_a_readable_unsubscribe_link(cli
 
     assert senders['a@example.com']['baglanti'] is True
     assert senders['b@example.com']['baglanti'] is False
+
+
+# --- Uygulama içi araçlar (ayarlar, dışa aktarma, belgeler) --------------------
+
+def test_update_env_file_keeps_comments_and_other_lines(tmp_path):
+    from mail_cleaner import tools
+    env = tmp_path / '.env'
+    env.write_text('# not\nPORT=5050\nLANGUAGE=en\n', encoding='utf-8')
+    tools.update_env_file(str(env), {'LANGUAGE': 'tr', 'DEFAULT_SCOPE': 'all'})
+    assert env.read_text(encoding='utf-8') == '# not\nPORT=5050\nLANGUAGE=tr\nDEFAULT_SCOPE=all\n'
+
+
+def test_help_page_renders_and_unknown_page_is_404():
+    from mail_cleaner.web import app
+    client = app.test_client()
+    assert client.get('/help/setup').status_code == 200
+    assert client.get('/help/yok').status_code == 404
+    assert client.get('/settings').status_code == 200
+
+
+def test_open_url_rejects_non_http():
+    from mail_cleaner.web import app
+    res = app.test_client().post('/api/open-url', json={'url': 'file:///etc/passwd'})
+    assert res.status_code == 400

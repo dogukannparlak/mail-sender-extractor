@@ -27,6 +27,8 @@ DEFAULT_SCOPE = settings.default_scope
 DEMO_MODE = False
 
 app = Flask(__name__)
+from .tools import bp as tools_bp  # noqa: E402  (ayarlar, dışa aktarma, belgeler)
+app.register_blueprint(tools_bp)
 # İstekler küçük JSON'lar; en büyüğü yüklenen istemci dosyası (~1 KB).
 app.config['MAX_CONTENT_LENGTH'] = 256 * 1024
 
@@ -43,8 +45,8 @@ def _page_paths():
 def inject_context():
     """Her şablonda: çeviri işlevi ve dil. Alt sayfalarda ayrıca: menüdeki hesap, hesap listesi, okunmamış bildirim sayısı."""
     language = current_language()
-    context = {'t': t, 'tn': tn, 'lang': language, 'languages': LANGUAGES, 'messages': messages_for(language)}
-    if request.endpoint in ('subscriptions_page', 'notifications_page', 'log_page'):
+    context = {'in_app': os.environ.get('MAIL_CLEANER_APP') == '1', 't': t, 'tn': tn, 'lang': language, 'languages': LANGUAGES, 'messages': messages_for(language)}
+    if request.endpoint in ('subscriptions_page', 'notifications_page', 'log_page', 'tools.settings_page', 'tools.help_page'):
         paths = _page_paths()
         context.update(page_account=paths.account if paths else None, account_list=accounts.list_accounts(),
                        unread_notifications=subscriptions.unread_count(paths) if paths else 0)
