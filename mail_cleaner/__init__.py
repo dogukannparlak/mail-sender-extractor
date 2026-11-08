@@ -13,3 +13,5 @@ Modüller:
 - web         Flask uygulaması ve API
 - demo        sahte posta kutuları
 """
+
+__version__ = "0.5.0"

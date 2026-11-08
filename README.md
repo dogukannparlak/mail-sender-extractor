@@ -17,6 +17,12 @@ a sender keeps mailing after you unsubscribed, and keeps a log of what you did. 
 - **Subscriptions**, **Notifications** and **Activity log** pages for each account.
 - Every Gmail account connects with its own Google Cloud client; no shared project or test-user list.
 
+## Download (macOS)
+
+Get `Mail-Sender-Extractor-0.5.0.dmg` from the [Releases](https://github.com/dogukannparlak/mail-sender-extractor/releases)
+page, drag the app to Applications. The app is not signed: on first launch right-click it › **Open**.
+Everything else (Google Cloud client, adding accounts) is explained in the in-app **Help** or [setup](doc/setup.md).
+
 ## Quick start
 
 Try it without a Gmail account (fake data, nothing leaves your machine):
